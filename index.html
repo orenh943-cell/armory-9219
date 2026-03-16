@@ -94,7 +94,7 @@ function cleanSigs(sigs){
   return out;
 }
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", safe.assignments).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -103,6 +103,7 @@ function saveDB(db){
   fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPerms", safe.userPerms).catch(e=>console.warn("FB err:",e));
   fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
+  fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
 }
 function initDB(){
   const local=loadDB();
@@ -168,6 +169,8 @@ function SerialPicker({itemName, value, onChange, db}){
       const assigned = db.assignments[s.id] !== undefined ? db.assignments[s.id] : s.assigned;
       Object.values(assigned||{}).forEach(v=>{ if(v&&v!==1&&String(v).length>3) used.add(Number(v)); });
     });
+    // פריטי מלאי גדודי
+    Object.values(db.unitItems||{}).forEach(item=>{ if(item.serial&&String(item.serial).length>3) used.add(Number(item.serial)); });
     return used;
   },[db]);
 
@@ -1366,7 +1369,10 @@ function ManagerApp({auth,onLogout}){
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); };
+    const off8 = fbOn("db/unitItems", (unitItems)=>{
+      setDb(prev=>({...prev, unitItems: unitItems||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -1420,6 +1426,7 @@ function ManagerApp({auth,onLogout}){
     {id:"signed",label:"חתומים",icon:"✅"},
     {id:"broken",label:"תקולים",icon:"🔧"},
     {id:"daily",label:"יומי",icon:"📋"},
+    {id:"inventory",label:"מלאי",icon:"📦"},
     ...(auth.role==="admin"?[{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
   ];
 
@@ -1662,6 +1669,9 @@ function ManagerApp({auth,onLogout}){
         )}
         {tab==="perms"&&auth.role==="admin"&&(
           <PermissionsTab db={db} setDb={setDb}/>
+        )}
+        {tab==="inventory"&&(
+          <InventoryTab db={db} setDb={setDb} soldiers={soldiers}/>
         )}
       </div>
 
@@ -1925,6 +1935,255 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
 }
 
 
+
+// =================== INVENTORY TAB (מלאי גדודי/פלוגתי) ===================
+const UNIT_LIST = ["פנוי","א","ב","ג","מסייעת","אגמ","פלסמ"];
+
+function InventoryTab({db, setDb, soldiers}){
+  const [view, setView] = React.useState("list"); // list | add | transfer
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [filterName, setFilterName] = React.useState("");
+  const [showTransfer, setShowTransfer] = React.useState(null); // item id
+  const [showAssignSoldier, setShowAssignSoldier] = React.useState(null); // item id
+
+  // unitItems: {id: {name, serial, unit, addedAt, note}}
+  const items = Object.entries(db.unitItems||{});
+
+  const filtered = React.useMemo(()=>{
+    return items.filter(([,item])=>{
+      const unitMatch = filterUnit==="הכל" || item.unit===filterUnit;
+      const nameMatch = !filterName || item.name.includes(filterName) || String(item.serial||"").includes(filterName);
+      return unitMatch && nameMatch;
+    });
+  },[items, filterUnit, filterName]);
+
+  // סטטיסטיקות
+  const stats = React.useMemo(()=>{
+    const byUnit = {};
+    UNIT_LIST.forEach(u=>byUnit[u]=0);
+    items.forEach(([,item])=>{ byUnit[item.unit]=(byUnit[item.unit]||0)+1; });
+    return byUnit;
+  },[items]);
+
+  function deleteItem(id){
+    if(!window.confirm("למחוק פריט זה מהמלאי?")) return;
+    const newItems={...db.unitItems}; delete newItems[id];
+    const ndb={...db,unitItems:newItems}; saveDB(ndb); setDb(ndb);
+  }
+
+  function transferItem(id, newUnit){
+    const newItems={...db.unitItems,[id]:{...db.unitItems[id],unit:newUnit,movedAt:new Date().toLocaleDateString("he-IL")}};
+    const ndb={...db,unitItems:newItems}; saveDB(ndb); setDb(ndb);
+    setShowTransfer(null);
+  }
+
+  function assignToSoldier(id, soldierId){
+    const item = db.unitItems[id];
+    if(!item||!soldierId) return;
+    const soldier = soldiers.find(s=>s.id===soldierId);
+    if(!soldier) return;
+    const assigned = db.assignments?.[soldierId]!==undefined ? db.assignments[soldierId] : soldier.assigned||{};
+    const newAssigned = {...assigned, [item.name]: item.serial||1};
+    // הסר מהמלאי הגדודי
+    const newUnitItems={...db.unitItems}; delete newUnitItems[id];
+    const newDb={...db,
+      assignments:{...(db.assignments||{}),[soldierId]:newAssigned},
+      signatures:{...(db.signatures||{})},
+      unitItems:newUnitItems
+    };
+    delete newDb.signatures[soldierId];
+    saveDB(newDb); setDb(newDb);
+    setShowAssignSoldier(null);
+  }
+
+  function downloadReport(){
+    const rows = filtered.map(([id,item])=>
+      `<tr><td>${item.name}</td><td style="font-family:monospace">${item.serial||"—"}</td><td>${item.unit==="פנוי"?"🟢 פנוי":"פלוגה "+item.unit}</td><td>${item.addedAt||""}</td><td>${item.note||""}</td></tr>`
+    ).join("");
+    const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>דוח מלאי גדודי</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;direction:rtl}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:8px;text-align:right}th{background:#f0f0f0}@media print{button{display:none}}</style></head>
+    <body><h2>דוח מלאי גדודי/פלוגתי — ${new Date().toLocaleDateString("he-IL")}</h2>
+    <p>סה"כ: ${filtered.length} פריטים | פילטר: ${filterUnit==="הכל"?"כולם":filterUnit}</p>
+    <table><thead><tr><th>שם אמצעי</th><th>מספר סידורי</th><th>מיקום</th><th>תאריך הוספה</th><th>הערה</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <button onclick="window.print()" style="margin-top:16px;padding:8px 20px;font-size:14px">🖨️ הדפס</button>
+    </body></html>`;
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=`מלאי_גדודי_${new Date().toLocaleDateString("he-IL").replace(/\//g,"-")}.html`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }
+
+  return (
+    <div style={{maxWidth:800,margin:"0 auto",padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📦 מלאי גדודי / פלוגתי</h2>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={downloadReport} style={{...S.btn("purple"),padding:"7px 12px",fontSize:12}}>⬇️ הורד דוח</button>
+          <button onClick={()=>setView(view==="add"?"list":"add")} style={{...S.btn("green"),padding:"7px 12px",fontSize:12}}>
+            {view==="add"?"✕ ביטול":"➕ הוסף פריט"}
+          </button>
+        </div>
+      </div>
+
+      {/* סטטיסטיקות */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:8,marginBottom:16}}>
+        {[["הכל","כולם","#a371f7"],...UNIT_LIST.map(u=>[u,u==="פנוי"?"🟢 פנוי":"פלוגה "+u,u==="פנוי"?"#3fb950":"#388bfd"])].map(([u,label,c])=>(
+          <div key={u} onClick={()=>setFilterUnit(u)}
+            style={{...S.card,textAlign:"center",padding:"10px 6px",marginBottom:0,cursor:"pointer",
+              border:`1px solid ${filterUnit===u?c:"#30363d"}`,background:filterUnit===u?"#161b22":"#0d1117"}}>
+            <div style={{fontSize:18,fontWeight:800,color:c}}>{u==="הכל"?items.length:(stats[u]||0)}</div>
+            <div style={{fontSize:10,color:"#8b949e",marginTop:2}}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* טופס הוספה */}
+      {view==="add"&&<AddUnitItemForm db={db} setDb={setDb} onDone={()=>setView("list")}/>}
+
+      {/* חיפוש */}
+      <input value={filterName} onChange={e=>setFilterName(e.target.value)}
+        placeholder="🔍 חפש לפי שם אמצעי או מספר סידורי..."
+        style={{...S.input,marginBottom:12}}/>
+
+      {/* רשימה */}
+      <div style={{fontSize:12,color:"#8b949e",marginBottom:8}}>{filtered.length} פריטים</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {filtered.map(([id,item])=>{
+          const isAvail = item.unit==="פנוי";
+          return (
+            <div key={id} style={{background:"#161b22",borderRadius:9,padding:"10px 14px",border:`1px solid ${isAvail?"#238636":"#30363d"}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div style={{flex:1}}>
+                  <span style={{fontWeight:700,fontSize:14,color:WEAPON_KEYS.includes(item.name)?"#e6edf3":"#388bfd"}}>{item.name}</span>
+                  {item.serial&&<span style={{color:"#8b949e",fontFamily:"monospace",fontSize:12,marginRight:8}}>· {item.serial}</span>}
+                  {item.note&&<span style={{color:"#484f58",fontSize:11,marginRight:6}}>— {item.note}</span>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  <Badge color={isAvail?"green":"blue"} small>{isAvail?"🟢 פנוי":"פלוגה "+item.unit}</Badge>
+                  <button onClick={()=>setShowTransfer(showTransfer===id?null:id)}
+                    style={{...S.btn("orange"),padding:"3px 8px",fontSize:11}}>🔄 העבר</button>
+                  <button onClick={()=>setShowAssignSoldier(showAssignSoldier===id?null:id)}
+                    style={{...S.btn("blue"),padding:"3px 8px",fontSize:11}}>👤 לחייל</button>
+                  <button onClick={()=>deleteItem(id)}
+                    style={{...S.btn("red"),padding:"3px 8px",fontSize:11}}>✕</button>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:"#484f58",marginTop:4}}>הוסף: {item.addedAt||"—"}{item.movedAt?" • הועבר: "+item.movedAt:""}</div>
+
+              {/* העברה לפלוגה */}
+              {showTransfer===id&&(
+                <div style={{marginTop:10,padding:"10px",background:"#0d1117",borderRadius:7,border:"1px solid #30363d"}}>
+                  <div style={{fontSize:12,color:"#8b949e",marginBottom:8}}>העבר לפלוגה / סמן כפנוי:</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {UNIT_LIST.map(u=>(
+                      <button key={u} onClick={()=>transferItem(id,u)}
+                        style={{...S.btn(item.unit===u?"green":""),padding:"5px 10px",fontSize:12,
+                          border:`1px solid ${item.unit===u?"#238636":"#30363d"}`}}>
+                        {u==="פנוי"?"🟢 פנוי":"פלוגה "+u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* שיוך לחייל */}
+              {showAssignSoldier===id&&(
+                <AssignToSoldierPanel item={item} itemId={id} soldiers={soldiers} db={db}
+                  onAssign={(solId)=>assignToSoldier(id,solId)} onClose={()=>setShowAssignSoldier(null)}/>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length===0&&(
+          <div style={{textAlign:"center",padding:32,color:"#484f58"}}>
+            <div style={{fontSize:40,marginBottom:8}}>📦</div>
+            <div>אין פריטים {filterUnit!=="הכל"?`בפלוגה ${filterUnit}`:""}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddUnitItemForm({db, setDb, onDone}){
+  const [name, setName] = React.useState("");
+  const [serial, setSerial] = React.useState("");
+  const [unit, setUnit] = React.useState("פנוי");
+  const [note, setNote] = React.useState("");
+  const [err, setErr] = React.useState("");
+
+  function save(){
+    if(!name.trim()){setErr("חובה לבחור אמצעי");return;}
+    const id = "ui_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+    const newItem = {name:name.trim(), serial:serial.trim()||null, unit, note:note.trim()||null, addedAt:new Date().toLocaleDateString("he-IL")};
+    const ndb={...db, unitItems:{...(db.unitItems||{}), [id]:newItem}};
+    saveDB(ndb); setDb(ndb);
+    setName(""); setSerial(""); setNote(""); setErr("");
+    onDone();
+  }
+
+  return (
+    <div style={{background:"#161b22",border:"1px solid #238636",borderRadius:10,padding:"14px 16px",marginBottom:16}}>
+      <div style={{fontWeight:700,fontSize:14,color:"#3fb950",marginBottom:12}}>➕ הוספת פריט למלאי</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={S.label}>אמצעי</label>
+          <select value={name} onChange={e=>setName(e.target.value)} style={S.input}>
+            <option value="">— בחר אמצעי —</option>
+            {EQ_COLS.map(eq=><option key={eq} value={eq}>{eq}{getMakat(eq)?" ("+getMakat(eq)+")":""}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>מספר סידורי</label>
+          <SerialPicker itemName={name} value={serial} onChange={setSerial} db={db}/>
+        </div>
+        <div>
+          <label style={S.label}>שיוך</label>
+          <select value={unit} onChange={e=>setUnit(e.target.value)} style={S.input}>
+            {UNIT_LIST.map(u=><option key={u} value={u}>{u==="פנוי"?"🟢 פנוי — נשקייה":"פלוגה "+u}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>הערה (אופציונלי)</label>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="לדוגמא: לתיקון" style={S.input}/>
+        </div>
+      </div>
+      {err&&<div style={{color:"#f85149",fontSize:12,marginBottom:8}}>{err}</div>}
+      <button onClick={save} style={{...S.btn("green"),width:"100%",padding:"10px 0"}}>✅ הוסף למלאי</button>
+    </div>
+  );
+}
+
+function AssignToSoldierPanel({item, itemId, soldiers, db, onAssign, onClose}){
+  const [search, setSearch] = React.useState("");
+  const matched = React.useMemo(()=>{
+    if(!search.trim()) return [];
+    const q=search.toLowerCase();
+    return soldiers.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)).slice(0,6);
+  },[search,soldiers]);
+
+  return (
+    <div style={{marginTop:10,padding:"10px",background:"#0d1117",borderRadius:7,border:"1px solid #388bfd"}}>
+      <div style={{fontSize:12,color:"#8b949e",marginBottom:8}}>העבר {item.name} לחייל:</div>
+      <input value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="חפש שם / מ.א..." style={{...S.input,marginBottom:6}}/>
+      {matched.map(s=>(
+        <div key={s.id} onClick={()=>onAssign(s.id)}
+          style={{padding:"8px 10px",background:"#161b22",borderRadius:6,marginBottom:4,cursor:"pointer",
+            display:"flex",justifyContent:"space-between",alignItems:"center"}}
+          onMouseEnter={e=>e.currentTarget.style.background="#1f3a5f"}
+          onMouseLeave={e=>e.currentTarget.style.background="#161b22"}>
+          <span style={{fontWeight:600}}>{s.name}</span>
+          <span style={{fontSize:11,color:"#8b949e"}}>פלוגה {s.unit} · {s.id}</span>
+        </div>
+      ))}
+      {search&&matched.length===0&&<div style={{color:"#484f58",fontSize:12}}>לא נמצא</div>}
+      <button onClick={onClose} style={{...S.btn(),width:"100%",marginTop:6,fontSize:11}}>ביטול</button>
+    </div>
+  );
+}
 
 // =================== DASH DETAIL MODAL ===================
 function DashDetailModal({type, soldiers, db, onClose}){
