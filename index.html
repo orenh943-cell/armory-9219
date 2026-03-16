@@ -2209,7 +2209,19 @@ function InventoryTab({db, setDb, soldiers, auth}){
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
                     {info.entries.map(([id,item])=>{
                       const isSoldier = item.assignedType==="soldier";
-                      const sol = isSoldier ? allSolsList.find(s=>s.id===item.assignedSoldierId) : null;
+                      // מצא חייל לפי מספר סידורי בassignments
+                      let sol = null;
+                      if(isSoldier){
+                        if(item.assignedSoldierId){
+                          sol = allSolsList.find(s=>s.id===item.assignedSoldierId);
+                        }
+                        if(!sol && item.serial){
+                          sol = allSolsList.find(s=>{
+                            const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+                            return Object.values(asgn).some(v=>String(v)===String(item.serial));
+                          });
+                        }
+                      }
                       return (
                         <div key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
                           background:"#0d1117",borderRadius:6,
