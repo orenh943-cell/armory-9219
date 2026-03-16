@@ -76,6 +76,8 @@ const {useState,useMemo,useRef,useEffect} = React;
 function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});}
 function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});}
 function isSerial(v){return v && v!==1 && String(v).length>3;}
+// כל האמצעים שיש להם מספרים סידוריים במערכת
+const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim()));
 function phoneToWA(p){if(!p)return null;const d=String(p).replace(/\D/g,"");return d.startsWith("0")?"972"+d.slice(1):d;}
 
 // Firebase DB — שמירה וטעינה
@@ -217,7 +219,7 @@ function SerialPicker({itemName, value, onChange, db}){
       {open&&available.length>0&&(
         <div style={{position:"absolute",top:"100%",right:0,left:0,background:"#0d1117",border:"1px solid #388bfd",borderRadius:8,zIndex:100,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
           <div style={{padding:"6px 10px",borderBottom:"1px solid #21262d",fontSize:11,color:"#8b949e"}}>
-            {available.length} פריטים זמינים בנשקייה
+            {available.length} זמינים בנשקייה • {ALL_SERIALS.filter(s=>s.name.trim()===(itemName||"").trim()).length} סה"כ
           </div>
           {filtered.map(serial=>(
             <div key={serial} onClick={()=>select(serial)}
@@ -1313,6 +1315,9 @@ function ManagerApp({auth,onLogout}){
   const [db,setDb]=useState(()=>initDB());
   const [tab,setTab]=useState("dashboard");
   const [lastRefresh,setLastRefresh]=useState(new Date());
+  const [dashModal,setDashModal]=useState(null); // "signed" | "unsigned" | "withWeapon" | "all"
+  const [searchModal,setSearchModal]=useState(false);
+  const [dashUnitFilter,setDashUnitFilter]=useState("הכל");
 
   // רענון אוטומטי כל 60 שניות
   useEffect(()=>{
@@ -1434,7 +1439,8 @@ function ManagerApp({auth,onLogout}){
             </button>
           ))}
         </nav>
-        <div style={{padding:"12px 16px",borderTop:"1px solid #21262d"}}>
+        <div style={{padding:"12px 16px",borderTop:"1px solid #21262d",display:"flex",flexDirection:"column",gap:6}}>
+          <button onClick={()=>{setSearchModal(true);setMobileMenu(false);}} style={{...S.btn("blue"),width:"100%",fontSize:12}}>🔍 חיפוש צ׳ / סידורי</button>
           <button onClick={onLogout} style={{...S.btn(),width:"100%",fontSize:12}}>🚪 יציאה</button>
         </div>
       </div>
@@ -1464,10 +1470,13 @@ function ManagerApp({auth,onLogout}){
           <div>
             <h2 style={{marginBottom:18,fontSize:20,fontWeight:800}}>לוח בקרה</h2>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:18}}>
-              {[{l:"חיילים",v:soldiers.length,c:"#a371f7"},{l:"עם נשק",v:withWeapons,c:"#388bfd"},{l:"חתמו",v:signedCount,c:"#3fb950"},{l:"טרם חתמו",v:unsigned,c:unsigned>0?"#f85149":"#3fb950"}].map(s=>(
-                <div key={s.l} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0}}>
+              {[{l:"חיילים",v:soldiers.length,c:"#a371f7",k:"all"},{l:"עם נשק",v:withWeapons,c:"#388bfd",k:"withWeapon"},{l:"חתמו",v:signedCount,c:"#3fb950",k:"signed"},{l:"טרם חתמו",v:unsigned,c:unsigned>0?"#f85149":"#3fb950",k:"unsigned"}].map(s=>(
+                <div key={s.l} onClick={()=>setDashModal(s.k)} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0,cursor:"pointer",transition:"border .15s",border:"1px solid #30363d"}}
+                  onMouseEnter={e=>e.currentTarget.style.border="1px solid "+s.c}
+                  onMouseLeave={e=>e.currentTarget.style.border="1px solid #30363d"}>
                   <div style={{fontSize:28,fontWeight:800,color:s.c}}>{s.v}</div>
                   <div style={{color:"#8b949e",fontSize:12,marginTop:2}}>{s.l}</div>
+                  <div style={{fontSize:10,color:"#484f58",marginTop:3}}>לחץ לפירוט ▼</div>
                 </div>
               ))}
             </div>
@@ -1661,6 +1670,8 @@ function ManagerApp({auth,onLogout}){
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType}/>}
+      {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
+      {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
     </div>
   );
 }
@@ -1914,6 +1925,174 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
 }
 
 
+
+// =================== DASH DETAIL MODAL ===================
+function DashDetailModal({type, soldiers, db, onClose}){
+  const [unitFilter, setUnitFilter] = React.useState("הכל");
+  const units = ["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
+
+  const filtered = React.useMemo(()=>{
+    let list = soldiers;
+    if(type==="signed") list=list.filter(s=>!!db.signatures?.[s.id]);
+    else if(type==="unsigned") list=list.filter(s=>{
+      const hasWeapon=Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k));
+      return hasWeapon && !db.signatures?.[s.id];
+    });
+    else if(type==="withWeapon") list=list.filter(s=>Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k)));
+    if(unitFilter!=="הכל") list=list.filter(s=>s.unit===unitFilter);
+    return list;
+  },[type, soldiers, db, unitFilter]);
+
+  const TITLES = {signed:"✅ חיילים חתומים", unsigned:"⏳ טרם חתמו", withWeapon:"🔫 חיילים עם נשק", all:"🪖 כל החיילים"};
+
+  return (
+    <Modal title={TITLES[type]||"פירוט"} onClose={onClose}>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {units.map(u=>(
+          <button key={u} onClick={()=>setUnitFilter(u)}
+            style={{...S.btn(unitFilter===u?"blue":""),padding:"4px 10px",fontSize:12}}>
+            {u==="הכל"?"כולם":"פלוגה "+u}
+          </button>
+        ))}
+      </div>
+      <div style={{fontSize:12,color:"#8b949e",marginBottom:8}}>{filtered.length} חיילים</div>
+      <div style={{maxHeight:420,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
+        {filtered.map(s=>{
+          const hasSig=!!db.signatures?.[s.id];
+          const items=Object.entries(s.assigned||{});
+          return (
+            <div key={s.id} style={{background:"#0d1117",borderRadius:8,padding:"9px 12px",border:"1px solid #21262d"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{fontWeight:700,fontSize:13}}>{s.name}</div>
+                <div style={{display:"flex",gap:5}}>
+                  <Badge color={hasSig?"green":"orange"} small>{hasSig?"✅":"⏳"}</Badge>
+                  <Badge color="purple" small>{s.unit}</Badge>
+                </div>
+              </div>
+              <div style={{fontSize:11,color:"#484f58",marginBottom:items.length?4:0}}>מ.א: {s.id}</div>
+              {items.length>0&&(
+                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                  {items.map(([name,val])=>(
+                    <span key={name} style={{background:"#161b22",borderRadius:4,padding:"2px 6px",fontSize:10,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>
+                      {name}{isSerial(val)?" · "+val:""}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length===0&&<div style={{textAlign:"center",padding:20,color:"#484f58"}}>אין חיילים בקטגוריה זו</div>}
+      </div>
+    </Modal>
+  );
+}
+
+// =================== SEARCH MODAL (חיפוש צ / סידורי) ===================
+function SearchModal({onClose, soldiers, db}){
+  const [q, setQ] = React.useState("");
+  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+
+  const results = React.useMemo(()=>{
+    const t = q.trim();
+    if(!t) return [];
+    const isNum = /^\d+$/.test(t);
+    if(isNum){
+      // חיפוש לפי מספר אישי
+      const byId = allSols.filter(s=>String(s.id).includes(t));
+      // חיפוש לפי סידורי
+      const bySerial = [];
+      allSols.forEach(s=>{
+        const assigned = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+        Object.entries(assigned).forEach(([name,val])=>{
+          if(val && String(val).includes(t) && isSerial(val)){
+            bySerial.push({soldier:s, itemName:name, serial:val});
+          }
+        });
+      });
+      return {byId, bySerial};
+    } else {
+      // חיפוש לפי שם
+      const byName = allSols.filter(s=>s.name&&s.name.includes(t));
+      return {byId:byName, bySerial:[]};
+    }
+  },[q, allSols, db]);
+
+  const inp = React.useRef(null);
+  React.useEffect(()=>{ setTimeout(()=>inp.current?.focus(),100); },[]);
+
+  return (
+    <Modal title="🔍 חיפוש צ׳ / מספר סידורי" onClose={onClose}>
+      <input ref={inp} value={q} onChange={e=>setQ(e.target.value)}
+        placeholder="הקלד מספר אישי, מספר סידורי, או שם..."
+        style={{...S.input,width:"100%",fontSize:15,marginBottom:16}}/>
+      {q.trim()&&(
+        <div>
+          {results.byId?.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:12,color:"#8b949e",marginBottom:6}}>👤 חיילים ({results.byId.length})</div>
+              {results.byId.map(s=>{
+                const assigned = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+                const items = Object.entries(assigned);
+                const hasSig = !!db.signatures?.[s.id];
+                return (
+                  <div key={s.id} style={{background:"#0d1117",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #21262d"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <Badge color={hasSig?"green":"orange"} small>{hasSig?"✅ חתום":"⏳ לא חתום"}</Badge>
+                        <Badge color="purple" small>פלוגה {s.unit}</Badge>
+                      </div>
+                    </div>
+                    <div style={{fontSize:11,color:"#484f58",marginBottom:6}}>מ.א: {s.id}</div>
+                    {items.length>0&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {items.map(([name,val])=>(
+                          <span key={name} style={{background:"#161b22",borderRadius:4,padding:"2px 7px",fontSize:11,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>
+                            {name}{isSerial(val)?" · "+val:""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {results.bySerial?.length>0&&(
+            <div>
+              <div style={{fontSize:12,color:"#8b949e",marginBottom:6}}>🔢 מספרים סידוריים ({results.bySerial.length})</div>
+              {results.bySerial.map((r,i)=>(
+                <div key={i} style={{background:"#0d1117",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #21262d"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <span style={{fontWeight:700,fontSize:14,color:WEAPON_KEYS.includes(r.itemName)?"#e6edf3":"#388bfd"}}>{r.itemName}</span>
+                      <span style={{color:"#8b949e",fontFamily:"monospace",fontSize:12,marginRight:8}}>· {r.serial}</span>
+                    </div>
+                    <Badge color="blue" small>👤 {r.soldier.name}</Badge>
+                  </div>
+                  <div style={{fontSize:11,color:"#484f58",marginTop:4}}>פלוגה {r.soldier.unit} · מ.א {r.soldier.id}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {results.byId?.length===0&&results.bySerial?.length===0&&(
+            <div style={{textAlign:"center",padding:24,color:"#484f58"}}>
+              <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+              <div>לא נמצאו תוצאות עבור "{q}"</div>
+            </div>
+          )}
+        </div>
+      )}
+      {!q.trim()&&(
+        <div style={{textAlign:"center",padding:24,color:"#484f58"}}>
+          <div style={{fontSize:32,marginBottom:8}}>🔍</div>
+          <div style={{fontSize:13}}>חפש לפי מספר אישי, מספר סידורי, או שם חייל</div>
+        </div>
+      )}
+    </Modal>
+  );
+}
 
 // =================== PERMISSIONS TAB ===================
 const PERM_LABELS = {
