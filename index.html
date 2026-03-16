@@ -1999,6 +1999,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
   const [showAdd, setShowAdd] = React.useState(false);
   const [showTransfer, setShowTransfer] = React.useState(null);
   const [showAssign, setShowAssign] = React.useState(null);
+  const [expandedItem2, setExpandedItem2] = React.useState(null);
 
   const items = Object.entries(db.unitItems||{});
 
@@ -2146,83 +2147,122 @@ function InventoryTab({db, setDb, soldiers, auth}){
         const unitItems2 = groupedByUnit[unit];
         const color = UNIT_COLORS[unit]||"#388bfd";
         const unitLabel = unit==="גדודי"?"🎖️ גדודי":unit==="נעורה"?"📦 נעורה":unit==="פנוי"?"🟢 פנוי":unit==="חטיבה 6"?"🔺 חטיבה 6":"פלוגה "+unit;
+        const allSolsList=[...Object.values(db.customSoldiers||{}),...soldiers];
+
+        // Group by item name
+        const byName = {};
+        unitItems2.forEach(([id,item])=>{
+          if(!byName[item.name]) byName[item.name]={total:0,soldiers:0,unitQty:0,broken:0,entries:[]};
+          byName[item.name].total++;
+          if(item.assignedType==="soldier") byName[item.name].soldiers++;
+          else byName[item.name].unitQty++;
+          if(item.broken) byName[item.name].broken++;
+          byName[item.name].entries.push([id,item]);
+        });
+        const sortedByName = Object.entries(byName).sort((a,b)=>b[1].total-a[1].total);
+
         return (
-          <div key={unit} style={{marginBottom:18}}>
+          <div key={unit} style={{marginBottom:22}}>
             {/* כותרת פלוגה */}
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,paddingBottom:6,borderBottom:`2px solid ${color}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingBottom:6,borderBottom:`2px solid ${color}`}}>
               <div style={{width:14,height:14,borderRadius:2,background:color,flexShrink:0}}/>
-              <span style={{fontWeight:800,fontSize:14,color}}>{unitLabel}</span>
+              <span style={{fontWeight:800,fontSize:15,color}}>{unitLabel}</span>
               <span style={{fontSize:12,color:"#484f58"}}>({unitItems2.length} פריטים)</span>
               <span style={{fontSize:11,color:"#8b949e",marginRight:"auto"}}>
                 🔵 {unitItems2.filter(([,i])=>i.assignedType==="soldier").length} לחייל &nbsp;
                 🟡 {unitItems2.filter(([,i])=>i.assignedType==="unit").length} לפלוגה
               </span>
             </div>
-            {/* פריטים */}
-            <div style={{display:"flex",flexDirection:"column",gap:5}}>
-              {unitItems2.map(([id,item])=>{
-                const isSoldier = item.assignedType==="soldier";
-                return (
-                  <div key={id} style={{background:"#161b22",borderRadius:8,padding:"8px 12px",
-                    border:`1px solid ${item.broken?"#f85149":"#21262d"}`,
-                    borderRight:`3px solid ${isSoldier?"#388bfd":"#e3b341"}`}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                      {/* ריבוע צבע */}
-                      <div title={isSoldier?"משויך לחייל":"מוקצה לפלוגה"}
-                        style={{width:11,height:11,borderRadius:2,flexShrink:0,
-                          background:isSoldier?"#388bfd":"#e3b341"}}/>
-                      <div style={{flex:1}}>
-                        <span style={{fontWeight:600,fontSize:13,color:WEAPON_KEYS.includes(item.name)?"#e6edf3":"#58a6ff"}}>
-                          {item.name}
-                        </span>
-                        {isSoldier&&item.soldierName&&(
-                          <span style={{fontSize:11,color:"#8b949e",marginRight:6}}>· {item.soldierName}</span>
-                        )}
-                      </div>
-                      {item.serial&&<span style={{color:"#8b949e",fontFamily:"monospace",fontSize:12}}>{item.serial}</span>}
-                      {item.broken&&<span style={{color:"#f85149",fontSize:11}}>⚠️ תקול</span>}
-                      <div style={{display:"flex",gap:4}}>
-                        {!isSoldier&&(
-                          <>
-                            <button onClick={e=>{e.stopPropagation();setShowTransfer(showTransfer===id?null:id);setShowAssign(null);}}
-                              style={{...S.btn("orange"),padding:"2px 7px",fontSize:10}}>🔄</button>
-                            <button onClick={e=>{e.stopPropagation();setShowAssign(showAssign===id?null:id);setShowTransfer(null);}}
-                              style={{...S.btn("blue"),padding:"2px 7px",fontSize:10}}>👤</button>
-                          </>
-                        )}
-                        <button onClick={e=>{e.stopPropagation();deleteItem(id);}}
-                          style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>✕</button>
-                      </div>
-                    </div>
 
-                    {/* Transfer panel */}
-                    {showTransfer===id&&(
-                      <div style={{marginTop:8,padding:8,background:"#0d1117",borderRadius:6}}>
-                        <div style={{fontSize:11,color:"#8b949e",marginBottom:6}}>העבר ל:</div>
-                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                          {UNIT_LIST.map(u=>(
-                            <button key={u} onClick={()=>transferItem(id,u)}
-                              style={{...S.btn(item.unit===u?"green":""),padding:"3px 8px",fontSize:11}}>
-                              {u==="פנוי"?"פנוי":u==="גדודי"?"גדודי":u}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Assign to soldier panel */}
-                    {showAssign===id&&(
-                      <AssignToSoldierPanel item={item} itemId={id} soldiers={soldiers} db={db}
-                        onAssign={(solId)=>assignToSoldier(id,solId)} onClose={()=>setShowAssign(null)}/>
-                    )}
+            {/* קוביות סיכום לפי פריט */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:10}}>
+              {sortedByName.map(([name,info])=>{
+                const isExp = expandedItem2===unit+"_"+name;
+                const borderColor = info.soldiers>0&&info.unitQty===0?"#388bfd":info.unitQty>0&&info.soldiers===0?"#e3b341":"#a371f7";
+                return (
+                  <div key={name} onClick={()=>setExpandedItem2(isExp?null:unit+"_"+name)}
+                    style={{background:isExp?"#1a1f2e":"#0d1117",borderRadius:9,padding:"10px 12px",cursor:"pointer",
+                      border:`1px solid ${isExp?color:"#21262d"}`,
+                      borderTop:`3px solid ${borderColor}`,transition:"border .15s"}}>
+                    <div style={{fontWeight:800,fontSize:24,color,lineHeight:1}}>{info.total}</div>
+                    <div style={{fontWeight:600,fontSize:12,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#58a6ff",
+                      marginTop:4,marginBottom:4,lineHeight:1.2}}>{name}</div>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {info.soldiers>0&&<span style={{fontSize:10,color:"#388bfd"}}>🔵{info.soldiers}</span>}
+                      {info.unitQty>0&&<span style={{fontSize:10,color:"#e3b341"}}>🟡{info.unitQty}</span>}
+                      {info.broken>0&&<span style={{fontSize:10,color:"#f85149"}}>⚠️{info.broken}</span>}
+                    </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* פירוט מורחב */}
+            {sortedByName.map(([name,info])=>{
+              if(expandedItem2!==unit+"_"+name) return null;
+              return (
+                <div key={"exp_"+name} style={{background:"#161b22",borderRadius:9,padding:"12px 14px",
+                  marginBottom:10,border:`1px solid ${color}`}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:8,color}}>
+                    {name} — {info.total} יחידות
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    {info.entries.map(([id,item])=>{
+                      const isSoldier = item.assignedType==="soldier";
+                      const sol = isSoldier ? allSolsList.find(s=>s.id===item.assignedSoldierId) : null;
+                      return (
+                        <div key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                          background:"#0d1117",borderRadius:6,
+                          borderRight:`3px solid ${isSoldier?"#388bfd":"#e3b341"}`}}>
+                          <div style={{width:9,height:9,borderRadius:2,flexShrink:0,
+                            background:isSoldier?"#388bfd":"#e3b341"}}/>
+                          <span style={{flex:1,fontSize:12,color:"#e6edf3"}}>
+                            {isSoldier?(sol?sol.name:"לא ידוע"):"מוקצה לפלוגה"}
+                          </span>
+                          {item.serial&&<span style={{color:"#8b949e",fontFamily:"monospace",fontSize:11}}>{item.serial}</span>}
+                          {item.broken&&<span style={{color:"#f85149",fontSize:10}}>⚠️ תקול</span>}
+                          {auth.role!=="viewer"&&<div style={{display:"flex",gap:3}}>
+                            {!isSoldier&&<>
+                              <button onClick={e=>{e.stopPropagation();setShowTransfer(showTransfer===id?null:id);setShowAssign(null);}}
+                                style={{...S.btn("orange"),padding:"2px 6px",fontSize:10}}>🔄</button>
+                              <button onClick={e=>{e.stopPropagation();setShowAssign(showAssign===id?null:id);setShowTransfer(null);}}
+                                style={{...S.btn("blue"),padding:"2px 6px",fontSize:10}}>👤</button>
+                            </>}
+                            <button onClick={e=>{e.stopPropagation();deleteItem(id);}}
+                              style={{...S.btn("red"),padding:"2px 6px",fontSize:10}}>✕</button>
+                          </div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {showTransfer&&info.entries.some(([id])=>id===showTransfer)&&(
+                    <div style={{marginTop:8,padding:8,background:"#0d1117",borderRadius:6}}>
+                      <div style={{fontSize:11,color:"#8b949e",marginBottom:6}}>העבר ל:</div>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        {UNIT_LIST.map(u=>(
+                          <button key={u} onClick={()=>transferItem(showTransfer,u)}
+                            style={{...S.btn(unit===u?"green":""),padding:"3px 8px",fontSize:11}}>
+                            {u==="פנוי"?"פנוי":u==="גדודי"?"גדודי":u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {showAssign&&info.entries.some(([id])=>id===showAssign)&&(
+                    <AssignToSoldierPanel
+                      item={info.entries.find(([id])=>id===showAssign)?.[1]||{}}
+                      itemId={showAssign} soldiers={soldiers} db={db}
+                      onAssign={(solId)=>assignToSoldier(showAssign,solId)}
+                      onClose={()=>setShowAssign(null)}/>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}
 
-      {filtered.length===0&&(
+            {filtered.length===0&&(
         <div style={{textAlign:"center",padding:40,color:"#484f58"}}>
           <div style={{fontSize:40,marginBottom:8}}>📦</div>
           <div>אין פריטים לפי הסינון הנוכחי</div>
