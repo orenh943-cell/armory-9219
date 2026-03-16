@@ -2360,7 +2360,7 @@ function SearchModal({onClose, soldiers, db}){
                       <span style={{fontWeight:700,fontSize:14,color:WEAPON_KEYS.includes(r.itemName)?"#e6edf3":"#388bfd"}}>{r.itemName}</span>
                       <span style={{color:"#8b949e",fontFamily:"monospace",fontSize:12,marginRight:8}}>· {r.serial}</span>
                     </div>
-                    <div style={{display:"flex",gap:4"}}>
+                    <div style={{display:"flex",gap:4}}>
                       {r.source==="soldier"&&<Badge color="blue" small>👤 {r.soldier?.name}</Badge>}
                       {r.source==="inventory"&&<Badge color="green" small>📦 מלאי</Badge>}
                       {r.source==="registry"&&<Badge color={r.assignedToSoldier?"blue":"orange"} small>{r.assignedToSoldier?"✅ מוקצה לחייל":"📋 רישום גדודי"}</Badge>}
