@@ -283,15 +283,36 @@ function Login({onLogin}){
   const [user,setUser]=useState("");
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
+  const [dynUsers,setDynUsers]=useState(loadDB()?.dynamicUsers||{});
+  const [loading,setLoading]=useState(true);
+  // טען משתמשים דינמיים מ-Firebase
+  useEffect(()=>{
+    const off = fbOn("db/dynamicUsers",(users)=>{
+      if(users){
+        setDynUsers(users);
+        try{
+          const local=loadDB()||{};
+          localStorage.setItem("armory_9219_v4",JSON.stringify({...local,dynamicUsers:users}));
+        }catch(e){}
+      }
+      setLoading(false);
+    });
+    setTimeout(()=>setLoading(false),6000); // timeout
+    return ()=>off();
+  },[]);
   function go(){
     const uTrim=user.trim();
     const pTrim=pass.trim();
     if(!uTrim||!pTrim){setErr("נא למלא שם ומספר אישי");return;}
-    // בדוק מנפקים לפי שם משתמש + מספר אישי כסיסמה
-    const dynUsers=loadDB()?.dynamicUsers||{};
     const u=USERS[uTrim]||dynUsers[uTrim];
     if(u && pTrim===u.pass){
-      onLogin({role:u.role,name:u.name,username:uTrim,soldierId:u.soldierId,viewUnit:u.viewUnit||null});
+      onLogin({
+        role:u.role,
+        name:u.name,
+        username:uTrim,
+        soldierId:u.soldierId||"",
+        viewUnit:u.viewUnit||null
+      });
       return;
     }
     // בדוק חייל — שם פרטי + מספר אישי
@@ -306,7 +327,11 @@ function Login({onLogin}){
       onLogin({role:"soldier",name:byId.name,soldierId:byId.id});
       return;
     }
-    setErr("שם משתמש או מספר אישי שגויים");
+    if(loading){
+      setErr("המערכת עדיין נטענת, נסה שוב עוד שניה");
+    } else {
+      setErr("שם משתמש או מספר אישי שגויים");
+    }
   }
   return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0d1117"}}>
@@ -323,7 +348,9 @@ function Login({onLogin}){
         <input value={pass} onChange={e=>{setPass(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&go()}
           placeholder="מספר אישי" style={S.input} inputMode="numeric" type="password"/>
         {err&&<p style={{color:"#f85149",fontSize:13,textAlign:"center",marginBottom:10}}>{err}</p>}
-        <button onClick={go} style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:16}}>כניסה</button>
+        <button onClick={go} style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:16}}>
+          {loading?"⏳ כניסה...":"כניסה"}
+        </button>
         <div style={{marginTop:14,padding:"10px 12px",background:"#0d1117",borderRadius:8,fontSize:11,color:"#8b949e",lineHeight:1.8}}>
           <div>🎖️ <strong style={{color:"#e6edf3"}}>מנפקים:</strong> שם משתמש + מספר אישי</div>
           <div>🪖 <strong style={{color:"#e6edf3"}}>חיילים:</strong> שם פרטי + מספר אישי = סיסמה</div>
@@ -2057,11 +2084,7 @@ function InventoryTab({db, setDb, soldiers}){
         <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📦 מלאי — {filtered.length} פריטים</h2>
         <div style={{display:"flex",gap:8}}>
           <button onClick={downloadReport} style={{...S.btn("purple"),padding:"7px 12px",fontSize:12}}>⬇️ Excel</button>
-          <button onClick={()=>{
-            if(!window.confirm("לטעון מחדש את כל המלאי מהנתונים המקוריים? פעולה זו תמחק שינויים ידניים.")) return;
-            const ndb={...db, unitItems:{...INITIAL_UNIT_ITEMS}};
-            saveDB(ndb); setDb(ndb);
-          }} style={{...S.btn("orange"),padding:"7px 12px",fontSize:12}}>🔄 אפס מלאי</button>
+
           <button onClick={()=>setShowAdd(!showAdd)} style={{...S.btn("green"),padding:"7px 12px",fontSize:12}}>
             {showAdd?"✕ ביטול":"➕ הוסף"}
           </button>
@@ -2696,7 +2719,7 @@ function App(){
   if(!auth)return<Login onLogin={handleLogin}/>;
   if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="viewer")return<ViewerApp auth={auth} onLogout={handleLogout} db={db}/>;
-  return<ManagerApp auth={auth} onLogout={handleLogout}/>;
+  return<ManagerApp auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
