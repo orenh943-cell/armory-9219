@@ -2800,8 +2800,21 @@ function MyStockTab({db, setDb, soldiers, auth}){
         return (
           <div style={{background:"var(--bg-elevated)",borderRadius:10,padding:"14px 16px",
             marginBottom:10,border:"1px solid var(--accent-orange)"}}>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"var(--accent-orange)"}}>
-              ✏️ עדכון מלאי — {editItem} (נוכחי: {current.total})
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:13,color:"var(--accent-orange)"}}>
+                ✏️ עדכון מלאי — {editItem} (נוכחי: {current.total})
+              </div>
+              <button onClick={()=>{
+                const original = ARMORY_MASTER[editItem];
+                if(!original) return;
+                if(!window.confirm("לאפס את "+editItem+" לכמות המקורית ("+original.total+")? שינויים ידניים יימחקו.")) return;
+                const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+                master2[editItem]={...original};
+                const ndb={...db,armoryMaster:master2};
+                saveDB(ndb); setDb(ndb);
+              }} style={{...S.btn(),padding:"4px 10px",fontSize:11,minHeight:30,color:"var(--accent-green)"}}>
+                ↩️ שחזר מקורי ({ARMORY_MASTER[editItem]?.total||"?"})
+              </button>
             </div>
 
             {/* הוספת פריט עם אמצעי + סידורי */}
