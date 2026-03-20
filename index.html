@@ -1705,8 +1705,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     {id:"broken",label:"תקולים",icon:"🔧"},
     {id:"daily",label:"יומי",icon:"📋"},
     {id:"inventory",label:"מלאי",icon:"📦"},
+    {id:"mystock",label:"מלאי ארמון",icon:"📋"},
     ...(auth.role==="admin"?[{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
-    // viewer sees all tabs
   ];
 
   function Sidebar(){
