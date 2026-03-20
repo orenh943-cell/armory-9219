@@ -377,8 +377,11 @@ function SerialPicker({itemName, value, onChange, db}){
       const assigned = db.assignments[s.id] !== undefined ? db.assignments[s.id] : s.assigned;
       Object.values(assigned||{}).forEach(v=>{ if(v&&v!==1&&String(v).length>3) used.add(Number(v)); });
     });
-    // פריטי מלאי גדודי
-    Object.values(db.unitItems||{}).forEach(item=>{ if(item.serial&&String(item.serial).length>3) used.add(Number(item.serial)); });
+    // פריטי מלאי גדודי (כולל פורמט דחוס)
+    Object.values(db.unitItems||{}).forEach(item=>{
+      const ser = item.s||item.serial;
+      if(ser&&String(ser).length>3) used.add(Number(ser));
+    });
     return used;
   },[db]);
 
@@ -2862,9 +2865,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   if(addIsNew && !EQ_COLS.includes(itemName)){
                     EQ_COLS.push(itemName);
                   }
-                  // Add to ALL_SERIALS if serial provided
+                  // Add to ALL_SERIALS if serial provided and not already there
                   if(addSerial){
-                    ALL_SERIALS.push({name:itemName, serial:parseInt(addSerial)||addSerial, unit:"פנוי", assignedToSoldier:false});
+                    const alreadyExists = ALL_SERIALS.some(s=>String(s.serial)===String(addSerial)&&s.name===itemName);
+                    if(!alreadyExists){
+                      ALL_SERIALS.push({name:itemName, serial:parseInt(addSerial)||addSerial, unit:"פנוי", assignedToSoldier:false});
+                    }
                   }
                   
                   const newKey="inv_add_"+Date.now();
@@ -2907,9 +2913,15 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         {item.s||item.serial||"ללא סידורי"} · {item.u||item.unit}
                       </span>
                       <button onClick={()=>{
-                        const master2={...( db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+                        const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
                         master2[editItem]={...master2[editItem],total:Math.max(0,(master2[editItem]?.total||1)-1)};
                         const newUI={...db.unitItems}; delete newUI[id];
+                        // Remove from ALL_SERIALS too
+                        const removedSerial = item.s||item.serial;
+                        if(removedSerial){
+                          const idx=ALL_SERIALS.findIndex(s=>String(s.serial)===String(removedSerial)&&s.name===(item.n||item.name));
+                          if(idx>=0) ALL_SERIALS.splice(idx,1);
+                        }
                         const ndb={...db,armoryMaster:master2,unitItems:newUI};
                         saveDB(ndb); setDb(ndb);
                       }} style={{...S.btn("red"),padding:"3px 8px",fontSize:11,minHeight:28}}>הסר</button>
