@@ -2254,6 +2254,37 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
 
 
 
+function AssignToSoldierPanel({item, itemId, soldiers, db, onAssign, onClose}){
+  const [search, setSearch] = React.useState("");
+  const matched = React.useMemo(()=>{
+    if(!search.trim()) return [];
+    const q=search.toLowerCase();
+    return soldiers.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)).slice(0,6);
+  },[search,soldiers]);
+
+  return (
+    <div style={{marginTop:10,padding:"10px",background:"var(--bg-base)",borderRadius:7,border:"1px solid var(--accent-blue)"}}>
+      <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:8}}>
+        העבר {item.n||item.name} לחייל:
+      </div>
+      <input value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="חפש שם / מ.א..." style={{...S.input,marginBottom:6}}/>
+      {matched.map(s=>(
+        <div key={s.id} onClick={()=>onAssign(s.id)}
+          style={{padding:"8px 10px",background:"var(--bg-surface)",borderRadius:6,marginBottom:4,cursor:"pointer",
+            display:"flex",justifyContent:"space-between",alignItems:"center"}}
+          onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+          onMouseLeave={e=>e.currentTarget.style.background="var(--bg-surface)"}>
+          <span style={{fontWeight:600}}>{s.name}</span>
+          <span style={{fontSize:11,color:"var(--text-secondary)"}}>פלוגה {s.unit} · {s.id}</span>
+        </div>
+      ))}
+      {search&&matched.length===0&&<div style={{color:"var(--text-muted)",fontSize:12}}>לא נמצא</div>}
+      <button onClick={onClose} style={{...S.btn(),width:"100%",marginTop:6,fontSize:11}}>ביטול</button>
+    </div>
+  );
+}
+
 // =================== INVENTORY TAB (מלאי גדודי/פלוגתי) ===================
 const UNIT_LIST = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי","נעורה","חטיבה 6","פנוי"];
 const UNIT_COLORS = {
@@ -2583,6 +2614,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [showWeaponsOnly, setShowWeaponsOnly] = React.useState(false);
   const [editItem, setEditItem] = React.useState(null);
   const [editQty, setEditQty] = React.useState("");
+  const [addSerial, setAddSerial] = React.useState("");
+  const [addItemName, setAddItemName] = React.useState("");
+  const [removeSearch, setRemoveSearch] = React.useState("");
 
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
   const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
@@ -2744,7 +2778,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 </div>
               )}
               {auth.role==="admin"&&(
-                <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);}}
+                <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--accent-orange)",cursor:"pointer"}}>✏️ ערוך כמות</div>
               )}
             </div>
@@ -2764,36 +2798,56 @@ function MyStockTab({db, setDb, soldiers, auth}){
               ✏️ עדכון מלאי — {editItem} (נוכחי: {current.total})
             </div>
 
-            {/* הוספת פריט עם סידורי */}
+            {/* הוספת פריט עם אמצעי + סידורי */}
             <div style={{marginBottom:12,padding:"10px 12px",background:"var(--bg-base)",borderRadius:8,border:"1px solid var(--accent-green)"}}>
               <div style={{fontSize:12,fontWeight:700,color:"var(--accent-green)",marginBottom:8}}>➕ הוסף לארמון</div>
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+                <select value={addItemName} onChange={e=>{setAddItemName(e.target.value);setAddSerial("");}}
+                  style={{...S.input,marginBottom:0,flex:2}}>
+                  <option value={editItem}>{editItem} (נוכחי)</option>
+                  {EQ_COLS.filter(eq=>eq!==editItem).map(eq=><option key={eq} value={eq}>{eq}</option>)}
+                </select>
+              </div>
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                <SerialPicker itemName={editItem} value={editQty} onChange={setEditQty} db={db}/>
+                <div style={{flex:1}}>
+                  <SerialPicker itemName={addItemName||editItem} value={addSerial} onChange={setAddSerial} db={db}/>
+                </div>
                 <button onClick={()=>{
-                  const master2 = {...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
-                  master2[editItem] = {...master2[editItem], total: (master2[editItem]?.total||0)+1};
-                  // Also add to inventory
-                  const newSerial = editQty||null;
-                  const newKey = "inv_add_"+Date.now();
-                  const newUnitItems = {...db.unitItems, [newKey]:{
-                    n:editItem, s:newSerial, u:"פנוי", t:"unit", addedAt:new Date().toLocaleDateString("he-IL")
+                  const itemToAdd = addItemName||editItem;
+                  const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+                  if(!master2[itemToAdd]) master2[itemToAdd]={total:0,makat:NAME_TO_MAKAT[itemToAdd]||null,byUnit:{},unassigned:0};
+                  master2[itemToAdd]={...master2[itemToAdd], total:(master2[itemToAdd].total||0)+1};
+                  const newKey="inv_add_"+Date.now();
+                  const newUnitItems={...db.unitItems,[newKey]:{
+                    n:itemToAdd, s:addSerial||null, u:"פנוי", t:"unit",
+                    addedAt:new Date().toLocaleDateString("he-IL")
                   }};
-                  const ndb={...db, armoryMaster:master2, unitItems:newUnitItems};
-                  saveDB(ndb); setDb(ndb); setEditQty("");
+                  const ndb={...db,armoryMaster:master2,unitItems:newUnitItems};
+                  saveDB(ndb); setDb(ndb); setAddSerial(""); setAddItemName(editItem);
                 }} style={{...S.btn("green"),padding:"6px 14px",fontSize:12,minHeight:38}}>הוסף</button>
               </div>
+              {!addSerial&&<div style={{fontSize:10,color:"var(--accent-orange)",marginTop:4}}>⚠️ מומלץ להכניס מספר סידורי</div>}
             </div>
 
             {/* הורדת פריט */}
             <div style={{marginBottom:12,padding:"10px 12px",background:"var(--bg-base)",borderRadius:8,border:"1px solid var(--accent-red)"}}>
               <div style={{fontSize:12,fontWeight:700,color:"var(--accent-red)",marginBottom:8}}>➖ הורד מהארמון</div>
-              <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:6}}>
-                בחר פריט פנוי להסרה מלאה:
-              </div>
-              <div style={{maxHeight:120,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
+              <input value={removeSearch} onChange={e=>setRemoveSearch(e.target.value)}
+                placeholder="🔍 חפש לפי סידורי או פלוגה..."
+                style={{...S.input,marginBottom:6,fontSize:12}}/>
+              <div style={{maxHeight:150,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
                 {Object.entries(db.unitItems||{})
-                  .filter(([,item])=>{const n=item.n||item.name; return n===editItem && (item.t||item.assignedType)==="unit";})
-                  .slice(0,10)
+                  .filter(([,item])=>{
+                    const n=item.n||item.name;
+                    if(n!==editItem) return false;
+                    if((item.t||item.assignedType)!=="unit") return false;
+                    if(!removeSearch.trim()) return true;
+                    const q=removeSearch.trim().toLowerCase();
+                    const s=String(item.s||item.serial||"");
+                    const u=String(item.u||item.unit||"");
+                    return s.includes(q)||u.includes(q);
+                  })
+                  .slice(0,20)
                   .map(([id,item])=>(
                     <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                       padding:"5px 8px",background:"var(--bg-elevated)",borderRadius:5}}>
