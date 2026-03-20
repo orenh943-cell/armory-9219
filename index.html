@@ -1726,12 +1726,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             </button>
           ))}
         </nav>
-        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border-subtle)",display:"flex",flexDirection:"column",gap:6}}>
-          <button onClick={()=>{setSearchModal(true);setMobileMenu(false);}} style={{...S.btn("blue"),width:"100%",fontSize:12}}>🔍 חיפוש צ׳ / סידורי</button>
-          <button className="theme-toggle" onClick={toggleTheme} style={{width:"100%",marginBottom:2}}>
+        <div style={{padding:"10px 14px",borderTop:"1px solid var(--border-subtle)",display:"flex",flexDirection:"column",gap:5}}>
+          <button onClick={()=>{setSearchModal(true);setMobileMenu(false);}} style={{...S.btn("blue"),width:"100%",fontSize:12,minHeight:38,padding:"6px 12px"}}>🔍 חיפוש צ׳ / סידורי</button>
+          <button className="theme-toggle" onClick={toggleTheme} style={{width:"100%",minHeight:34,padding:"4px 10px"}}>
             {theme==="dark"?"☀️ מצב בהיר":"🌙 מצב כהה"}
           </button>
-          <button onClick={onLogout} style={{...S.btn(),width:"100%",fontSize:12}}>🚪 יציאה</button>
+          <button onClick={onLogout} style={{...S.btn(),width:"100%",fontSize:12,minHeight:38,padding:"6px 12px"}}>🚪 יציאה</button>
         </div>
       </div>
     );
