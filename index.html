@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ארמון 9219 מוריה</title>
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -119,16 +119,36 @@ button{min-height:var(--tap-target);}
 /* ===== RESPONSIVE LAYOUT ===== */
 @media(max-width:768px){
   .desktop-sidebar{display:none!important;}
-  .main-content{margin-right:0!important;padding:12px 10px!important;}
+  .main-content{margin-right:0!important;padding:8px!important;}
   .mobile-header{display:flex!important;}
-  /* Larger tap targets on mobile */
   button{min-height:var(--tap-target);}
-  /* Stack grids on mobile */
   .grid-2{grid-template-columns:1fr!important;}
   .grid-stats{grid-template-columns:repeat(2,1fr)!important;}
+  /* Tables scroll horizontally */
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  /* Modal full screen on mobile */
+  [style*="maxWidth:480"],[style*="maxWidth:700"]{max-width:100%!important;margin:0!important;border-radius:0!important;min-height:100vh;}
+  /* Input sizes */
+  input,select{font-size:16px!important;} /* Prevents zoom on iOS */
+  /* Cards padding */
+  [style*="padding:"16px 20px""]{padding:12px!important;}
 }
 @media(max-width:480px){
   .grid-stats{grid-template-columns:repeat(2,1fr)!important;}
+  :root{--sidebar-width:0px;}
+  /* Tiles smaller on phone */
+  [style*="minmax(160px"]{grid-template-columns:repeat(2,1fr)!important;}
+  [style*="minmax(150px"]{grid-template-columns:repeat(2,1fr)!important;}
+  [style*="minmax(140px"]{grid-template-columns:repeat(2,1fr)!important;}
+}
+/* iOS safe area */
+@supports(padding-bottom:env(safe-area-inset-bottom)){
+  .mobile-header{padding-top:max(8px,env(safe-area-inset-top))!important;}
+  body{padding-bottom:env(safe-area-inset-bottom);}
+}
+/* Android back button */
+@media(display-mode:standalone){
+  .mobile-header{padding-top:24px!important;}
 }
 /* ===== ANIMATIONS ===== */
 @media(prefers-reduced-motion:reduce){
@@ -162,9 +182,9 @@ const USERS = {
 };
 // הרשאות ברירת מחדל לפי תפקיד
 const DEFAULT_PERMS = {
-  admin:   {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:true, canManagePerms:true, canDownload:true},
-  manager: {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:false, canManagePerms:false, canDownload:true},
-  viewer:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:true},
+  admin:   {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:true, canManagePerms:true, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false},
+  manager: {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:false, canManagePerms:false, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false},
+  viewer:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false},
 };
 function getPerms(auth, db){
   const base = DEFAULT_PERMS[auth.role]||DEFAULT_PERMS.viewer;
@@ -233,7 +253,7 @@ function restoreFromFirebase(obj, refObj){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -244,6 +264,7 @@ function saveDB(db){
   fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
   fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
+  fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
 }
 function initDB(){
   const local=loadDB();
@@ -737,9 +758,25 @@ function DailyModal({db,onClose,type}){
   const [mgrSig,setMgrSig]=useState(null);
   const [showPad,setShowPad]=useState(false);
   const [note,setNote]=useState("");
+  
+  const FORM_ITEMS = [{"msd": 1, "makat": 100012066, "name": "רוס\"ק M4A1 תצורת חי\"ר", "total": 340, "alias": "M4"}, {"msd": 2, "makat": 100012073, "name": "קלע סער M4", "total": 68, "alias": "קלע סער"}, {"msd": 3, "makat": 100012332, "name": "רוס\"ק 5.56 M-16 מ\"מ", "total": 148, "alias": "M16"}, {"msd": 4, "makat": 100014050, "name": "רוב\"צ HTR 338", "total": 3, "alias": "HTR 338"}, {"msd": 5, "makat": 100015536, "name": "רוב\"צ M24 עם מעצה משודרג", "total": 9, "alias": "M-24 חדש"}, {"msd": 6, "makat": 100020009, "name": "מקלע קל נגב תצורת 7.62", "total": 7, "alias": "נגב 7.62"}, {"msd": 7, "makat": 100020017, "name": "משגר רימון מטול 40 מ\"מ דואט M320A1", "total": 34, "alias": "מטולון M320"}, {"msd": 8, "makat": 100021013, "name": "מקלע אחיד 7.62 ממ מאג חי\"ר", "total": 38, "alias": "מאג"}, {"msd": 9, "makat": 100022206, "name": "מקלע קל נגב דגם ב'", "total": 24, "alias": "נגב 5.56"}, {"msd": 10, "makat": 100024225, "name": "מקלע כבד 0.5 בראונינג אמריקאי", "total": 9, "alias": "מק\"כ 0.5"}, {"msd": 11, "makat": 100025019, "name": "מקל\"ר קל משקל", "total": 1, "alias": "מקלרון"}, {"msd": 12, "makat": 100025108, "name": "מטול רימונים M-203", "total": null, "alias": "מטול רימונים M-203"}, {"msd": 13, "makat": 100025132, "name": "מקל\"ר מוד 3 40 ממ MK-19", "total": 4, "alias": "מקלר"}, {"msd": 20, "makat": 146749010, "name": "כדור ברזל- מתקן הטלה", "total": 3, "alias": "כדור ברזל- מתקן הטלה"}, {"msd": 21, "makat": 167779000, "name": "ערכת תהל", "total": 20, "alias": "ערכת תהל"}, {"msd": 22, "makat": 146764009, "name": "כלי טיס בלתי מאוייש אלפא", "total": 1, "alias": "כלי טיס בלתי מאוייש אלפא"}, {"msd": 23, "makat": 146737000, "name": "כלי טיס בלתי מאוייש מטריס 30 דואלי", "total": 2, "alias": "מטריס 30"}, {"msd": 24, "makat": 146749000, "name": "כלי טיס בלתי מאויש אבוו מקס 4 תרמי", "total": 8, "alias": "רחפן איבו"}, {"msd": 25, "makat": 146749009, "name": "כלי טיס בלתי מאוייש זיקים N", "total": null, "alias": "זיקים N"}, {"msd": 26, "makat": 146755000, "name": "כלי טייס בלתי מאויש אווטה", "total": 22, "alias": "אבטה"}];
+  
+  // חישוב מהנתונים החיים
   const loansMap={};
-  Object.values(db.assignments).forEach(assigned=>Object.keys(assigned).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;}));
-  const items=DAILY_ITEMS.map(item=>{const loans=loansMap[item.name]||0;const stock=item.total-loans;return{...item,loans,stock,ok:stock>=0};});
+  Object.values(db.assignments||{}).forEach(assigned=>Object.keys(assigned).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;}));
+  
+  // Use armoryMaster totals if available
+  const master = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : null;
+  
+  const items = FORM_ITEMS.map(item=>{
+    const alias = item.alias||item.name;
+    const total = master?.[alias]?.total ?? item.total ?? 0;
+    const loans = loansMap[alias]||0;
+    // נעורה = פריטים שנמצאים בנעורה (unitItems עם unit=נעורה)
+    const neoura = Object.values(db.unitItems||{}).filter(ui=>(ui.n||ui.name)===alias&&(ui.u||ui.unit)==="נעורה").length;
+    const stock = total - loans - neoura;
+    return {...item, alias, total, loans, neoura, stock, ok:stock>=0};
+  });
   return (
     <Modal title={`ספירת מחסן — ${type==="open"?"פתיחה":"סגירה"} ${todayStr()}`} onClose={onClose} wide>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
@@ -752,12 +789,21 @@ function DailyModal({db,onClose,type}){
       </div>
       <div style={{overflowX:"auto",marginBottom:14}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr style={{background:"var(--bg-base)"}}>
-            {['מס"ד',"שם הפריט","מלאי כולל","השאלות","מצאי","✓"].map(h=><th key={h} style={S.th}>{h}</th>)}
-          </tr></thead>
+          <thead>
+            <tr style={{background:"var(--bg-base)"}}>
+              <th style={S.th}>מס"ד</th>
+              <th style={S.th}>מק"ט</th>
+              <th style={{...S.th,minWidth:160}}>שם הפריט</th>
+              <th style={S.th}>מלאי כולל</th>
+              <th style={S.th}>השאלות</th>
+              <th style={S.th}>נעורה</th>
+              <th style={S.th}>מצאי</th>
+              <th style={S.th}>✓</th>
+            </tr>
+          </thead>
           <tbody>
             {items.map((item,i)=>(
-              <tr key={item.name} style={{background:i%2===0?"#161b22":"#1c2128"}}>
+              <tr key={item.name} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
                 <td style={{...S.td,color:"var(--text-secondary)"}}>{i+1}</td>
                 <td style={{...S.td,fontWeight:600}}>{item.name}</td>
                 <td style={{...S.td,textAlign:"center",color:"#388bfd"}}>{item.total}</td>
@@ -926,6 +972,12 @@ function SignatureDocument({soldier, db, onClose}){
 }
 
 function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
+  const [editingLocation,setEditingLocation]=useState(false);
+  const [editingSerial,setEditingSerial]=useState(null);
+  const [newSerialVal,setNewSerialVal]=useState("");
+  const [locKana,setLocKana]=useState("");
+  const [locRow,setLocRow]=useState("");
+  const [locNote,setLocNote]=useState("");
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
   const [newItems,setNewItems]=useState([{name:"",serial:""}]);
@@ -983,6 +1035,34 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
               </div>
             </div>
             {sig&&<img src={sig.sigData} style={{height:38,marginTop:10,borderRadius:4,border:"1px solid var(--border)"}} alt="חתימה"/>}
+            {/* מיקום נשק */}
+            {(()=>{
+              const loc = db.weaponLocations?.[soldier.id];
+              return (
+                <div style={{marginTop:10,borderTop:"1px solid var(--border-subtle)",paddingTop:8}}>
+                  <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>📍 מיקום נשק:</div>
+                  {editingLocation
+                    ?<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                      <input value={locKana} onChange={e=>setLocKana(e.target.value)} placeholder="כנה" style={{...S.input,marginBottom:0,width:80}} />
+                      <input value={locRow} onChange={e=>setLocRow(e.target.value)} placeholder="שורה" style={{...S.input,marginBottom:0,width:70}} />
+                      <input value={locNote} onChange={e=>setLocNote(e.target.value)} placeholder="הערה" style={{...S.input,marginBottom:0,flex:1}} />
+                      <button onClick={()=>{
+                        const newLocs={...(db.weaponLocations||{}),[soldier.id]:{kana:locKana,row:locRow,note:locNote}};
+                        const ndb={...db,weaponLocations:newLocs}; saveDB(ndb); onSave(ndb); setEditingLocation(false);
+                      }} style={{...S.btn("green"),padding:"4px 10px",fontSize:11,minHeight:32}}>שמור</button>
+                      <button onClick={()=>setEditingLocation(false)} style={{...S.btn(),padding:"4px 8px",fontSize:11,minHeight:32}}>ביטול</button>
+                    </div>
+                    :<div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:12,color:"var(--text-primary)"}}>
+                        {loc?`כנה: ${loc.kana||"—"} · שורה: ${loc.row||"—"}${loc.note?" · "+loc.note:""}` : "לא הוגדר"}
+                      </span>
+                      <button onClick={()=>{setLocKana(loc?.kana||"");setLocRow(loc?.row||"");setLocNote(loc?.note||"");setEditingLocation(true);}}
+                        style={{...S.btn(),padding:"2px 8px",fontSize:11,minHeight:28}}>✏️</button>
+                    </div>
+                  }
+                </div>
+              );
+            })()}
             {sig?.testImg&&(
               <div style={{marginTop:8,borderTop:"1px solid var(--border-subtle)",paddingTop:8}}>
                 <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>📸 צילום מסך מבחן:</div>
@@ -1652,7 +1732,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
       }
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); };
+    const off10 = fbOn("db/weaponLocations", (locs)=>{
+      setDb(prev=>({...prev, weaponLocations: locs||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -1700,15 +1783,16 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
   }
 
+  const perms = getPerms(auth, db);
   const tabs=[
     {id:"dashboard",label:"בקרה",icon:"🛡️"},
-    {id:"soldiers",label:"חיילים",icon:"🪖"},
-    {id:"signatures",label:"חתימות",icon:"✍️",badge:unsigned},
-    {id:"signed",label:"חתומים",icon:"✅"},
-    {id:"broken",label:"תקולים",icon:"🔧"},
+    ...(perms.canViewSoldiers!==false?[{id:"soldiers",label:"חיילים",icon:"🪖"}]:[]),
+    ...(perms.canViewSignatures!==false?[{id:"signatures",label:"חתימות",icon:"✍️",badge:unsigned}]:[]),
+    ...(perms.canViewSignatures!==false?[{id:"signed",label:"חתומים",icon:"✅"}]:[]),
+    ...(perms.canViewBroken!==false?[{id:"broken",label:"תקולים",icon:"🔧"}]:[]),
     {id:"daily",label:"יומי",icon:"📋"},
-    {id:"inventory",label:"מלאי",icon:"📦"},
-    {id:"mystock",label:"מלאי ארמון",icon:"📋"},
+    ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
+    ...(perms.canViewInventory!==false?[{id:"mystock",label:"מלאי ארמון",icon:"📋"}]:[]),
     ...(auth.role==="admin"?[{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
   ];
 
@@ -3205,10 +3289,69 @@ function SearchModal({onClose, soldiers, db}){
   );
 }
 
+// =================== RESET ASSIGNMENTS BUTTON ===================
+function ResetAssignmentsBtn({auth, db, setDb}){
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [password, setPassword] = React.useState("");
+  const [err, setErr] = React.useState("");
+  
+  if(auth.soldierId !== "7680832" && auth.username !== "אורן") return null;
+  
+  function doReset(){
+    if(password !== auth.soldierId){
+      setErr("סיסמה שגויה — הכנס את המספר האישי שלך");
+      return;
+    }
+    if(!window.confirm("האם אתה בטוח? פעולה זו תמחק את כל השיוכים של חיילים ואת כל החתימות. המלאי, הסידוריים והנתוני הבסיס יישמרו.")) return;
+    
+    const ndb={...db,
+      assignments:{},
+      signatures:{},
+      bulkGuarantors:{},
+    };
+    saveDB(ndb); setDb(ndb);
+    setShowConfirm(false); setPassword(""); setErr("");
+    alert("✅ כל השיוכים והחתימות נמחקו. המלאי והנתוני הבסיס נשמרו.");
+  }
+  
+  return (
+    <div style={{marginTop:16,borderTop:"1px solid var(--border-subtle)",paddingTop:12}}>
+      {!showConfirm
+        ?<button onClick={()=>setShowConfirm(true)}
+            style={{...S.btn("red"),width:"100%",fontSize:13}}>
+            🗑️ מחיקת כל השיוכים והחתימות
+          </button>
+        :<div style={{background:"rgba(248,81,73,.1)",border:"1px solid var(--accent-red)",borderRadius:8,padding:"12px 14px"}}>
+          <div style={{fontWeight:700,color:"var(--accent-red)",marginBottom:8,fontSize:13}}>⚠️ פעולה בלתי הפיכה</div>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:10}}>
+            הכנס את המספר האישי שלך ({auth.soldierId}) לאישור:
+          </div>
+          <input value={password} onChange={e=>{setPassword(e.target.value);setErr("");}}
+            type="password" inputMode="numeric" placeholder="מספר אישי"
+            style={{...S.input,marginBottom:8}}/>
+          {err&&<div style={{color:"var(--accent-red)",fontSize:12,marginBottom:8}}>{err}</div>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={doReset} style={{...S.btn("red"),flex:1}}>אשר מחיקה</button>
+            <button onClick={()=>{setShowConfirm(false);setPassword("");setErr("");}} style={{...S.btn(),flex:1}}>ביטול</button>
+          </div>
+        </div>
+      }
+    </div>
+  );
+}
+
 // =================== PERMISSIONS TAB ===================
 const PERM_LABELS = {
   canCheckout:"שיוך אמצעים", canReturn:"ביטול שיוך", canSign:"שליחת לינק חתימה",
   canBulkSign:"החתמה מרוכזת", canEdit:"עריכת נתונים", canDownload:"הורדת טפסים",
+  canViewSoldiers:"צפייה בחיילים", canViewSignatures:"צפייה בחתימות",
+  canViewBroken:"צפייה בתקולים", canViewInventory:"צפייה במלאי",
+  canSendToUnit:"שליחת חתימה לפלוגה בלבד",
+};
+const TAB_PERMS = {
+  soldiers:"canViewSoldiers", signatures:"canViewSignatures",
+  signed:"canViewSignatures", broken:"canViewBroken",
+  inventory:"canViewInventory", mystock:"canViewInventory",
 };
 function PermissionsTab({db, setDb}){
   const staticUsers = Object.entries(USERS).filter(([,u])=>u.role==="manager"||u.role==="admin");
@@ -3349,6 +3492,7 @@ function PermissionsTab({db, setDb}){
           </div>
         );
       })}
+      <ResetAssignmentsBtn auth={{soldierId:"7680832",username:"אורן"}} db={db} setDb={setDb}/>
     </div>
   );
 }
