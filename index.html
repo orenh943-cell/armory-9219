@@ -762,12 +762,16 @@ function DailyModal({db,onClose,type,auth}){
   const [qofficer,setQofficer]=useState(""); // קצין סופר
   const [showPad,setShowPad]=useState(false);
   const [note,setNote]=useState("");
-  // חישוב מהנתונים החיים
-  // השאלות = רק מה שהוחתם + שיוכים ידניים (db.assignments)
+  // השאלות = חיילים שחתמו בפועל (db.signatures) + שיוכים שנעשו ידנית
+  // db.assignments מכיל את כל הרישום הגדודי — לא רלוונטי לפתיחה/סגירה
   const loansMap={};
-  Object.values(db.assignments||{}).forEach(assigned=>Object.keys(assigned).forEach(name=>{
-    loansMap[name]=(loansMap[name]||0)+1;
-  }));
+  const signedIds = new Set(Object.keys(db.signatures||{}));
+  Object.entries(db.assignments||{}).forEach(([soldierId, assigned])=>{
+    if(!signedIds.has(soldierId)) return; // רק חתומים בפועל
+    Object.keys(assigned).forEach(name=>{
+      loansMap[name]=(loansMap[name]||0)+1;
+    });
+  });
   const master = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : null;
   
   function calcItem(item){
