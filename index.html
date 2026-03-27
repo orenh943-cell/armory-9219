@@ -763,8 +763,11 @@ function DailyModal({db,onClose,type,auth}){
   const [showPad,setShowPad]=useState(false);
   const [note,setNote]=useState("");
   // חישוב מהנתונים החיים
+  // השאלות = רק מה שהוחתם + שיוכים ידניים (db.assignments)
   const loansMap={};
-  Object.values(db.assignments||{}).forEach(assigned=>Object.keys(assigned).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;}));
+  Object.values(db.assignments||{}).forEach(assigned=>Object.keys(assigned).forEach(name=>{
+    loansMap[name]=(loansMap[name]||0)+1;
+  }));
   const master = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : null;
   
   function calcItem(item){
