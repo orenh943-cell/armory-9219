@@ -754,10 +754,13 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   );
 }
 
-function DailyModal({db,onClose,type}){
+function DailyModal({db,onClose,type,auth}){
   const [mgrSig,setMgrSig]=useState(null);
+  const [qofficer,setQofficer]=useState(""); // קצין סופר
   const [showPad,setShowPad]=useState(false);
   const [note,setNote]=useState("");
+  const LEFT_ITEMS = [{"msd": 1, "makat": 100012066, "fullname": "רוס\"ק M4A1 תצורת חי\"ר", "alias": "M4", "total": 340}, {"msd": 2, "makat": 100012073, "fullname": "קלע סער M4", "alias": "קלע סער", "total": 68}, {"msd": 3, "makat": 100012332, "fullname": "רוס\"ק 5.56 M-16 מ\"מ", "alias": "M16", "total": 148}, {"msd": 4, "makat": 100014050, "fullname": "רוב\"צ HTR 338", "alias": "HTR 338", "total": 3}, {"msd": 5, "makat": 100015536, "fullname": "רוב\"צ M24 עם מעצה משודרג", "alias": "M-24 חדש", "total": 9}, {"msd": 6, "makat": 100020009, "fullname": "מקלע קל נגב תצורת 7.62", "alias": "נגב 7.62", "total": 7}, {"msd": 7, "makat": 100020017, "fullname": "משגר רימון מטול 40 מ\"מ דואט M320A1", "alias": "מטולון M320", "total": 34}, {"msd": 8, "makat": 100021013, "fullname": "מקלע אחיד 7.62 ממ מאג חי\"ר", "alias": "מאג", "total": 38}, {"msd": 9, "makat": 100022206, "fullname": "מקלע קל נגב דגם ב'", "alias": "נגב 5.56", "total": 24}, {"msd": 10, "makat": 100024225, "fullname": "מקלע כבד 0.5 בראונינג אמריקאי", "alias": "מק\"כ 0.5", "total": 9}, {"msd": 11, "makat": 100025019, "fullname": "מקל\"ר קל משקל", "alias": "מקלרון", "total": 1}, {"msd": 12, "makat": 100025108, "fullname": "מטול רימונים M-203", "alias": "", "total": null}, {"msd": 13, "makat": 100025132, "fullname": "מקל\"ר מוד 3 40 ממ MK-19", "alias": "מקלר", "total": 4}, {"msd": 20, "makat": 146749010, "fullname": "כדור ברזל- מתקן הטלה", "alias": "כדור ברזל- מתקן הטלה", "total": 3}, {"msd": 21, "makat": 167779000, "fullname": "ערכת תהל", "alias": "", "total": 20}, {"msd": 22, "makat": 146764009, "fullname": "כלי טיס בלתי מאוייש אלפא", "alias": "אלפא", "total": 1}, {"msd": 23, "makat": 146737000, "fullname": "כלי טיס בלתי מאוייש מטריס 30 דואלי", "alias": "מטריס 30", "total": 2}, {"msd": 24, "makat": 146749000, "fullname": "כלי טיס בלתי מאויש אבוו מקס 4 תרמי", "alias": "רחפן איבו", "total": 8}, {"msd": 25, "makat": 146749009, "fullname": "כלי טיס בלתי מאוייש זיקים N", "alias": "זיקים N", "total": null}, {"msd": 26, "makat": 146755000, "fullname": "כלי טייס בלתי מאויש אווטה", "alias": "אבטה", "total": 22}];
+  const RIGHT_ITEMS = [{"msd": 1, "makat": 100069180, "fullname": "ישל\"ט משופר למערכת \"גיל\"", "alias": "ישלט", "total": 2}, {"msd": 2, "makat": 100070154, "fullname": "אמר\"ל לנהג \"עדי\" כולל זווד", "alias": "עדי", "total": 5}, {"msd": 3, "makat": 100070170, "fullname": "אמר\"ל שפנפן חד-עיני כולל זווד", "alias": "שח\"ע", "total": 15}, {"msd": 4, "makat": 100070537, "fullname": "וילון נהג לנגמ\"ש", "alias": "וילון", "total": 19}, {"msd": 5, "makat": 100070740, "fullname": "אמר\"ל שח\"ע (שפ ממותגת) כולל זווד", "alias": "שח\"ע ממותג", "total": 14}, {"msd": 6, "makat": 100070758, "fullname": "כוונת לילה לצלף- MUNS דור ג", "alias": "כוונת MUNS", "total": 1}, {"msd": 7, "makat": 100071258, "fullname": "אמר\"ל חד עיני \"שח\"מ\"", "alias": "שח\"מ כחולה", "total": 39}, {"msd": 8, "makat": 100072369, "fullname": "אמר\"ל חד עיני שח\"מ שפ' ירוקה", "alias": "שח''מ ירוקה", "total": 25}, {"msd": 9, "makat": 100072505, "fullname": "אמר\"ל דו-עיני עידו דור ב' (קל משקל)", "alias": "עידו", "total": 16}, {"msd": 10, "makat": 100075431, "fullname": "כוונת טרמית \"אורלי\" עבור \"גיל\"", "alias": "אורלי", "total": 2}, {"msd": 11, "makat": 100075881, "fullname": "משקפת תרמית \"עמית\"", "alias": "עמית", "total": 7}, {"msd": 12, "makat": 100075946, "fullname": "משקפת תרמית \"עמית\" אכון", "alias": "עמית איכון", "total": 2}, {"msd": 13, "makat": 100075962, "fullname": "יחצ\"ג מיני כוכב", "alias": "יחצ\"ג מיני כוכב", "total": 1}, {"msd": 14, "makat": 100075989, "fullname": "מערכת הרכשת מטרות ערמון (טרמי)", "alias": "ערמון", "total": 2}, {"msd": 15, "makat": 100077555, "fullname": "אמר\"ל דו עיני MIKRON-D", "alias": "מיקרון", "total": 5}, {"msd": 16, "makat": 100077656, "fullname": "כוונת תרמית סטנד אלון לקלע THERMIS SR W", "alias": "טרמיס", "total": 11}, {"msd": 17, "makat": 100077889, "fullname": "אמר\"ל דו עיני NYX", "alias": "NYX", "total": 4}, {"msd": 18, "makat": 100079275, "fullname": "אמר\"ל \"ליאור\" 4 כולל זווד", "alias": "ליאור", "total": 5}, {"msd": 19, "makat": 100080125, "fullname": "כוונת פגיון דור ב", "alias": "פיגיון", "total": 3}, {"msd": 20, "makat": 100081954, "fullname": "אמר\"ל \"עכבר\" כולל זווד", "alias": "עכבר", "total": 15}, {"msd": 21, "makat": 100083523, "fullname": "כוונת טרמית קליפ און טרמית", "alias": "פליר T75", "total": 12}, {"msd": 22, "makat": 100083582, "fullname": "אמר\"ל אקילה 4 כולל זווד", "alias": "אקילה X4", "total": 52}, {"msd": 23, "makat": 100083680, "fullname": "אמר\"ל אקילה 6 כולל זווד", "alias": "אקילה X6", "total": 8}, {"msd": 24, "makat": 100087863, "fullname": "מט\"ל סרוג 10 ק\"מ", "alias": "מטל סרוג 10", "total": 3}, {"msd": 25, "makat": 100087871, "fullname": "מט\"ל סרוג 20 ק\"מ", "alias": "מטל סרוג 20", "total": 1}, {"msd": 26, "makat": 100079330, "fullname": "כוונת תרמי לקלע מכבית", "alias": "מכבית", "total": 10}]  const RIGHT_ITEMS = [{"msd": 1, "makat": 100069180, "fullname": "ישל\"ט משופר למערכת \"גיל\"", "alias": "ישלט", "total": 2}, {"msd": 2, "makat": 100070154, "fullname": "אמר\"ל לנהג \"עדי\" כולל זווד", "alias": "עדי", "total": 5}, {"msd": 3, "makat": 100070170, "fullname": "אמר\"ל שפנפן חד-עיני כולל זווד", "alias": "שח\"ע", "total": 15}, {"msd": 4, "makat": 100070537, "fullname": "וילון נהג לנגמ\"ש", "alias": "וילון", "total": 19}, {"msd": 5, "makat": 100070740, "fullname": "אמר\"ל שח\"ע (שפ ממותגת) כולל זווד", "alias": "שח\"ע ממותג", "total": 14}, {"msd": 6, "makat": 100070758, "fullname": "כוונת לילה לצלף- MUNS דור ג", "alias": "כוונת MUNS", "total": 1}, {"msd": 7, "makat": 100071258, "fullname": "אמר\"ל חד עיני \"שח\"מ\"", "alias": "שח\"מ כחולה", "total": 39}, {"msd": 8, "makat": 100072369, "fullname": "אמר\"ל חד עיני שח\"מ שפ' ירוקה", "alias": "שח''מ ירוקה", "total": 25}, {"msd": 9, "makat": 100072505, "fullname": "אמר\"ל דו-עיני עידו דור ב' (קל משקל)", "alias": "עידו", "total": 16}, {"msd": 10, "makat": 100075431, "fullname": "כוונת טרמית \"אורלי\" עבור \"גיל\"", "alias": "אורלי", "total": 2}, {"msd": 11, "makat": 100075881, "fullname": "משקפת תרמית \"עמית\"", "alias": "עמית", "total": 7}, {"msd": 12, "makat": 100075946, "fullname": "משקפת תרמית \"עמית\" אכון", "alias": "עמית איכון", "total": 2}, {"msd": 13, "makat": 100075962, "fullname": "יחצ\"ג מיני כוכב", "alias": "יחצ\"ג מיני כוכב", "total": 1}, {"msd": 14, "makat": 100075989, "fullname": "מערכת הרכשת מטרות ערמון (טרמי)", "alias": "ערמון", "total": 2}, {"msd": 15, "makat": 100077555, "fullname": "אמר\"ל דו עיני MIKRON-D", "alias": "מיקרון", "total": 5}, {"msd": 16, "makat": 100077656, "fullname": "כוונת תרמית סטנד אלון לקלע THERMIS SR W", "alias": "טרמיס", "total": 11}, {"msd": 17, "makat": 100077889, "fullname": "אמר\"ל דו עיני NYX", "alias": "NYX", "total": 4}, {"msd": 18, "makat": 100079275, "fullname": "אמר\"ל \"ליאור\" 4 כולל זווד", "alias": "ליאור", "total": 5}, {"msd": 19, "makat": 100080125, "fullname": "כוונת פגיון דור ב", "alias": "פיגיון", "total": 3}, {"msd": 20, "makat": 100081954, "fullname": "אמר\"ל \"עכבר\" כולל זווד", "alias": "עכבר", "total": 15}, {"msd": 21, "makat": 100083523, "fullname": "כוונת טרמית קליפ און טרמית", "alias": "פליר T75", "total": 12}, {"msd": 22, "makat": 100083582, "fullname": "אמר\"ל אקילה 4 כולל זווד", "alias": "אקילה X4", "total": 52}, {"msd": 23, "makat": 100083680, "fullname": "אמר\"ל אקילה 6 כולל זווד", "alias": "אקילה X6", "total": 8}, {"msd": 24, "makat": 100087863, "fullname": "מט\"ל סרוג 10 ק\"מ", "alias": "מטל סרוג 10", "total": 3}, {"msd": 25, "makat": 100087871, "fullname": "מט\"ל סרוג 20 ק\"מ", "alias": "מטל סרוג 20", "total": 1}, {"msd": 26, "makat": 100079330, "fullname": "כוונת תרמי לקלע מכבית", "alias": "מכבית", "total": 10}];
   
   const FORM_ITEMS = [{"msd": 1, "makat": 100012066, "name": "רוס\"ק M4A1 תצורת חי\"ר", "total": 340, "alias": "M4"}, {"msd": 2, "makat": 100012073, "name": "קלע סער M4", "total": 68, "alias": "קלע סער"}, {"msd": 3, "makat": 100012332, "name": "רוס\"ק 5.56 M-16 מ\"מ", "total": 148, "alias": "M16"}, {"msd": 4, "makat": 100014050, "name": "רוב\"צ HTR 338", "total": 3, "alias": "HTR 338"}, {"msd": 5, "makat": 100015536, "name": "רוב\"צ M24 עם מעצה משודרג", "total": 9, "alias": "M-24 חדש"}, {"msd": 6, "makat": 100020009, "name": "מקלע קל נגב תצורת 7.62", "total": 7, "alias": "נגב 7.62"}, {"msd": 7, "makat": 100020017, "name": "משגר רימון מטול 40 מ\"מ דואט M320A1", "total": 34, "alias": "מטולון M320"}, {"msd": 8, "makat": 100021013, "name": "מקלע אחיד 7.62 ממ מאג חי\"ר", "total": 38, "alias": "מאג"}, {"msd": 9, "makat": 100022206, "name": "מקלע קל נגב דגם ב'", "total": 24, "alias": "נגב 5.56"}, {"msd": 10, "makat": 100024225, "name": "מקלע כבד 0.5 בראונינג אמריקאי", "total": 9, "alias": "מק\"כ 0.5"}, {"msd": 11, "makat": 100025019, "name": "מקל\"ר קל משקל", "total": 1, "alias": "מקלרון"}, {"msd": 12, "makat": 100025108, "name": "מטול רימונים M-203", "total": null, "alias": "מטול רימונים M-203"}, {"msd": 13, "makat": 100025132, "name": "מקל\"ר מוד 3 40 ממ MK-19", "total": 4, "alias": "מקלר"}, {"msd": 20, "makat": 146749010, "name": "כדור ברזל- מתקן הטלה", "total": 3, "alias": "כדור ברזל- מתקן הטלה"}, {"msd": 21, "makat": 167779000, "name": "ערכת תהל", "total": 20, "alias": "ערכת תהל"}, {"msd": 22, "makat": 146764009, "name": "כלי טיס בלתי מאוייש אלפא", "total": 1, "alias": "כלי טיס בלתי מאוייש אלפא"}, {"msd": 23, "makat": 146737000, "name": "כלי טיס בלתי מאוייש מטריס 30 דואלי", "total": 2, "alias": "מטריס 30"}, {"msd": 24, "makat": 146749000, "name": "כלי טיס בלתי מאויש אבוו מקס 4 תרמי", "total": 8, "alias": "רחפן איבו"}, {"msd": 25, "makat": 146749009, "name": "כלי טיס בלתי מאוייש זיקים N", "total": null, "alias": "זיקים N"}, {"msd": 26, "makat": 146755000, "name": "כלי טייס בלתי מאויש אווטה", "total": 22, "alias": "אבטה"}];
   
@@ -778,57 +781,135 @@ function DailyModal({db,onClose,type}){
     return {...item, alias, total, loans, neoura, stock, ok:stock>=0};
   });
   return (
-    <Modal title={`ספירת מחסן — ${type==="open"?"פתיחה":"סגירה"} ${todayStr()}`} onClose={onClose} wide>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-        {[{l:"מלאי כולל",v:items.reduce((a,i)=>a+i.total,0),c:"#388bfd"},{l:"השאלות",v:items.reduce((a,i)=>a+i.loans,0),c:"#e3b341"},{l:"במחסן",v:items.reduce((a,i)=>a+Math.max(0,i.stock),0),c:"#3fb950"}].map(s=>(
-          <div key={s.l} style={{background:"var(--bg-base)",borderRadius:8,padding:"12px 8px",textAlign:"center"}}>
-            <div style={{fontSize:26,fontWeight:800,color:s.c}}>{s.v}</div>
-            <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.l}</div>
+    <Modal title={`ספירת מחסן ארמו"ן — ${type==="open"?"פתיחה":"סגירה"} ${todayStr()}`} onClose={onClose} wide>
+      {/* כותרת בפורמט האקסל */}
+      <div style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 14px",marginBottom:12,border:"1px solid var(--border-subtle)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8,fontSize:12}}>
+          <div><strong>ספירת מחסן ארמו"ן — {type==="open"?"פתיחה":"סגירה"}</strong> | גדוד 9219</div>
+          <div>תאריך: <strong>{todayStr()}</strong></div>
+        </div>
+      </div>
+
+      {/* סיכום */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
+        {[
+          {l:"מלאי כולל",v:allCalc.reduce((a,i)=>a+(i.total||0),0),c:"var(--accent-blue)"},
+          {l:"השאלות",v:allCalc.reduce((a,i)=>a+(i.loans||0),0),c:"var(--accent-orange)"},
+          {l:"במחסן",v:allCalc.reduce((a,i)=>a+Math.max(0,i.stock||0),0),c:"var(--accent-green)"}
+        ].map(s=>(
+          <div key={s.l} style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 6px",textAlign:"center",border:"1px solid var(--border-subtle)"}}>
+            <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
+            <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>{s.l}</div>
           </div>
         ))}
       </div>
-      <div style={{overflowX:"auto",marginBottom:14}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+
+      {/* טבלה דו-עמודית כמו האקסל */}
+      <div style={{overflowX:"auto",marginBottom:12}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,direction:"rtl"}}>
           <thead>
-            <tr style={{background:"var(--bg-base)"}}>
-              <th style={S.th}>מס"ד</th>
-              <th style={S.th}>מק"ט</th>
-              <th style={{...S.th,minWidth:160}}>שם הפריט</th>
-              <th style={S.th}>מלאי כולל</th>
-              <th style={S.th}>השאלות</th>
-              <th style={S.th}>נעורה</th>
-              <th style={S.th}>מצאי</th>
-              <th style={S.th}>✓</th>
+            <tr style={{background:"#1a1a2e",color:"#fff"}}>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מס"ד</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>חומר</th>
+              <th style={{padding:"5px 8px",textAlign:"right",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff",minWidth:130}}>שם הפריט</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מלאי כולל</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>השאלות</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מצאי</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>הערות</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מס"ד</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>חומר</th>
+              <th style={{padding:"5px 8px",textAlign:"right",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff",minWidth:130}}>שם הפריט</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מלאי כולל</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>השאלות</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מצאי</th>
+              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>הערות</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item,i)=>(
-              <tr key={item.name} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
-                <td style={{...S.td,color:"var(--text-secondary)"}}>{i+1}</td>
-                <td style={{...S.td,fontWeight:600}}>{item.name}</td>
-                <td style={{...S.td,textAlign:"center",color:"#388bfd"}}>{item.total}</td>
-                <td style={{...S.td,textAlign:"center",color:"#e3b341"}}>{item.loans}</td>
-                <td style={{...S.td,textAlign:"center",color:item.stock>=0?"#3fb950":"#f85149",fontWeight:700}}>{item.stock}</td>
-                <td style={{...S.td,textAlign:"center"}}>{item.ok?"✅":"⚠️"}</td>
-              </tr>
-            ))}
+            {Array.from({length:Math.max(leftCalc.length,rightCalc.length)},(_,i)=>{
+              const L=leftCalc[i];
+              const R=rightCalc[i];
+              const bg=i%2===0?"var(--bg-surface)":"var(--bg-elevated)";
+              const tdS={padding:"5px 4px",border:"1px solid var(--border-subtle)",textAlign:"center",fontSize:11,background:bg};
+              const tdSL={...tdS,textAlign:"right"};
+              return (
+                <tr key={i}>
+                  {L?(<>
+                    <td style={tdS}>{L.msd}</td>
+                    <td style={{...tdS,fontSize:9,fontFamily:"monospace"}}>{L.makat||"—"}</td>
+                    <td style={{...tdSL,fontWeight:L.total?600:400}}>{L.fullname||L.alias||"—"}</td>
+                    <td style={tdS}>{L.total??""}</td>
+                    <td style={{...tdS,color:"var(--accent-orange)"}}>{L.loans||0}</td>
+                    <td style={{...tdS,color:L.ok?"var(--accent-green)":"var(--accent-red)",fontWeight:700}}>{L.total!=null?L.stock:""}</td>
+                    <td style={tdS}></td>
+                  </>):(<><td colSpan={7} style={tdS}/></>)}
+                  {R?(<>
+                    <td style={tdS}>{R.msd}</td>
+                    <td style={{...tdS,fontSize:9,fontFamily:"monospace"}}>{R.makat||"—"}</td>
+                    <td style={{...tdSL,fontWeight:R.total?600:400}}>{R.fullname||R.alias||"—"}</td>
+                    <td style={tdS}>{R.total??""}</td>
+                    <td style={{...tdS,color:"var(--accent-orange)"}}>{R.loans||0}</td>
+                    <td style={{...tdS,color:R.ok?"var(--accent-green)":"var(--accent-red)",fontWeight:700}}>{R.total!=null?R.stock:""}</td>
+                    <td style={tdS}></td>
+                  </>):(<><td colSpan={7} style={tdS}/></>)}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-        <div>
-          <label style={S.label}>הערות</label>
-          <textarea value={note} onChange={e=>setNote(e.target.value)} style={{...S.input,height:70,resize:"none",marginBottom:0}} placeholder="הערות..."/>
+
+      {/* פרטים + חתימות כמו האקסל */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+        <div style={{border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4}}>פרטים</div>
+          <div style={{fontSize:12,display:"flex",flexDirection:"column",gap:4}}>
+            <div><span style={{color:"var(--text-secondary)"}}>שם ושם משפחה: </span><strong>{auth?.name||"אורן חלפון"}</strong></div>
+            <div><span style={{color:"var(--text-secondary)"}}>מספר אישי: </span><strong>{auth?.soldierId||"7680832"}</strong></div>
+          </div>
         </div>
-        <div>
-          <label style={S.label}>חתימת אחראי</label>
-          <div onClick={()=>setShowPad(true)} style={{background:"var(--bg-base)",border:`1px solid ${mgrSig?"#238636":"#30363d"}`,borderRadius:8,height:70,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-            {mgrSig?<img src={mgrSig} style={{height:58,maxWidth:"100%"}} alt="חתימה"/>:<span style={{color:"var(--text-secondary)",fontSize:13}}>לחץ לחתימה</span>}
+        <div style={{border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4}}>אחראי משק הארמו"ן</div>
+          <div style={{fontSize:12,marginBottom:6}}>
+            <span style={{color:"var(--text-secondary)"}}>בעל תפקיד סופר: </span>
+            <input value={qofficer} onChange={e=>setQofficer(e.target.value)} placeholder="שם ושם משפחה" style={{...S.input,marginBottom:0,display:"inline",width:"auto"}}/>
+          </div>
+          <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>חתימת אחראי:</div>
+          <div onClick={()=>setShowPad(true)} style={{background:"var(--bg-base)",border:`1px solid ${mgrSig?"var(--accent-green)":"var(--border)"}`,borderRadius:6,height:55,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+            {mgrSig?<img src={mgrSig} style={{height:45,maxWidth:"100%"}} alt="חתימה"/>:<span style={{color:"var(--text-secondary)",fontSize:12}}>לחץ לחתימה</span>}
           </div>
         </div>
       </div>
+
+      <div style={{marginBottom:10}}>
+        <label style={S.label}>הערות</label>
+        <textarea value={note} onChange={e=>setNote(e.target.value)} style={{...S.input,height:55,resize:"none",marginBottom:0}} placeholder="הערות..."/>
+      </div>
+
       <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>window.print()} style={{...S.btn("blue"),flex:1}}>🖨️ הדפסה</button>
+        <button onClick={()=>{
+          const win=window.open("","_blank");
+          const leftRows=leftCalc.map(i=>`<tr><td>${i.msd}</td><td style="font-size:9px">${i.makat||""}</td><td>${i.fullname||i.alias}</td><td>${i.total??""}</td><td>${i.loans||0}</td><td>${i.neoura||0}</td><td style="color:${i.ok?"green":"red"}">${i.total!=null?i.stock:""}</td><td></td></tr>`).join("");
+          const rightRows=rightCalc.map(i=>`<tr><td>${i.msd}</td><td style="font-size:9px">${i.makat||""}</td><td>${i.fullname||i.alias}</td><td>${i.total??""}</td><td>${i.loans||0}</td><td>${i.neoura||0}</td><td style="color:${i.ok?"green":"red"}">${i.total!=null?i.stock:""}</td><td></td></tr>`).join("");
+          win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>ספירת מחסן</title>
+          <style>body{font-family:Arial,sans-serif;direction:rtl;padding:15px;font-size:11px}
+          table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:4px 6px}
+          th{background:#1a1a2e;color:#fff}.header{display:flex;justify-content:space-between;border-bottom:2px solid #1a1a2e;margin-bottom:8px;padding-bottom:4px}
+          .details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}.det-box{border:1px solid #ccc;padding:8px;border-radius:4px}
+          @media print{button{display:none}}</style></head>
+          <body><div class="header"><div><strong>ספירת מחסן ארמו"ן — ${type==="open"?"פתיחה":"סגירה"}</strong></div><div>תאריך: ${todayStr()}</div><div>גדוד 9219</div></div>
+          <table><thead><tr><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th></tr></thead>
+          <tbody>${Array.from({length:Math.max(leftCalc.length,rightCalc.length)},(_,i)=>{
+            const L=leftCalc[i]||null; const R=rightCalc[i]||null;
+            return `<tr>${L?`<td>${L.msd}</td><td>${L.makat||""}</td><td>${L.fullname||L.alias}</td><td>${L.total??""}</td><td>${L.loans||0}</td><td>${L.total!=null?L.stock:""}</td><td></td>`:"<td colspan='7'></td>"}${R?`<td>${R.msd}</td><td>${R.makat||""}</td><td>${R.fullname||R.alias}</td><td>${R.total??""}</td><td>${R.loans||0}</td><td>${R.total!=null?R.stock:""}</td><td></td>`:"<td colspan='7'></td>"}</tr>`;
+          }).join("")}</tbody></table>
+          <div class="details"><div class="det-box"><strong>פרטים</strong><br/>שם: אורן חלפון<br/>מ.א: 7680832<br/>דרגה: רסר</div>
+          <div class="det-box"><strong>אחראי משק הארמו"ן</strong><br/>בעל תפקיד סופר: ${qofficer||"_______________"}<br/>חתימה: _______________</div></div>
+          ${note?`<p>הערות: ${note}</p>`:""}
+          <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
+          </body></html>`);
+          win.document.close();
+        }} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
         <button onClick={onClose} style={{...S.btn(),flex:1}}>סגור</button>
       </div>
       {showPad&&<Modal title="חתימת אחראי" onClose={()=>setShowPad(false)}><SignaturePad onSave={d=>{setMgrSig(d);setShowPad(false);}}/></Modal>}
@@ -2084,7 +2165,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
-      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType}/>}
+      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
     </div>
