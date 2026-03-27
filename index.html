@@ -765,15 +765,12 @@ function DailyModal({db,onClose,type,auth}){
   // השאלות = חיילים שחתמו בפועל (db.signatures) + שיוכים שנעשו ידנית
   // db.assignments מכיל את כל הרישום הגדודי — לא רלוונטי לפתיחה/סגירה
   const loansMap={};
+  // ספור לפי חתימות — לכל חתום בדוק מה יש לו ב-assignments
   const signedIds = new Set(Object.keys(db.signatures||{}));
-  Object.entries(db.assignments||{}).forEach(([soldierId, assigned])=>{
-    if(!signedIds.has(soldierId)) return; // רק חתומים בפועל
+  signedIds.forEach(soldierId=>{
+    const assigned = db.assignments?.[soldierId] || {};
     Object.keys(assigned).forEach(name=>{
-      // Store by both original name and cleaned alias
       loansMap[name]=(loansMap[name]||0)+1;
-      // Also try matching by EQ_COLS name (in case of sanitized chars)
-      const aliasMatch = EQ_COLS.find(eq=>eq===name||eq.replace(/[^א-תa-zA-Z0-9 .]/g,'')===name.replace(/[^א-תa-zA-Z0-9 .]/g,''));
-      if(aliasMatch && aliasMatch!==name) loansMap[aliasMatch]=(loansMap[aliasMatch]||0)+1;
     });
   });
   const master = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : null;
