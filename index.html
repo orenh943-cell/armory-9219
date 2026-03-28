@@ -766,7 +766,9 @@ function DailyModal({db,onClose,type,auth}){
   const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
   const [editTime, setEditTime] = useState(now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}));
   const [mgrSig, setMgrSig] = useState(null);
+  const [soferSig, setSoferSig] = useState(null);
   const [showPad, setShowPad] = useState(false);
+  const [showSoferPad, setShowSoferPad] = useState(false);
   const [note, setNote] = useState("");
   // בעל תפקיד סופר
   const [soferName, setSoferName] = useState("");
@@ -881,7 +883,7 @@ function DailyModal({db,onClose,type,auth}){
         <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${soferName||"_______________"}</span></div>
         <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${soferID||"_______________"}</span></div>
         <div class="field"><span class="lbl">דרגה:</span><span class="val">${soferRank||"_______________"}</span></div>
-        <div class="sig-area"></div>
+        ${soferSig?`<img src="${soferSig}" style="height:45px;margin-top:6px;border-radius:4px" alt="חתימה"/>`:`<div class="sig-area"></div>`}
         <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
       </div>
     </div>
@@ -1017,7 +1019,16 @@ function DailyModal({db,onClose,type,auth}){
               placeholder="מספר אישי" style={{...S.input,marginBottom:4,fontSize:12}} inputMode="numeric"/>
             <label style={S.label}>דרגה</label>
             <input value={soferRank} onChange={e=>setSoferRank(e.target.value)}
-              placeholder="דרגה" style={{...S.input,marginBottom:0,fontSize:12}}/>
+              placeholder="דרגה" style={{...S.input,marginBottom:4,fontSize:12}}/>
+            <div style={{marginTop:2}}>
+              <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>חתימה:</div>
+              <div onClick={()=>setShowSoferPad(true)}
+                style={{background:"var(--bg-base)",border:"1px solid "+(soferSig?"var(--accent-green)":"var(--border)"),
+                  borderRadius:6,height:55,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                {soferSig?<img src={soferSig} style={{height:45,maxWidth:"100%"}} alt="חתימה"/>
+                  :<span style={{color:"var(--text-secondary)",fontSize:12}}>לחץ לחתימה</span>}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1034,6 +1045,7 @@ function DailyModal({db,onClose,type,auth}){
       </div>
 
       {showPad&&<Modal title="חתימת אחראי" onClose={()=>setShowPad(false)}><SignaturePad onSave={d=>{setMgrSig(d);setShowPad(false);}}/></Modal>}
+      {showSoferPad&&<Modal title="חתימת קצין סופר" onClose={()=>setShowSoferPad(false)}><SignaturePad onSave={d=>{setSoferSig(d);setShowSoferPad(false);}}/></Modal>}
     </Modal>
   );
 }
@@ -2067,13 +2079,19 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           <div>
             <h2 style={{marginBottom:18,fontSize:20,fontWeight:800}}>לוח בקרה</h2>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:18}}>
-              {[{l:"חיילים",v:soldiers.length,c:"#a371f7",k:"all"},{l:"עם נשק",v:withWeapons,c:"#388bfd",k:"withWeapon"},{l:"חתמו",v:signedCount,c:"#3fb950",k:"signed"},{l:"טרם חתמו",v:unsigned,c:unsigned>0?"#f85149":"#3fb950",k:"unsigned"}].map(s=>(
+              {[
+                {label:"חיילים",val:soldiers.length,color:"#a371f7",k:"all"},
+                {label:"עם נשק",val:withWeapons,color:"#388bfd",k:"withWeapon"},
+                {label:"חתמו",val:signedCount,color:"#3fb950",k:"signed"},
+                {label:"טרם חתמו",val:unsigned,color:unsigned>0?"#f85149":"#3fb950",k:"unsigned"}
+              ].map(s=>(
                 <div key={s.label} onClick={()=>setDashModal(s.k)} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0,cursor:"pointer",transition:"border .15s",border:"1px solid var(--border)"}}
                   onMouseEnter={e=>e.currentTarget.style.border="1px solid "+s.color}
-                  onMouseLeave={e=>e.currentTarget.style.border="1px solid #30363d"}>
-                  <div style={{fontSize:28,fontWeight:800,color:s.color}}>{s.val}</div>
-                  <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.label}</div>
-                  <div style={{fontSize:10,color:"var(--text-muted)",marginTop:3}}>לחץ לפירוט ▼</div>
+                  onMouseLeave={e=>e.currentTarget.style.border="1px solid var(--border)"}
+                >
+                  <div style={{fontSize:32,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
+                  <div style={{color:"var(--text-secondary)",fontSize:13,marginTop:6,fontWeight:600}}>{s.label}</div>
+                  <div style={{fontSize:10,color:"var(--text-muted)",marginTop:4}}>לחץ לפירוט ▼</div>
                 </div>
               ))}
             </div>
