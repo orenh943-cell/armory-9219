@@ -174,7 +174,7 @@ const DAILY_ITEMS = [{"name":"M4","total":340},{"name":"קלע סער","total":6
 const USERS = {
   "אורן": {role:"admin", pass:"7680832", name:"אורן חלפון", soldierId:"7680832"},
   "מתן": {role:"manager", pass:"7492961", name:"מתן ניסים דיין", soldierId:"7492961"},
-  "יקי": {role:"manager", pass:"3456", name:"יקי", soldierId:""},
+
   "צפייה_א": {role:"viewer", pass:"1111", name:"צפייה פלוגה א", soldierId:"", viewUnit:"א"},
   "צפייה_ב": {role:"viewer", pass:"2222", name:"צפייה פלוגה ב", soldierId:"", viewUnit:"ב"},
   "צפייה_ג": {role:"viewer", pass:"3333", name:"צפייה פלוגה ג", soldierId:"", viewUnit:"ג"},
@@ -1569,6 +1569,8 @@ function GroupSignModal({db, soldiers, onClose}){
   );
 }
 
+const INITIAL_BROKEN = [{"id": "broken_sheet_0", "soldierId": "5786027", "soldierName": "תום שוורץ", "itemName": "מאג", "serial": "6702100", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_1", "soldierId": "8265093", "soldierName": "יהונתן שוורץ", "itemName": "נגב 7_62", "serial": "49158598", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_2", "soldierId": "8336677", "soldierName": "דן רמצון", "itemName": "נגב 5_56", "serial": "96500279", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_3", "soldierId": "8656206", "soldierName": "רחמים עידן", "itemName": "נגב 7_62", "serial": "49158616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_4", "soldierId": "9166274", "soldierName": "דוד קפלן", "itemName": "נגב 5_56", "serial": "97500947", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_5", "soldierId": "8359634", "soldierName": "סחר עידן", "itemName": "נגב 5_56", "serial": "97500197", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_6", "soldierId": "8807573", "soldierName": "סער מחול", "itemName": "נגב 5_56", "serial": "96500309", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_7", "soldierId": "8736682", "soldierName": "דוראל מושזאדה", "itemName": "נגב 5_56", "serial": "31500254", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_8", "soldierId": "7561457", "soldierName": "נוי קרידי", "itemName": "אקילה X4", "serial": "1085662", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_9", "soldierId": "8825435", "soldierName": "עיליי אביטן", "itemName": "M4", "serial": "922284", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_10", "soldierId": "8278738", "soldierName": "פנש מאירי", "itemName": "אקילה X4", "serial": "97020173", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_11", "soldierId": "8427230", "soldierName": "מיכאל ברנדס", "itemName": "עכבר", "serial": "7052697", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_12", "soldierId": "8508192", "soldierName": "מתן אביטבול", "itemName": "M16", "serial": "5071674", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_13", "soldierId": "7068405", "soldierName": "חורב שלו", "itemName": "M4", "serial": "926637", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_14", "soldierId": "8412746", "soldierName": "גל גלבוע", "itemName": "אקילה X4", "serial": "98062959", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_15", "soldierId": "8651541", "soldierName": "מזרחי עמית", "itemName": "קלע סער", "serial": "4042616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_16", "soldierId": "6178836", "soldierName": "חי נחמני", "itemName": "M16", "serial": "5169571", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_17", "soldierId": "8751717", "soldierName": "ירדן אזולאי", "itemName": "M4", "serial": "932644", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_18", "soldierId": "8693817", "soldierName": "נדב שוסברג", "itemName": "עמית", "serial": "10120765", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}];
+
 function BrokenEquipmentTab({db, setDb, soldiers, auth}){
   const [items, setItems] = useState(()=>(db.brokenItems||[]));
   const [showForm, setShowForm] = useState(false);
@@ -1784,7 +1786,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off4 = fbOn("db/brokenItems", (broken)=>{
       setDb(prev=>{
-        const updated={...prev, brokenItems: broken||[]};
+        const items = broken||[];
+        // Seed broken items from sheet if empty
+        const seeded = items.length === 0 ? INITIAL_BROKEN : items;
+        if(items.length === 0){ fbSet("db/brokenItems", INITIAL_BROKEN).catch(()=>{}); }
+        const updated={...prev, brokenItems: seeded};
         try{localStorage.setItem(DB_KEY,JSON.stringify(updated));}catch(e){}
         return updated;
       });
@@ -3251,6 +3257,7 @@ function DashDetailModal({type, soldiers, db, onClose}){
 // =================== SEARCH MODAL (חיפוש צ / סידורי) ===================
 function SearchModal({onClose, soldiers, db}){
   const [q, setQ] = React.useState("");
+  const [searchItem, setSearchItem] = React.useState("");
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
 
   const results = React.useMemo(()=>{
@@ -3445,9 +3452,10 @@ function PermissionsTab({db, setDb}){
   const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
   const [showAdd, setShowAdd] = useState(false);
-  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל"});
+  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",soldierId:""});
   const [err, setErr] = useState("");
   const [searchUser, setSearchUser] = useState("");
+  const [nameSuggestions, setNameSuggestions] = useState([]);
   const [soldiers] = useState(()=>[...Object.values(loadDB()?.customSoldiers||{}),...RAW_SOLDIERS]);
 
   function togglePerm(username, perm, isDynamic){
@@ -3506,9 +3514,34 @@ function PermissionsTab({db, setDb}){
               <label style={S.label}>שם משתמש (לכניסה)</label>
               <input value={newUser.username} onChange={e=>setNewUser({...newUser,username:e.target.value})} placeholder="לדוגמא: dani" style={S.input}/>
             </div>
-            <div>
-              <label style={S.label}>שם מלא</label>
-              <input value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})} placeholder="דני כהן" style={S.input}/>
+            <div style={{position:"relative"}}>
+              <label style={S.label}>שם מלא (חפש מרשימת החיילים)</label>
+              <input value={newUser.name} onChange={e=>{
+                setNewUser({...newUser,name:e.target.value,soldierId:""});
+                setNameSuggestions(e.target.value.length>1
+                  ? soldiers.filter(s=>s.name.includes(e.target.value)||s.id.includes(e.target.value)).slice(0,6)
+                  : []);
+              }} placeholder="הקלד שם חייל לחיפוש..." style={{...S.input,marginBottom:0}}/>
+              {nameSuggestions.length>0&&(
+                <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--bg-elevated)",
+                  border:"1px solid var(--accent-blue)",borderRadius:8,zIndex:100,maxHeight:180,overflowY:"auto",
+                  boxShadow:"0 4px 16px rgba(0,0,0,.4)"}}>
+                  {nameSuggestions.map(s=>(
+                    <div key={s.id} onClick={()=>{
+                      setNewUser(p=>({...p,name:s.name,soldierId:s.id,
+                        username:p.username||s.id,pass:p.pass||s.id}));
+                      setNameSuggestions([]);
+                    }} style={{padding:"9px 12px",cursor:"pointer",
+                      borderBottom:"1px solid var(--border-subtle)",display:"flex",
+                      justifyContent:"space-between",alignItems:"center"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=""}>
+                      <span style={{fontWeight:600,fontSize:13}}>{s.name}</span>
+                      <span style={{color:"var(--text-secondary)",fontSize:11}}>פלוגה {s.unit} · {s.id}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label style={S.label}>סיסמה</label>
