@@ -3009,24 +3009,24 @@ function CabinetsTab({db, setDb, auth}){
   }
 
   function confirmAddItem(){
-    if(!newItem.alias.trim()) return;
+    if(!addForm.alias.trim()) return;
     const items = [...getItems(addingTo), {
-      makat: newItem.makat||'', 
-      alias: newItem.alias.trim(),
-      fullname: newItem.alias.trim(),
-      qty: parseInt(newItem.qty)||1
+      makat: addForm.makat||'', 
+      alias: addForm.alias.trim(),
+      fullname: addForm.alias.trim(),
+      qty: parseInt(addForm.qty)||1
     }];
     const updated = {...customCabinets, [addingTo]: items};
     setCustomCabinets(updated);
     const ndb = {...db, cabinets: updated};
     saveDB(ndb); setDb(ndb);
     setAddingTo(null);
-    setNewItem({alias:'',makat:'',qty:1});
+    setAddForm({alias:'',makat:'',qty:1});
   }
 
   function addItem(cabName){
     setAddingTo(cabName);
-    setNewItem({alias:'',makat:'',qty:1});
+    setAddForm({alias:'',makat:'',qty:1});
   }
 
   function removeItem(cabName, idx){
@@ -3165,13 +3165,13 @@ function CabinetsTab({db, setDb, auth}){
         <div style={{background:"var(--bg-surface)",borderRadius:14,padding:"20px 24px",width:"100%",maxWidth:380,border:"1px solid var(--border)"}}>
           <h3 style={{margin:"0 0 14px",fontSize:15}}>➕ הוסף פריט — {addingTo}</h3>
           <label style={S.label}>שם אמצעי *</label>
-          <input value={newItem.alias} onChange={e=>setNewItem(p=>({...p,alias:e.target.value}))}
+          <input value={addForm.alias} onChange={e=>setAddForm(p=>({...p,alias:e.target.value}))}
             placeholder="שם האמצעי" style={S.input} autoFocus/>
           <label style={S.label}>מק"ט (אופציונלי)</label>
-          <input value={newItem.makat} onChange={e=>setNewItem(p=>({...p,makat:e.target.value}))}
+          <input value={addForm.makat} onChange={e=>setAddForm(p=>({...p,makat:e.target.value}))}
             placeholder="מספר מק׳׳ט" style={S.input} inputMode="numeric"/>
           <label style={S.label}>כמות</label>
-          <input value={newItem.qty} onChange={e=>setNewItem(p=>({...p,qty:e.target.value}))}
+          <input value={addForm.qty} onChange={e=>setAddForm(p=>({...p,qty:e.target.value}))}
             type="number" min="1" style={S.input}/>
           <div style={{display:"flex",gap:8,marginTop:8}}>
             <button onClick={confirmAddItem} style={{...S.btn("green"),flex:1}}>הוסף</button>
