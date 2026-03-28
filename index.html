@@ -253,7 +253,7 @@ function restoreFromFirebase(obj, refObj){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -265,6 +265,7 @@ function saveDB(db){
   fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
   fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
+  fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
 }
 function initDB(){
   const local=loadDB();
@@ -753,6 +754,8 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     </div>
   );
 }
+
+const CABINETS_DATA = {"ארון א":[{"makat":100077656,"alias":"טרמיס","fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","qty":3},{"makat":100087421,"alias":"מטלון ישן","fullname":"מטל למפקד מחלקה דגם WG-III","qty":3},{"makat":100088720,"alias":"ציין לייזר לנגב","fullname":"סמן לייזר AIM1-LR","qty":9},{"makat":100089149,"alias":"סמן PACK","fullname":"סמן אוניברסלי לייזר טאץ","qty":11},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":2},{"makat":100080125,"alias":"פיגיון","fullname":"כוונת פגיון דור ב","qty":1},{"makat":100088495,"alias":"סמן לייזר למפקד","fullname":"סמן לייזר למפקד דגם HHP דיוי","qty":1},{"makat":100088843,"alias":"נטלי","fullname":"סמן תרמי לחיר פלור","qty":2},{"makat":100071150,"alias":"סמן לייזר ללאו","fullname":"סמן לייזר למפצח ולאו M72","qty":6},{"makat":100080494,"alias":"משקפת","fullname":"משקפת 50*10 גלורי דלת אחזקה","qty":11},{"makat":100087022,"alias":"מצפן","fullname":"מצפן יד מעלות פרז צף קרינת בתא","qty":14}],"ארון ב":[{"makat":100077656,"alias":"טרמיס","fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","qty":3},{"makat":100087421,"alias":"מטלון ישן","fullname":"מטל למפקד מחלקה דגם WG-III","qty":3},{"makat":100088720,"alias":"ציין לייזר לנגב","fullname":"סמן לייזר AIM1-LR","qty":8},{"makat":100089149,"alias":"סמן PACK","fullname":"סמן אוניברסלי לייזר טאץ","qty":11},{"makat":100088495,"alias":"סמן לייזר למפקד","fullname":"סמן לייזר למפקד דגם HHP דיוי","qty":1},{"makat":100088843,"alias":"נטלי","fullname":"סמן תרמי לחיר פלור","qty":2},{"makat":100071150,"alias":"סמן לייזר ללאו","fullname":"סמן לייזר למפצח ולאו M72","qty":6},{"makat":100080494,"alias":"משקפת","fullname":"משקפת 50*10 גלורי דלת אחזקה","qty":11},{"makat":100087022,"alias":"מצפן","fullname":"מצפן יד מעלות פרז צף קרינת בתא","qty":14}],"ארון ג":[{"makat":100077656,"alias":"טרמיס","fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","qty":3},{"makat":100087421,"alias":"מטלון ישן","fullname":"מטל למפקד מחלקה דגם WG-III","qty":2},{"makat":100088720,"alias":"ציין לייזר לנגב","fullname":"סמן לייזר AIM1-LR","qty":8},{"makat":100089149,"alias":"סמן PACK","fullname":"סמן אוניברסלי לייזר טאץ","qty":11},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":2},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":1},{"makat":100088495,"alias":"סמן לייזר למפקד","fullname":"סמן לייזר למפקד דגם HHP דיוי","qty":1},{"makat":100088843,"alias":"נטלי","fullname":"סמן תרמי לחיר פלור","qty":1},{"makat":100071150,"alias":"סמן לייזר ללאו","fullname":"סמן לייזר למפצח ולאו M72","qty":6},{"makat":100080494,"alias":"משקפת","fullname":"משקפת 50*10 גלורי דלת אחזקה","qty":14},{"makat":100087022,"alias":"מצפן","fullname":"מצפן יד מעלות פרז צף קרינת בתא","qty":14}],"ארון מסייעת":[{"makat":100077656,"alias":"טרמיס","fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","qty":2},{"makat":146749010,"alias":"כדור ברזל- מתקן הטלה","fullname":"מתקן הטלה רימון רסס רחפן EVOMAX","qty":2},{"makat":100087812,"alias":"מטלון חדש","fullname":"מטל לערכת מאתר לצלף","qty":8},{"makat":100086077,"alias":"זום למתאר","fullname":"טלסקופ צלף 2 לאופולד כולל זווד","qty":10},{"makat":100086131,"alias":"טלסקופ ישיר ירין","fullname":"טלסקופ זום 50*20 6.5 לאופולד","qty":1},{"makat":100088720,"alias":"ציין לייזר לנגב","fullname":"סמן לייזר AIM1-LR","qty":6},{"makat":100089149,"alias":"סמן PACK","fullname":"סמן אוניברסלי לייזר טאץ","qty":15},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":3},{"makat":100088495,"alias":"סמן לייזר למפקד","fullname":"סמן לייזר למפקד דגם HHP דיוי","qty":1},{"makat":100071150,"alias":"סמן לייזר ללאו","fullname":"סמן לייזר למפצח ולאו M72","qty":4},{"makat":100080494,"alias":"משקפת","fullname":"משקפת 50*10 גלורי דלת אחזקה","qty":15},{"makat":100087022,"alias":"מצפן","fullname":"מצפן יד מעלות פרז צף קרינת בתא","qty":16},{"makat":100092638,"alias":"שבשבת רוח","fullname":"שבשבת רוח לצלף","qty":9},{"makat":100069180,"alias":"ישלט","fullname":"ישלט משופר למערכת גיל","qty":2},{"makat":100075431,"alias":"אורלי","fullname":"כוונת טרמית אורלי עבור גיל","qty":2},{"makat":100086344,"alias":"טלסקופ זום 2050 6.5","fullname":"טלסקופ ישר ירין הגדלה משתנה","qty":1}],"ארון גדודי":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":7},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":1},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":8},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":10},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":3},{"makat":100080125,"alias":"פיגיון","fullname":"כוונת פגיון דור ב","qty":1},{"makat":100085321,"alias":"כוונת השלכה למטול M203","fullname":"כוונת השלכה מטול M203 רוסר M4","qty":5}],"כנה א":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":13},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":5},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":49},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":1},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":6},{"makat":100085321,"alias":"כוונת השלכה למטול M203","fullname":"כוונת השלכה מטול M203 רוסר M4","qty":1}],"כנה ב":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":14},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":7},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":43},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":5}],"כנה ג":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":13},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":6},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":44},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":8}],"מסייעת 2":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":3},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":7},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":54}],"מסייעת 3":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":11},{"makat":100086456,"alias":"מרק 5","fullname":"טלסקופ לאופולד MARK#5HD#3.6-18*44","qty":2},{"makat":100086412,"alias":"מרק 6","fullname":"טלסקופ לאופולד MARK6 3-18*44 TREMOR2 MA","qty":2},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":1},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":12},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":4},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":4}],"אגמ-פלסמ":[{"makat":100083647,"alias":"טריגיקון","fullname":"טלסקופ יום טריגיקון X4 לקלע סער","qty":3},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":2},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":63},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":7},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":1}],"מסייעת 1":[{"makat":100086456,"alias":"מרק 5","fullname":"טלסקופ לאופולד MARK#5HD#3.6-18*44","qty":2},{"makat":100086412,"alias":"מרק 6","fullname":"טלסקופ לאופולד MARK6 3-18*44 TREMOR2 MA","qty":6},{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":6},{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":1},{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":1}],"ארון אגמ-פלסמ":[{"makat":100088720,"alias":"ציין לייזר לנגב","fullname":"סמן לייזר AIM1-LR","qty":1},{"makat":100089149,"alias":"סמן PACK","fullname":"סמן אוניברסלי לייזר טאץ","qty":8},{"makat":100076110,"alias":"מפרומור","fullname":"כוונת מפרו מור למפקד","qty":1},{"makat":100071150,"alias":"סמן לייזר ללאו","fullname":"סמן לייזר למפצח ולאו M72","qty":1},{"makat":100080494,"alias":"משקפת","fullname":"משקפת 50*10 גלורי דלת אחזקה","qty":8},{"makat":100087022,"alias":"מצפן","fullname":"מצפן יד מעלות פרז צף קרינת בתא","qty":10}],"ארמון 4":[{"makat":100085518,"alias":"כוונת M5","fullname":"כוונת השלכה מתקדמת M5","qty":7}],"ארמון 3":[{"makat":100075783,"alias":"מפרולייט","fullname":"מפרולייט","qty":1}],"ארמון 2":[{"makat":100085454,"alias":"זאבון","fullname":"כוונת זאבון למטול HR","qty":6},{"makat":100085321,"alias":"כוונת השלכה למטול M203","fullname":"כוונת השלכה מטול M203 רוסר M4","qty":3}],"ארון רחפנים":[{"makat":146755000,"alias":"אבטה","fullname":"אבטה","qty":20},{"makat":146755013,"alias":"משקפי אבטה","fullname":"משקפי אבטה","qty":11},{"makat":146755014,"alias":"שלט אבטה","fullname":"שלט אבטה","qty":11}]};
 
 const DAILY_LEFT = [{"msd":1,"makat":100012066,"fullname":"רוסק M4A1 תצורת חיר","alias":"M4","total":340},{"msd":2,"makat":100012073,"fullname":"קלע סער M4","alias":"קלע סער","total":68},{"msd":3,"makat":100012332,"fullname":"רוסק 5.56 M-16 ממ","alias":"M16","total":148},{"msd":4,"makat":100014050,"fullname":"רובצ HTR 338","alias":"HTR 338","total":3},{"msd":5,"makat":100015536,"fullname":"רובצ M24 עם מעצה משודרג","alias":"M-24 חדש","total":9},{"msd":6,"makat":100020009,"fullname":"מקלע קל נגב תצורת 7.62","alias":"נגב 7.62","total":7},{"msd":7,"makat":100020017,"fullname":"משגר רימון מטול 40 ממ דואט M320A1","alias":"מטולון M320","total":34},{"msd":8,"makat":100021013,"fullname":"מקלע אחיד 7.62 ממ מאג חיר","alias":"מאג","total":38},{"msd":9,"makat":100022206,"fullname":"מקלע קל נגב דגם ב","alias":"נגב 5.56","total":24},{"msd":10,"makat":100024225,"fullname":"מקלע כבד 0.5 בראונינג אמריקאי","alias":"מקכ 0.5","total":9},{"msd":11,"makat":100025019,"fullname":"מקלר קל משקל","alias":"מקלרון","total":1},{"msd":12,"makat":100025108,"fullname":"מטול רימונים M-203","alias":"","total":null},{"msd":13,"makat":100025132,"fullname":"מקלר מוד 3 40 ממ MK-19","alias":"מקלר","total":4},{"msd":20,"makat":146749010,"fullname":"כדור ברזל- מתקן הטלה","alias":"כדור ברזל- מתקן הטלה","total":3},{"msd":21,"makat":167779000,"fullname":"ערכת תהל ","alias":"","total":20},{"msd":22,"makat":146764009,"fullname":"כלי טיס בלתי מאוייש אלפא ","alias":"אלפא","total":1},{"msd":23,"makat":146737000,"fullname":"כלי טיס בלתי מאוייש מטריס 30 דואלי","alias":"מטריס 30","total":2},{"msd":24,"makat":146749000,"fullname":"כלי טיס בלתי מאויש אבוו מקס 4 תרמי","alias":"רחפן איבו","total":8},{"msd":25,"makat":146749009,"fullname":"כלי טיס בלתי מאוייש זיקים N","alias":"זיקים N","total":null},{"msd":26,"makat":146755000,"fullname":"כלי טייס בלתי מאויש אווטה","alias":"אבטה","total":22}];
 const DAILY_RIGHT = [{"msd":1,"makat":100069180,"fullname":"ישלט משופר למערכת גיל","alias":"ישלט","total":2},{"msd":2,"makat":100070154,"fullname":"אמרל לנהג עדי כולל זווד","alias":"עדי","total":5},{"msd":3,"makat":100070170,"fullname":"אמרל שפנפן חד-עיני כולל זווד","alias":"שחע","total":15},{"msd":4,"makat":100070537,"fullname":"וילון נהג לנגמש","alias":"וילון","total":19},{"msd":5,"makat":100070740,"fullname":"אמרל שחע (שפ ממותגת) כולל זווד","alias":"שחע ממותג","total":14},{"msd":6,"makat":100070758,"fullname":"כוונת לילה לצלף- MUNS דור ג","alias":"כוונת MUNS","total":1},{"msd":7,"makat":100071258,"fullname":"אמרל חד עיני שחמ","alias":"שחמ כחולה","total":39},{"msd":8,"makat":100072369,"fullname":"אמרל חד עיני שחמ שפ ירוקה","alias":"שחמ ירוקה","total":25},{"msd":9,"makat":100072505,"fullname":"אמרל דו-עיני עידו דור ב (קל משקל)","alias":"עידו","total":16},{"msd":10,"makat":100075431,"fullname":"כוונת טרמית אורלי עבור גיל","alias":"אורלי","total":2},{"msd":11,"makat":100075881,"fullname":"משקפת תרמית עמית","alias":"עמית","total":7},{"msd":12,"makat":100075946,"fullname":"משקפת תרמית עמית אכון","alias":"עמית איכון","total":2},{"msd":13,"makat":100075962,"fullname":"יחצג מיני כוכב","alias":"יחצג מיני כוכב","total":1},{"msd":14,"makat":100075989,"fullname":"מערכת הרכשת מטרות ערמון (טרמי)","alias":"ערמון","total":2},{"msd":15,"makat":100077555,"fullname":"אמרל דו עיני MIKRON-D","alias":"מיקרון","total":5},{"msd":16,"makat":100077656,"fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","alias":"טרמיס","total":11},{"msd":17,"makat":100077889,"fullname":"אמרל דו עיני NYX","alias":"NYX","total":4},{"msd":18,"makat":100079275,"fullname":"אמרל ליאור 4 כולל זווד","alias":"ליאור","total":5},{"msd":19,"makat":100080125,"fullname":"כוונת פגיון דור ב","alias":"פיגיון","total":3},{"msd":20,"makat":100081954,"fullname":"אמרל עכבר כולל זווד","alias":"עכבר","total":15},{"msd":21,"makat":100083523,"fullname":"כוונת טרמית קליפ און טרמית","alias":"פליר T75","total":12},{"msd":22,"makat":100083582,"fullname":"אמרל אקילה 4 כולל זווד","alias":"אקילה X4","total":52},{"msd":23,"makat":100083680,"fullname":"אמרל אקילה 6 כולל זווד","alias":"אקילה X6","total":8},{"msd":24,"makat":100087863,"fullname":"מטל סרוג 10 קמ","alias":"מטל סרוג 10","total":3},{"msd":25,"makat":100087871,"fullname":"מטל סרוג 20 קמ","alias":"מטל סרוג 20","total":1},{"msd":26,"makat":100079330,"fullname":"כוונת תרמי לקלע מכבית","alias":"מכבית","total":10}];
@@ -1827,7 +1830,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off10 = fbOn("db/weaponLocations", (locs)=>{
       setDb(prev=>({...prev, weaponLocations: locs||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); };
+    const off11 = fbOn("db/cabinets", (cabs)=>{
+      setDb(prev=>({...prev, cabinets: cabs||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -1885,6 +1891,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     {id:"daily",label:"יומי",icon:"📋"},
     ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
     ...(perms.canViewInventory!==false?[{id:"mystock",label:"מלאי ארמון",icon:"📋"}]:[]),
+    {id:"cabinets",label:"ארונות",icon:"🗄️"},
     ...(auth.role==="admin"?[{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
   ];
 
@@ -2166,6 +2173,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         )}
         {tab==="inventory"&&(
           <InventoryTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+        )}
+        {tab==="cabinets"&&(
+          <CabinetsTab db={db} setDb={setDb} auth={auth}/>
         )}
         {tab==="mystock"&&(
           <MyStockTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
@@ -2781,6 +2791,199 @@ function InventoryTab({db, setDb, soldiers, auth}){
           <div>אין פריטים לפי הסינון הנוכחי</div>
         </div>
       )}
+    </div>
+  );
+}
+
+// =================== CABINETS TAB (ארונות) ===================
+function CabinetsTab({db, setDb, auth}){
+  const [selectedUnit, setSelectedUnit] = React.useState("א");
+  const [editMode, setEditMode] = React.useState(false);
+  const [customCabinets, setCustomCabinets] = React.useState(()=>db.cabinets||{});
+
+  React.useEffect(()=>setCustomCabinets(db.cabinets||{}),[db.cabinets]);
+
+  // Unit -> cabinet names mapping
+  const UNIT_CABINETS = {
+    "א":        ["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],
+    "ב":        ["כנה ב","ארון ב 1","ארון ב 2","ארון רחפנים ב"],
+    "ג":        ["כנה ג","ארון ג 1","ארון ג 2","ארון רחפנים ג"],
+    "מסייעת":  ["כנה מסייעת","ארון מסייעת 1","ארון מסייעת 2","ארון מסייעת 3","ארון מסייעת 4","ארון רחפנים מסייעת"],
+    "אגמ":      ["כנה אגמ","ארון אגמ 1","ארון אגמ 2","ארון רחפנים אגמ"],
+    "פלסמ":     ["כנה פלסמ","ארון פלסמ 1","ארון פלסמ 2","ארון רחפנים פלסמ"],
+    "גדודי":    ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
+  };
+
+  const units = Object.keys(UNIT_CABINETS);
+  const currentCabinets = UNIT_CABINETS[selectedUnit]||[];
+
+  // Map new cabinet names to original data keys
+  const CAB_DATA_MAP = {
+    "כנה א": "כנה א", "ארון א 1": "ארון א", "ארון א 2": [],
+    "כנה ב": "כנה ב", "ארון ב 1": "ארון ב", "ארון ב 2": [],
+    "כנה ג": "כנה ג", "ארון ג 1": "ארון ג", "ארון ג 2": [],
+    "כנה מסייעת": "ארון מסייעת", "ארון מסייעת 1": "מסייעת 1",
+    "ארון מסייעת 2": "מסייעת 2", "ארון מסייעת 3": "מסייעת 3", "ארון מסייעת 4": [],
+    "כנה אגמ": "ארון אגמ-פלסמ", "ארון אגמ 1": "אגמ-פלסמ", "ארון אגמ 2": [],
+    "ארון גדודי": "ארון גדודי", "ארמון 2": "ארמון 2", "ארמון 3": "ארמון 3", "ארמון 4": "ארמון 4",
+  };
+  function getItems(cabName){
+    const custom = customCabinets[cabName];
+    if(custom) return custom;
+    const dataKey = CAB_DATA_MAP[cabName];
+    if(Array.isArray(dataKey)) return [];
+    if(dataKey) return CABINETS_DATA[dataKey]||[];
+    return CABINETS_DATA[cabName]||[];
+  }
+
+  function updateQty(cabName, idx, newQty){
+    const items = [...getItems(cabName)];
+    items[idx] = {...items[idx], qty: parseInt(newQty)||0};
+    const updated = {...customCabinets, [cabName]: items};
+    setCustomCabinets(updated);
+    const ndb = {...db, cabinets: updated};
+    saveDB(ndb); setDb(ndb);
+  }
+
+  function addItem(cabName){
+    const items = [...getItems(cabName), {makat:'',alias:'',fullname:'',qty:1}];
+    const updated = {...customCabinets, [cabName]: items};
+    setCustomCabinets(updated);
+    const ndb = {...db, cabinets: updated};
+    saveDB(ndb); setDb(ndb);
+  }
+
+  function removeItem(cabName, idx){
+    const items = getItems(cabName).filter((_,i)=>i!==idx);
+    const updated = {...customCabinets, [cabName]: items};
+    setCustomCabinets(updated);
+    const ndb = {...db, cabinets: updated};
+    saveDB(ndb); setDb(ndb);
+  }
+
+  function printCabinet(cabName){
+    const items = getItems(cabName);
+    const total = items.reduce((s,i)=>s+i.qty,0);
+    const win = window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    <title>${cabName}</title>
+    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+    h2{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:12px 0}
+    th,td{border:1px solid #ccc;padding:6px 9px;text-align:right}
+    th{background:#1a1a2e;color:#fff}.total{font-weight:bold;background:#f0f4ff}
+    @media print{button{display:none}}</style></head>
+    <body><h2>🗄️ ${cabName}</h2>
+    <p style="color:#666">סה"כ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
+    <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th></tr></thead>
+    <tbody>${items.map(i=>`<tr><td style="font-size:10px;font-family:monospace">${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style="text-align:center;font-weight:bold">${i.qty}</td></tr>`).join("")}
+    <tr class="total"><td colspan="2">סה"כ</td><td style="text-align:center">${total}</td></tr>
+    </tbody></table>
+    <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
+    </body></html>`);
+    win.document.close();
+  }
+
+  function printAllUnit(){
+    const allItems = currentCabinets.flatMap(cab=>
+      getItems(cab).map(i=>({...i, cabinet:cab}))
+    );
+    const win = window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    <title>כל ארונות פלוגה ${selectedUnit}</title>
+    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+    h2{margin-bottom:4px}h3{margin:16px 0 6px;color:#1a1a2e;border-bottom:2px solid #1a1a2e;padding-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin:8px 0}
+    th,td{border:1px solid #ccc;padding:5px 8px;text-align:right}
+    th{background:#1a1a2e;color:#fff}.total{font-weight:bold;background:#f0f4ff}
+    @media print{button{display:none}}</style></head>
+    <body><h2>🗄️ ארונות פלוגה ${selectedUnit}</h2>
+    <p style="color:#666">הופק: ${new Date().toLocaleDateString("he-IL")}</p>
+    ${currentCabinets.map(cab=>{
+      const items=getItems(cab);
+      const total=items.reduce((s,i)=>s+i.qty,0);
+      return `<h3>${cab} (${total} יחידות)</h3>
+      <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>כמות</th></tr></thead>
+      <tbody>${items.map(i=>`<tr><td style="font-size:10px">${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style="text-align:center;font-weight:bold">${i.qty}</td></tr>`).join("")}
+      <tr class="total"><td colspan="2">סה"כ</td><td style="text-align:center">${total}</td></tr>
+      </tbody></table>`;
+    }).join("")}
+    <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
+    </body></html>`);
+    win.document.close();
+  }
+
+  return (
+    <div style={{maxWidth:900,margin:"0 auto",padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div>
+          <h2 style={{fontSize:17,fontWeight:800,margin:0}}>🗄️ ארונות פלוגות</h2>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>ציוד מוקצה לפי ארון</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {auth.role==="admin"&&(
+            <button onClick={()=>setEditMode(p=>!p)}
+              style={{...S.btn(editMode?"orange":""),padding:"7px 14px",fontSize:13}}>
+              {editMode?"✓ סיום עריכה":"✏️ עריכה"}
+            </button>
+          )}
+          <button onClick={printAllUnit} style={{...S.btn("green"),padding:"7px 14px",fontSize:13}}>🖨️ הדפס פלוגה</button>
+        </div>
+      </div>
+
+      {/* בחירת פלוגה */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        {units.map(u=>(
+          <button key={u} onClick={()=>setSelectedUnit(u)}
+            style={{padding:"6px 16px",borderRadius:20,border:`1px solid ${selectedUnit===u?"var(--accent-blue)":"var(--border)"}`,
+              background:selectedUnit===u?"var(--btn-blue-bg)":"transparent",
+              color:selectedUnit===u?"var(--accent-blue)":"var(--text-secondary)",
+              cursor:"pointer",fontWeight:selectedUnit===u?700:400,fontSize:13,minHeight:36}}>
+            פלוגה {u}
+          </button>
+        ))}
+      </div>
+
+      {/* ארונות הפלוגה */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>
+        {currentCabinets.map(cabName=>{
+          const items = getItems(cabName);
+          const total = items.reduce((s,i)=>s+i.qty,0);
+          return (
+            <div key={cabName} style={{...S.card,marginBottom:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                marginBottom:10,borderBottom:"1px solid var(--border-subtle)",paddingBottom:8}}>
+                <div>
+                  <span style={{fontWeight:700,fontSize:14}}>{cabName}</span>
+                  <span style={{fontSize:11,color:"var(--text-secondary)",marginRight:6}}>{total} יחידות</span>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {editMode&&<button onClick={()=>addItem(cabName)}
+                    style={{...S.btn("green"),padding:"3px 8px",fontSize:11,minHeight:28}}>+ הוסף</button>}
+                  <button onClick={()=>printCabinet(cabName)}
+                    style={{...S.btn("blue"),padding:"3px 8px",fontSize:11,minHeight:28}}>🖨️</button>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                {items.map((item,idx)=>(
+                  <div key={idx} style={{display:"flex",alignItems:"center",gap:6,
+                    padding:"5px 7px",background:"var(--bg-base)",borderRadius:5}}>
+                    <span style={{flex:1,fontSize:12,fontWeight:500}}>{item.alias||item.fullname}</span>
+                    {editMode
+                      ?<input type="number" value={item.qty} min="0"
+                          onChange={e=>updateQty(cabName,idx,e.target.value)}
+                          style={{...S.input,width:55,marginBottom:0,textAlign:"center",padding:"3px 6px"}}/>
+                      :<span style={{fontWeight:700,fontSize:14,color:"var(--accent-blue)",minWidth:28,textAlign:"center"}}>{item.qty}</span>
+                    }
+                    {editMode&&<button onClick={()=>removeItem(cabName,idx)}
+                      style={{...S.btn("red"),padding:"2px 6px",fontSize:10,minHeight:26}}>✕</button>}
+                  </div>
+                ))}
+                {items.length===0&&<div style={{color:"var(--text-muted)",fontSize:12,textAlign:"center",padding:8}}>ריק</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
