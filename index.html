@@ -3008,9 +3008,6 @@ function CabinetsTab({db, setDb, auth}){
     saveDB(ndb); setDb(ndb);
   }
 
-  const [addingTo, setAddingTo] = React.useState(null);
-  const [newItem, setNewItem] = React.useState({alias:'',makat:'',qty:1});
-
   function confirmAddItem(){
     if(!newItem.alias.trim()) return;
     const items = [...getItems(addingTo), {
