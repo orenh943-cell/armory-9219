@@ -1833,7 +1833,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off11 = fbOn("db/cabinets", (cabs)=>{
       setDb(prev=>({...prev, cabinets: cabs||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); };
+    const off12 = fbOn("db/loginLog", (log)=>{
+      setDb(prev=>({...prev, loginLog: log||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off12(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -1892,7 +1895,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
     ...(perms.canViewInventory!==false?[{id:"mystock",label:"מלאי ארמון",icon:"📋"}]:[]),
     {id:"cabinets",label:"ארונות",icon:"🗄️"},
-    ...(auth.role==="admin"?[{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
+    ...(auth.role==="admin"?[{id:"actlog",label:"כניסות",icon:"📊"}]:[]),
+    ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"}]:[]),
+    ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
   ];
 
   function Sidebar(){
@@ -2168,17 +2173,26 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="broken"&&(
           <BrokenEquipmentTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
+        {tab==="loginlog"&&auth.role==="admin"&&(
+          <LoginLogTab db={db}/>
+        )}
         {tab==="perms"&&auth.role==="admin"&&(
           <PermissionsTab db={db} setDb={setDb}/>
         )}
         {tab==="inventory"&&(
           <InventoryTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
+        {tab==="loginlog"&&auth.role==="admin"&&(
+          <LoginLogTab db={db}/>
+        )}
         {tab==="cabinets"&&(
           <CabinetsTab db={db} setDb={setDb} auth={auth}/>
         )}
         {tab==="mystock"&&(
           <MyStockTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+        )}
+        {tab==="actlog"&&auth.role==="admin"&&(
+          <ActivityLogTab db={db}/>
         )}
       </div>
 
@@ -2795,6 +2809,151 @@ function InventoryTab({db, setDb, soldiers, auth}){
   );
 }
 
+// =================== LOGIN LOG TAB ===================
+function LoginLogTab({db}){
+  const entries = React.useMemo(()=>{
+    return Object.values(db.loginLog||{})
+      .sort((a,b)=>(b.ts||0)-(a.ts||0))
+      .slice(0, 200);
+  },[db.loginLog]);
+
+  const ROLE_LABELS = {admin:"מנהל",manager:"מנפק",viewer:"צפייה"};
+
+  function clearLog(){
+    if(!window.confirm("למחוק את כל לוג הכניסות?")) return;
+    fbSet("db/loginLog", {}).catch(()=>{});
+  }
+
+  return (
+    <div style={{maxWidth:700,margin:"0 auto",padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div>
+          <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📊 לוג כניסות</h2>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>{entries.length} רשומות</div>
+        </div>
+        <button onClick={clearLog} style={{...S.btn("red"),padding:"6px 14px",fontSize:12}}>🗑️ נקה לוג</button>
+      </div>
+
+      {entries.length===0?(
+        <div style={{...S.card,textAlign:"center",padding:40,color:"var(--text-muted)"}}>
+          <div style={{fontSize:40,marginBottom:8}}>📊</div>
+          <div>אין רשומות עדיין</div>
+          <div style={{fontSize:12,marginTop:4}}>כניסות עתידיות יירשמו כאן</div>
+        </div>
+      ):(
+        <div style={{...S.card,padding:0,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:"var(--bg-base)"}}>
+                {["שם","תפקיד","שם משתמש","תאריך ושעה"].map(h=>(
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e,i)=>(
+                <tr key={i} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
+                  <td style={{...S.td,fontWeight:600}}>{e.name||e.username||"?"}</td>
+                  <td style={S.td}>
+                    <span style={{
+                      color:e.role==="admin"?"var(--accent-purple)":e.role==="manager"?"var(--accent-blue)":"var(--text-secondary)",
+                      fontSize:12,fontWeight:600
+                    }}>{ROLE_LABELS[e.role]||e.role||"?"}</span>
+                  </td>
+                  <td style={{...S.td,color:"var(--text-secondary)",fontFamily:"monospace",fontSize:12}}>{e.username||"?"}</td>
+                  <td style={{...S.td,fontSize:12,color:"var(--text-secondary)"}}>{e.loginAt||"?"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =================== ACTIVITY LOG TAB ===================
+function ActivityLogTab({db}){
+  const [logs, setLogs] = React.useState([]);
+  const [filterUser, setFilterUser] = React.useState("הכל");
+
+  React.useEffect(()=>{
+    // Load from Firebase db.activityLog
+    const fbLogs = db.activityLog ? 
+      Object.values(db.activityLog).sort((a,b)=>b.ts-a.ts) : [];
+    // Also load from localStorage
+    try{
+      const local = JSON.parse(localStorage.getItem('armory_activity_log')||'[]');
+      // Merge, deduplicate by ts
+      const merged = [...fbLogs];
+      local.forEach(l=>{ if(!merged.find(m=>m.ts===l.ts)) merged.push(l); });
+      merged.sort((a,b)=>b.ts-a.ts);
+      setLogs(merged);
+    }catch(e){
+      setLogs(fbLogs);
+    }
+  },[db.activityLog]);
+
+  const users = ["הכל",...new Set(logs.map(l=>l.name||l.username).filter(Boolean))];
+  const filtered = filterUser==="הכל" ? logs : logs.filter(l=>(l.name||l.username)===filterUser);
+
+  const ROLE_HEB = {admin:"מנהל",manager:"מנפק",viewer:"צפייה"};
+
+  return (
+    <div style={{maxWidth:800,margin:"0 auto",padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div>
+          <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📊 יומן כניסות</h2>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>{filtered.length} כניסות</div>
+        </div>
+        <select value={filterUser} onChange={e=>setFilterUser(e.target.value)}
+          style={{...S.input,width:"auto",marginBottom:0}}>
+          {users.map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+      </div>
+
+      {filtered.length===0?(
+        <div style={{textAlign:"center",padding:40,color:"var(--text-muted)"}}>
+          <div style={{fontSize:40,marginBottom:8}}>📊</div>
+          <div>אין נתוני כניסה עדיין</div>
+          <div style={{fontSize:12,marginTop:4}}>נתונים יצטברו מהכניסה הבאה של כל משתמש</div>
+        </div>
+      ):(
+        <div style={{...S.card,padding:0,overflow:"hidden"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:"var(--bg-base)"}}>
+                {["שם","תפקיד","תאריך ושעה"].map(h=>(
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((log,i)=>(
+                <tr key={log.ts||i}
+                  style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}>
+                  <td style={{...S.td,fontWeight:600}}>{log.name||log.username||"—"}</td>
+                  <td style={S.td}>
+                    <span style={{
+                      color:log.role==="admin"?"var(--accent-purple)":log.role==="manager"?"var(--accent-blue)":"var(--text-secondary)",
+                      fontSize:12,fontWeight:500
+                    }}>{ROLE_HEB[log.role]||log.role||"—"}</span>
+                  </td>
+                  <td style={{...S.td,fontFamily:"monospace",fontSize:12,color:"var(--text-secondary)"}}>
+                    {log.loginAt||"—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // =================== CABINETS TAB (ארונות) ===================
 function CabinetsTab({db, setDb, auth}){
   const [selectedUnit, setSelectedUnit] = React.useState("א");
@@ -2845,12 +3004,28 @@ function CabinetsTab({db, setDb, auth}){
     saveDB(ndb); setDb(ndb);
   }
 
-  function addItem(cabName){
-    const items = [...getItems(cabName), {makat:'',alias:'',fullname:'',qty:1}];
-    const updated = {...customCabinets, [cabName]: items};
+  const [addingTo, setAddingTo] = React.useState(null);
+  const [newItem, setNewItem] = React.useState({alias:'',makat:'',qty:1});
+
+  function confirmAddItem(){
+    if(!newItem.alias.trim()) return;
+    const items = [...getItems(addingTo), {
+      makat: newItem.makat||'', 
+      alias: newItem.alias.trim(),
+      fullname: newItem.alias.trim(),
+      qty: parseInt(newItem.qty)||1
+    }];
+    const updated = {...customCabinets, [addingTo]: items};
     setCustomCabinets(updated);
     const ndb = {...db, cabinets: updated};
     saveDB(ndb); setDb(ndb);
+    setAddingTo(null);
+    setNewItem({alias:'',makat:'',qty:1});
+  }
+
+  function addItem(cabName){
+    setAddingTo(cabName);
+    setNewItem({alias:'',makat:'',qty:1});
   }
 
   function removeItem(cabName, idx){
@@ -2957,7 +3132,7 @@ function CabinetsTab({db, setDb, auth}){
                   <span style={{fontSize:11,color:"var(--text-secondary)",marginRight:6}}>{total} יחידות</span>
                 </div>
                 <div style={{display:"flex",gap:6}}>
-                  {editMode&&<button onClick={()=>addItem(cabName)}
+                  {editMode&&<button onClick={()=>{setAddingTo(addingTo===cabName?null:cabName);setAddForm({alias:'',makat:'',qty:1});}}
                     style={{...S.btn("green"),padding:"3px 8px",fontSize:11,minHeight:28}}>+ הוסף</button>}
                   <button onClick={()=>printCabinet(cabName)}
                     style={{...S.btn("blue"),padding:"3px 8px",fontSize:11,minHeight:28}}>🖨️</button>
@@ -2985,6 +3160,28 @@ function CabinetsTab({db, setDb, auth}){
         })}
       </div>
     </div>
+
+    {/* מודל הוספת פריט */}
+    {addingTo&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{background:"var(--bg-surface)",borderRadius:14,padding:"20px 24px",width:"100%",maxWidth:380,border:"1px solid var(--border)"}}>
+          <h3 style={{margin:"0 0 14px",fontSize:15}}>➕ הוסף פריט — {addingTo}</h3>
+          <label style={S.label}>שם אמצעי *</label>
+          <input value={newItem.alias} onChange={e=>setNewItem(p=>({...p,alias:e.target.value}))}
+            placeholder="שם האמצעי" style={S.input} autoFocus/>
+          <label style={S.label}>מק"ט (אופציונלי)</label>
+          <input value={newItem.makat} onChange={e=>setNewItem(p=>({...p,makat:e.target.value}))}
+            placeholder="מספר מק׳׳ט" style={S.input} inputMode="numeric"/>
+          <label style={S.label}>כמות</label>
+          <input value={newItem.qty} onChange={e=>setNewItem(p=>({...p,qty:e.target.value}))}
+            type="number" min="1" style={S.input}/>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button onClick={confirmAddItem} style={{...S.btn("green"),flex:1}}>הוסף</button>
+            <button onClick={()=>setAddingTo(null)} style={{...S.btn(),flex:1}}>ביטול</button>
+          </div>
+        </div>
+      </div>
+    )}
   );
 }
 
@@ -3988,6 +4185,15 @@ function App(){
 
   function handleLogin(a){
     try{sessionStorage.setItem("armory_session",JSON.stringify(a));}catch(e){}
+    // Log login to Firebase
+    const logEntry = {
+      username: a.username||a.name||"",
+      name: a.name||"",
+      role: a.role||"",
+      loginAt: new Date().toLocaleString("he-IL"),
+      ts: Date.now()
+    };
+    fbSet("db/loginLog/"+Date.now(), logEntry).catch(()=>{});
     setAuth(a);
   }
   function handleLogout(){
