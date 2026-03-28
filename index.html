@@ -761,23 +761,27 @@ const DAILY_LEFT = [{"msd":1,"makat":100012066,"fullname":"רוסק M4A1 תצו�
 const DAILY_RIGHT = [{"msd":1,"makat":100069180,"fullname":"ישלט משופר למערכת גיל","alias":"ישלט","total":2},{"msd":2,"makat":100070154,"fullname":"אמרל לנהג עדי כולל זווד","alias":"עדי","total":5},{"msd":3,"makat":100070170,"fullname":"אמרל שפנפן חד-עיני כולל זווד","alias":"שחע","total":15},{"msd":4,"makat":100070537,"fullname":"וילון נהג לנגמש","alias":"וילון","total":19},{"msd":5,"makat":100070740,"fullname":"אמרל שחע (שפ ממותגת) כולל זווד","alias":"שחע ממותג","total":14},{"msd":6,"makat":100070758,"fullname":"כוונת לילה לצלף- MUNS דור ג","alias":"כוונת MUNS","total":1},{"msd":7,"makat":100071258,"fullname":"אמרל חד עיני שחמ","alias":"שחמ כחולה","total":39},{"msd":8,"makat":100072369,"fullname":"אמרל חד עיני שחמ שפ ירוקה","alias":"שחמ ירוקה","total":25},{"msd":9,"makat":100072505,"fullname":"אמרל דו-עיני עידו דור ב (קל משקל)","alias":"עידו","total":16},{"msd":10,"makat":100075431,"fullname":"כוונת טרמית אורלי עבור גיל","alias":"אורלי","total":2},{"msd":11,"makat":100075881,"fullname":"משקפת תרמית עמית","alias":"עמית","total":7},{"msd":12,"makat":100075946,"fullname":"משקפת תרמית עמית אכון","alias":"עמית איכון","total":2},{"msd":13,"makat":100075962,"fullname":"יחצג מיני כוכב","alias":"יחצג מיני כוכב","total":1},{"msd":14,"makat":100075989,"fullname":"מערכת הרכשת מטרות ערמון (טרמי)","alias":"ערמון","total":2},{"msd":15,"makat":100077555,"fullname":"אמרל דו עיני MIKRON-D","alias":"מיקרון","total":5},{"msd":16,"makat":100077656,"fullname":"כוונת תרמית סטנד אלון לקלע THERMIS SR W","alias":"טרמיס","total":11},{"msd":17,"makat":100077889,"fullname":"אמרל דו עיני NYX","alias":"NYX","total":4},{"msd":18,"makat":100079275,"fullname":"אמרל ליאור 4 כולל זווד","alias":"ליאור","total":5},{"msd":19,"makat":100080125,"fullname":"כוונת פגיון דור ב","alias":"פיגיון","total":3},{"msd":20,"makat":100081954,"fullname":"אמרל עכבר כולל זווד","alias":"עכבר","total":15},{"msd":21,"makat":100083523,"fullname":"כוונת טרמית קליפ און טרמית","alias":"פליר T75","total":12},{"msd":22,"makat":100083582,"fullname":"אמרל אקילה 4 כולל זווד","alias":"אקילה X4","total":52},{"msd":23,"makat":100083680,"fullname":"אמרל אקילה 6 כולל זווד","alias":"אקילה X6","total":8},{"msd":24,"makat":100087863,"fullname":"מטל סרוג 10 קמ","alias":"מטל סרוג 10","total":3},{"msd":25,"makat":100087871,"fullname":"מטל סרוג 20 קמ","alias":"מטל סרוג 20","total":1},{"msd":26,"makat":100079330,"fullname":"כוונת תרמי לקלע מכבית","alias":"מכבית","total":10}];
 
 function DailyModal({db,onClose,type,auth}){
-  const [mgrSig,setMgrSig]=useState(null);
-  const [qofficer,setQofficer]=useState(""); // קצין סופר
-  const [showPad,setShowPad]=useState(false);
-  const [note,setNote]=useState("");
-  // השאלות = חיילים שחתמו בפועל (db.signatures) + שיוכים שנעשו ידנית
-  // db.assignments מכיל את כל הרישום הגדודי — לא רלוונטי לפתיחה/סגירה
-  const loansMap={};
-  // ספור לפי חתימות — לכל חתום בדוק מה יש לו ב-assignments
+  // תאריך ושעה עם אפשרות עריכה
+  const now = new Date();
+  const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
+  const [editTime, setEditTime] = useState(now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}));
+  const [mgrSig, setMgrSig] = useState(null);
+  const [showPad, setShowPad] = useState(false);
+  const [note, setNote] = useState("");
+  // בעל תפקיד סופר
+  const [soferName, setSoferName] = useState("");
+  const [soferID, setSoferID] = useState("");
+  const [soferRank, setSoferRank] = useState("");
+
+  // חישוב השאלות
+  const loansMap = {};
   const signedIds = new Set(Object.keys(db.signatures||{}));
   signedIds.forEach(soldierId=>{
-    const assigned = db.assignments?.[soldierId] || {};
-    Object.keys(assigned).forEach(name=>{
-      loansMap[name]=(loansMap[name]||0)+1;
-    });
+    const assigned = db.assignments?.[soldierId]||{};
+    Object.keys(assigned).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;});
   });
   const master = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : null;
-  
+
   function calcItem(item){
     const alias = item.alias||item.name;
     const total = master?.[alias]?.total ?? item.total ?? 0;
@@ -787,23 +791,138 @@ function DailyModal({db,onClose,type,auth}){
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
-  const allCalc = [...leftCalc, ...rightCalc];
+  const allCalc = [...leftCalc,...rightCalc];
+
+  // סגנון טבלה
+  const TH = {padding:"5px 6px",border:"1px solid #1a1a2e",background:"#1a1a2e",color:"#fff",textAlign:"right",fontSize:11};
+  const TD = (ok) => ({padding:"4px 6px",border:"1px solid #ccc",textAlign:"right",fontSize:11,
+    background: ok===false?"#fff0f0":ok===true?"#f0fff0":"#fff"});
+  const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
+
+  function handlePrint(){
+    const leftRows = leftCalc.map(i=>
+      "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:11px'>"+(i.fullname||i.alias)+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc'></td></tr>"
+    ).join("");
+    const rightRows = rightCalc.map(i=>
+      "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:11px'>"+(i.fullname||i.alias)+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
+      "<td style='padding:4px 6px;border:1px solid #ccc'></td></tr>"
+    ).join("");
+    const maxRows = Math.max(leftCalc.length, rightCalc.length);
+    const leftArr = leftCalc; const rightArr = rightCalc;
+    const tableRows = Array.from({length:maxRows},(_,i)=>{
+      const L=leftArr[i]||null; const R=rightArr[i]||null;
+      const Lc=L?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+L.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(L.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(L.fullname||L.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(L.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(L.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(L.ok?"green":"red")+"'>"+(L.total!=null?L.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
+      const Rc=R?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+R.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(R.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(R.fullname||R.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(R.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(R.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(R.ok?"green":"red")+"'>"+(R.total!=null?R.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
+      return "<tr>"+Lc+Rc+"</tr>";
+    }).join("");
+
+    const win = window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    <title>ספירת מחסן ארמון 9219</title>
+    <style>
+      body{font-family:Arial,sans-serif;direction:rtl;padding:10px;font-size:11px}
+      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a1a2e;padding-bottom:6px;margin-bottom:10px}
+      .header h1{font-size:16px;margin:0;color:#1a1a2e}
+      .meta{display:flex;gap:20px;font-size:11px;margin-bottom:10px}
+      table{width:100%;border-collapse:collapse;margin-bottom:10px}
+      th{background:#1a1a2e;color:#fff;padding:5px 6px;text-align:right;font-size:11px;border:1px solid #1a1a2e}
+      td{border:1px solid #ccc;padding:4px 6px;font-size:11px}
+      .footer{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+      .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
+      .box h3{font-size:11px;margin:0 0 6px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:4px}
+      .field{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+      .field .lbl{color:#666}
+      .field .val{font-weight:bold}
+      .sig-area{height:35px;border-bottom:1px solid #999;margin-top:8px}
+      @media print{button{display:none}}
+    </style></head>
+    <body>
+    <div class="header">
+      <div>
+        <h1>ספירת מחסן ארמון — ${type==="open"?"פתיחה":"סגירה"}</h1>
+        <div style="font-size:10px;color:#555">גדוד 9219 מוריה</div>
+      </div>
+      <div style="font-size:11px;text-align:left">
+        <div>תאריך: <strong>${editDate}</strong></div>
+        <div>שעה: <strong>${editTime}</strong></div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>מסד</th><th>חומר</th><th style="min-width:110px">שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th>
+          <th>מסד</th><th>חומר</th><th style="min-width:110px">שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div class="footer">
+      <div class="box">
+        <h3>אחראי משק הארמון</h3>
+        <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${auth?.name||"אורן חלפון"}</span></div>
+        <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${auth?.soldierId||"7680832"}</span></div>
+        <div class="field"><span class="lbl">דרגה:</span><span class="val">רסר</span></div>
+        <div class="sig-area"></div>
+        <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
+      </div>
+      <div class="box">
+        <h3>בעל תפקיד סופר</h3>
+        <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${soferName||"_______________"}</span></div>
+        <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${soferID||"_______________"}</span></div>
+        <div class="field"><span class="lbl">דרגה:</span><span class="val">${soferRank||"_______________"}</span></div>
+        <div class="sig-area"></div>
+        <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
+      </div>
+    </div>
+    ${note?`<div style="margin-top:8px;font-size:11px;border:1px solid #ccc;padding:6px;border-radius:4px"><strong>הערות:</strong> ${note}</div>`:""}
+    <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
+    </body></html>`);
+    win.document.close();
+  }
+
   return (
-    <Modal title={`ספירת מחסן ארמו"ן — ${type==="open"?"פתיחה":"סגירה"} ${todayStr()}`} onClose={onClose} wide>
-      {/* כותרת בפורמט האקסל */}
+    <Modal title={"ספירת מחסן ארמון — "+(type==="open"?"פתיחה":"סגירה")} onClose={onClose} wide>
+
+      {/* כותרת + תאריך/שעה ניתנים לעריכה */}
       <div style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 14px",marginBottom:12,border:"1px solid var(--border-subtle)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8,fontSize:12}}>
-          <div><strong>ספירת מחסן ארמו"ן — {type==="open"?"פתיחה":"סגירה"}</strong> | גדוד 9219</div>
-          <div>תאריך: <strong>{todayStr()}</strong></div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <div style={{fontWeight:700,fontSize:13}}>
+            ספירת מחסן ארמון — {type==="open"?"פתיחה":"סגירה"} | גדוד 9219
+          </div>
+          <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:11,color:"var(--text-secondary)"}}>תאריך:</span>
+              <input value={editDate} onChange={e=>setEditDate(e.target.value)}
+                style={{...S.input,marginBottom:0,width:100,fontSize:12,padding:"3px 6px"}}/>
+            </div>
+            {type==="close"&&(
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{fontSize:11,color:"var(--text-secondary)"}}>שעה:</span>
+                <input value={editTime} onChange={e=>setEditTime(e.target.value)}
+                  style={{...S.input,marginBottom:0,width:70,fontSize:12,padding:"3px 6px"}}/>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* סיכום */}
+      {/* סיכום מהיר */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
         {[
-          {l:"מלאי כולל",v:allCalc.reduce((a,i)=>a+(i.total||0),0),c:"var(--accent-blue)"},
-          {l:"השאלות",v:allCalc.reduce((a,i)=>a+(i.loans||0),0),c:"var(--accent-orange)"},
-          {l:"במחסן",v:allCalc.reduce((a,i)=>a+Math.max(0,i.stock||0),0),c:"var(--accent-green)"}
+          {label:"מלאי כולל",val:allCalc.reduce((a,i)=>a+(i.total||0),0),color:"var(--accent-blue)"},
+          {label:"השאלות",val:allCalc.reduce((a,i)=>a+(i.loans||0),0),color:"var(--accent-orange)"},
+          {label:"במחסן",val:allCalc.reduce((a,i)=>a+Math.max(0,i.stock||0),0),color:"var(--accent-green)"}
         ].map(s=>(
           <div key={s.label} style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 6px",textAlign:"center",border:"1px solid var(--border-subtle)"}}>
             <div style={{fontSize:22,fontWeight:800,color:s.color}}>{s.val}</div>
@@ -812,54 +931,41 @@ function DailyModal({db,onClose,type,auth}){
         ))}
       </div>
 
-      {/* טבלה דו-עמודית כמו האקסל */}
+      {/* טבלה דו-עמודית */}
       <div style={{overflowX:"auto",marginBottom:12}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,direction:"rtl"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,direction:"rtl",minWidth:700}}>
           <thead>
-            <tr style={{background:"#1a1a2e",color:"#fff"}}>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מס"ד</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>חומר</th>
-              <th style={{padding:"5px 8px",textAlign:"right",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff",minWidth:130}}>שם הפריט</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מלאי כולל</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>השאלות</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מצאי</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>הערות</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מס"ד</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>חומר</th>
-              <th style={{padding:"5px 8px",textAlign:"right",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff",minWidth:130}}>שם הפריט</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מלאי כולל</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>השאלות</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>מצאי</th>
-              <th style={{padding:"5px 4px",textAlign:"center",border:"1px solid #1a1a2e",fontSize:10,background:"#1a1a2e",color:"#fff"}}>הערות</th>
+            <tr>
+              {["מסד","חומר","שם הפריט","מלאי כולל","השאלות","מצאי","הערות",
+                "מסד","חומר","שם הפריט","מלאי כולל","השאלות","מצאי","הערות"].map((h,i)=>(
+                <th key={i} style={{...TH,minWidth:i===2||i===9?110:undefined}}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {Array.from({length:Math.max(leftCalc.length,rightCalc.length)},(_,i)=>{
-              const L=leftCalc[i];
-              const R=rightCalc[i];
+              const L=leftCalc[i]||null; const R=rightCalc[i]||null;
               const bg=i%2===0?"var(--bg-surface)":"var(--bg-elevated)";
-              const tdS={padding:"5px 4px",border:"1px solid var(--border-subtle)",textAlign:"center",fontSize:11,background:bg};
-              const tdSL={...tdS,textAlign:"right"};
               return (
                 <tr key={i}>
                   {L?(<>
-                    <td style={tdS}>{L.msd}</td>
-                    <td style={{...tdS,fontSize:9,fontFamily:"monospace"}}>{L.makat||"—"}</td>
-                    <td style={{...tdSL,fontWeight:L.total?600:400}}>{L.fullname||L.alias||"—"}</td>
-                    <td style={tdS}>{L.total??""}</td>
-                    <td style={{...tdS,color:"var(--accent-orange)"}}>{L.loans||0}</td>
-                    <td style={{...tdS,color:L.ok?"var(--accent-green)":"var(--accent-red)",fontWeight:700}}>{L.total!=null?L.stock:""}</td>
-                    <td style={tdS}></td>
-                  </>):(<><td colSpan={7} style={tdS}/></>)}
+                    <td style={{...TD(),background:bg,textAlign:"center"}}>{L.msd}</td>
+                    <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{L.makat||""}</td>
+                    <td style={{...TD(),background:bg}}>{L.fullname||L.alias}</td>
+                    <td style={{...TDC(),background:bg}}>{L.total||""}</td>
+                    <td style={{...TDC(),background:bg,color:"var(--accent-orange)"}}>{L.loans||0}</td>
+                    <td style={{...TDC(L.ok),background:bg,color:L.ok?"var(--accent-green)":"var(--accent-red)"}}>{L.total!=null?L.stock:""}</td>
+                    <td style={{...TD(),background:bg}}></td>
+                  </>):<td colSpan={7} style={{border:"1px solid var(--border-subtle)",background:bg}}/>}
                   {R?(<>
-                    <td style={tdS}>{R.msd}</td>
-                    <td style={{...tdS,fontSize:9,fontFamily:"monospace"}}>{R.makat||"—"}</td>
-                    <td style={{...tdSL,fontWeight:R.total?600:400}}>{R.fullname||R.alias||"—"}</td>
-                    <td style={tdS}>{R.total??""}</td>
-                    <td style={{...tdS,color:"var(--accent-orange)"}}>{R.loans||0}</td>
-                    <td style={{...tdS,color:R.ok?"var(--accent-green)":"var(--accent-red)",fontWeight:700}}>{R.total!=null?R.stock:""}</td>
-                    <td style={tdS}></td>
-                  </>):(<><td colSpan={7} style={tdS}/></>)}
+                    <td style={{...TD(),background:bg,textAlign:"center"}}>{R.msd}</td>
+                    <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{R.makat||""}</td>
+                    <td style={{...TD(),background:bg}}>{R.fullname||R.alias}</td>
+                    <td style={{...TDC(),background:bg}}>{R.total||""}</td>
+                    <td style={{...TDC(),background:bg,color:"var(--accent-orange)"}}>{R.loans||0}</td>
+                    <td style={{...TDC(R.ok),background:bg,color:R.ok?"var(--accent-green)":"var(--accent-red)"}}>{R.total!=null?R.stock:""}</td>
+                    <td style={{...TD(),background:bg}}></td>
+                  </>):<td colSpan={7} style={{border:"1px solid var(--border-subtle)",background:bg}}/>}
                 </tr>
               );
             })}
@@ -867,66 +973,70 @@ function DailyModal({db,onClose,type,auth}){
         </table>
       </div>
 
-      {/* פרטים + חתימות כמו האקסל */}
+      {/* פרטים + בעל תפקיד סופר */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <div style={{border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>
-          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4}}>פרטים</div>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4,color:"var(--accent-blue)"}}>
+            אחראי משק הארמון
+          </div>
           <div style={{fontSize:12,display:"flex",flexDirection:"column",gap:4}}>
-            <div><span style={{color:"var(--text-secondary)"}}>שם ושם משפחה: </span><strong>{auth?.name||"אורן חלפון"}</strong></div>
-            <div><span style={{color:"var(--text-secondary)"}}>מספר אישי: </span><strong>{auth?.soldierId||"7680832"}</strong></div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"var(--text-secondary)"}}>שם ושם משפחה:</span>
+              <strong>{auth?.name||"אורן חלפון"}</strong>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"var(--text-secondary)"}}>מספר אישי:</span>
+              <strong>{auth?.soldierId||"7680832"}</strong>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"var(--text-secondary)"}}>דרגה:</span>
+              <strong>רסר</strong>
+            </div>
+            <div style={{marginTop:6}}>
+              <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>חתימה:</div>
+              <div onClick={()=>setShowPad(true)}
+                style={{background:"var(--bg-base)",border:"1px solid "+(mgrSig?"var(--accent-green)":"var(--border)"),
+                  borderRadius:6,height:55,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                {mgrSig?<img src={mgrSig} style={{height:45,maxWidth:"100%"}} alt="חתימה"/>
+                  :<span style={{color:"var(--text-secondary)",fontSize:12}}>לחץ לחתימה</span>}
+              </div>
+            </div>
           </div>
         </div>
+
         <div style={{border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>
-          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4}}>אחראי משק הארמו"ן</div>
-          <div style={{fontSize:12,marginBottom:6}}>
-            <span style={{color:"var(--text-secondary)"}}>בעל תפקיד סופר: </span>
-            <input value={qofficer} onChange={e=>setQofficer(e.target.value)} placeholder="שם ושם משפחה" style={{...S.input,marginBottom:0,display:"inline",width:"auto"}}/>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:8,borderBottom:"1px solid var(--border-subtle)",paddingBottom:4,color:"var(--accent-purple)"}}>
+            בעל תפקיד סופר
           </div>
-          <div style={{fontSize:11,color:"var(--text-secondary)",marginBottom:4}}>חתימת אחראי:</div>
-          <div onClick={()=>setShowPad(true)} style={{background:"var(--bg-base)",border:`1px solid ${mgrSig?"var(--accent-green)":"var(--border)"}`,borderRadius:6,height:55,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-            {mgrSig?<img src={mgrSig} style={{height:45,maxWidth:"100%"}} alt="חתימה"/>:<span style={{color:"var(--text-secondary)",fontSize:12}}>לחץ לחתימה</span>}
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <label style={S.label}>שם ושם משפחה</label>
+            <input value={soferName} onChange={e=>setSoferName(e.target.value)}
+              placeholder="שם הסופר" style={{...S.input,marginBottom:4,fontSize:12}}/>
+            <label style={S.label}>מספר אישי</label>
+            <input value={soferID} onChange={e=>setSoferID(e.target.value)}
+              placeholder="מספר אישי" style={{...S.input,marginBottom:4,fontSize:12}} inputMode="numeric"/>
+            <label style={S.label}>דרגה</label>
+            <input value={soferRank} onChange={e=>setSoferRank(e.target.value)}
+              placeholder="דרגה" style={{...S.input,marginBottom:0,fontSize:12}}/>
           </div>
         </div>
       </div>
 
       <div style={{marginBottom:10}}>
         <label style={S.label}>הערות</label>
-        <textarea value={note} onChange={e=>setNote(e.target.value)} style={{...S.input,height:55,resize:"none",marginBottom:0}} placeholder="הערות..."/>
+        <textarea value={note} onChange={e=>setNote(e.target.value)}
+          style={{...S.input,height:50,resize:"none",marginBottom:0}} placeholder="הערות..."/>
       </div>
 
       <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>{
-          const win=window.open("","_blank");
-          const leftRows=leftCalc.map(i=>`<tr><td>${i.msd}</td><td style="font-size:9px">${i.makat||""}</td><td>${i.fullname||i.alias}</td><td>${i.total??""}</td><td>${i.loans||0}</td><td>${i.neoura||0}</td><td style="color:${i.ok?"green":"red"}">${i.total!=null?i.stock:""}</td><td></td></tr>`).join("");
-          const rightRows=rightCalc.map(i=>`<tr><td>${i.msd}</td><td style="font-size:9px">${i.makat||""}</td><td>${i.fullname||i.alias}</td><td>${i.total??""}</td><td>${i.loans||0}</td><td>${i.neoura||0}</td><td style="color:${i.ok?"green":"red"}">${i.total!=null?i.stock:""}</td><td></td></tr>`).join("");
-          win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>ספירת מחסן</title>
-          <style>body{font-family:Arial,sans-serif;direction:rtl;padding:15px;font-size:11px}
-          table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #ccc;padding:4px 6px}
-          th{background:#1a1a2e;color:#fff}.header{display:flex;justify-content:space-between;border-bottom:2px solid #1a1a2e;margin-bottom:8px;padding-bottom:4px}
-          .details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}.det-box{border:1px solid #ccc;padding:8px;border-radius:4px}
-          @media print{button{display:none}}</style></head>
-          <body><div class="header"><div><strong>ספירת מחסן ארמו"ן — ${type==="open"?"פתיחה":"סגירה"}</strong></div><div>תאריך: ${todayStr()}</div><div>גדוד 9219</div></div>
-          <table><thead><tr><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th></tr></thead>
-          <tbody>${Array.from({length:Math.max(leftCalc.length,rightCalc.length)},(_,i)=>{
-            const L=leftCalc[i]||null; const R=rightCalc[i]||null;
-            const Lcells=L?("<td>"+L.msd+"</td><td>"+(L.makat||"")+"</td><td>"+(L.fullname||L.alias)+"</td><td>"+(L.total!=null?L.total:"")+"</td><td>"+(L.loans||0)+"</td><td>"+(L.total!=null?L.stock:"")+"</td><td></td>"):"<td colspan='7'></td>";
-            const Rcells=R?("<td>"+R.msd+"</td><td>"+(R.makat||"")+"</td><td>"+(R.fullname||R.alias)+"</td><td>"+(R.total!=null?R.total:"")+"</td><td>"+(R.loans||0)+"</td><td>"+(R.total!=null?R.stock:"")+"</td><td></td>"):"<td colspan='7'></td>";
-            return "<tr>"+Lcells+Rcells+"</tr>";
-          }).join("")}</tbody></table>
-          <div class="details"><div class="det-box"><strong>פרטים</strong><br/>שם: אורן חלפון<br/>מ.א: 7680832<br/>דרגה: רסר</div>
-          <div class="det-box"><strong>אחראי משק הארמו"ן</strong><br/>בעל תפקיד סופר: ${qofficer||"_______________"}<br/>חתימה: _______________</div></div>
-          ${note?"<p>הערות: "+note+"</p>":""}
-          <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
-          </body></html>`);
-          win.document.close();
-        }} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
+        <button onClick={handlePrint} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
         <button onClick={onClose} style={{...S.btn(),flex:1}}>סגור</button>
       </div>
+
       {showPad&&<Modal title="חתימת אחראי" onClose={()=>setShowPad(false)}><SignaturePad onSave={d=>{setMgrSig(d);setShowPad(false);}}/></Modal>}
     </Modal>
   );
 }
-
 
 function SignatureDocument({soldier, db, onClose}){
   const sig = db.signatures?.[soldier.id];
