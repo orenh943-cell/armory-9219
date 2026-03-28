@@ -805,9 +805,9 @@ function DailyModal({db,onClose,type,auth}){
           {l:"השאלות",v:allCalc.reduce((a,i)=>a+(i.loans||0),0),c:"var(--accent-orange)"},
           {l:"במחסן",v:allCalc.reduce((a,i)=>a+Math.max(0,i.stock||0),0),c:"var(--accent-green)"}
         ].map(s=>(
-          <div key={s.l} style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 6px",textAlign:"center",border:"1px solid var(--border-subtle)"}}>
-            <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
-            <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>{s.l}</div>
+          <div key={s.label} style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 6px",textAlign:"center",border:"1px solid var(--border-subtle)"}}>
+            <div style={{fontSize:22,fontWeight:800,color:s.color}}>{s.val}</div>
+            <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:2}}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -909,11 +909,13 @@ function DailyModal({db,onClose,type,auth}){
           <table><thead><tr><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th><th>מס"ד</th><th>חומר</th><th>שם הפריט</th><th>מלאי כולל</th><th>השאלות</th><th>מצאי</th><th>הערות</th></tr></thead>
           <tbody>${Array.from({length:Math.max(leftCalc.length,rightCalc.length)},(_,i)=>{
             const L=leftCalc[i]||null; const R=rightCalc[i]||null;
-            return `<tr>${L?`<td>${L.msd}</td><td>${L.makat||""}</td><td>${L.fullname||L.alias}</td><td>${L.total??""}</td><td>${L.loans||0}</td><td>${L.total!=null?L.stock:""}</td><td></td>`:"<td colspan='7'></td>"}${R?`<td>${R.msd}</td><td>${R.makat||""}</td><td>${R.fullname||R.alias}</td><td>${R.total??""}</td><td>${R.loans||0}</td><td>${R.total!=null?R.stock:""}</td><td></td>`:"<td colspan='7'></td>"}</tr>`;
+            const Lcells=L?("<td>"+L.msd+"</td><td>"+(L.makat||"")+"</td><td>"+(L.fullname||L.alias)+"</td><td>"+(L.total!=null?L.total:"")+"</td><td>"+(L.loans||0)+"</td><td>"+(L.total!=null?L.stock:"")+"</td><td></td>"):"<td colspan='7'></td>";
+            const Rcells=R?("<td>"+R.msd+"</td><td>"+(R.makat||"")+"</td><td>"+(R.fullname||R.alias)+"</td><td>"+(R.total!=null?R.total:"")+"</td><td>"+(R.loans||0)+"</td><td>"+(R.total!=null?R.stock:"")+"</td><td></td>"):"<td colspan='7'></td>";
+            return "<tr>"+Lcells+Rcells+"</tr>";
           }).join("")}</tbody></table>
           <div class="details"><div class="det-box"><strong>פרטים</strong><br/>שם: אורן חלפון<br/>מ.א: 7680832<br/>דרגה: רסר</div>
           <div class="det-box"><strong>אחראי משק הארמו"ן</strong><br/>בעל תפקיד סופר: ${qofficer||"_______________"}<br/>חתימה: _______________</div></div>
-          ${note?`<p>הערות: ${note}</p>`:""}
+          ${note?"<p>הערות: "+note+"</p>":""}
           <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
           </body></html>`);
           win.document.close();
@@ -1958,11 +1960,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             <h2 style={{marginBottom:18,fontSize:20,fontWeight:800}}>לוח בקרה</h2>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:18}}>
               {[{l:"חיילים",v:soldiers.length,c:"#a371f7",k:"all"},{l:"עם נשק",v:withWeapons,c:"#388bfd",k:"withWeapon"},{l:"חתמו",v:signedCount,c:"#3fb950",k:"signed"},{l:"טרם חתמו",v:unsigned,c:unsigned>0?"#f85149":"#3fb950",k:"unsigned"}].map(s=>(
-                <div key={s.l} onClick={()=>setDashModal(s.k)} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0,cursor:"pointer",transition:"border .15s",border:"1px solid var(--border)"}}
-                  onMouseEnter={e=>e.currentTarget.style.border="1px solid "+s.c}
+                <div key={s.label} onClick={()=>setDashModal(s.k)} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0,cursor:"pointer",transition:"border .15s",border:"1px solid var(--border)"}}
+                  onMouseEnter={e=>e.currentTarget.style.border="1px solid "+s.color}
                   onMouseLeave={e=>e.currentTarget.style.border="1px solid #30363d"}>
-                  <div style={{fontSize:28,fontWeight:800,color:s.c}}>{s.v}</div>
-                  <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.l}</div>
+                  <div style={{fontSize:28,fontWeight:800,color:s.color}}>{s.val}</div>
+                  <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.label}</div>
                   <div style={{fontSize:10,color:"var(--text-muted)",marginTop:3}}>לחץ לפירוט ▼</div>
                 </div>
               ))}
@@ -2251,9 +2253,9 @@ function ViewerApp({auth, onLogout, db}){
             {l:"חתומים",v:signed,c:"#3fb950"},
             {l:"ממתינים",v:withWeapon-signed,c:"#e3b341"},
           ].map(s=>(
-            <div key={s.l} style={{background:"var(--bg-surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 8px",textAlign:"center"}}>
-              <div style={{fontSize:26,fontWeight:800,color:s.c}}>{s.v}</div>
-              <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.l}</div>
+            <div key={s.label} style={{background:"var(--bg-surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 8px",textAlign:"center"}}>
+              <div style={{fontSize:26,fontWeight:800,color:s.color}}>{s.val}</div>
+              <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:2}}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -2959,6 +2961,8 @@ function CabinetsTab({db, setDb, auth}){
   const [selectedUnit, setSelectedUnit] = React.useState("א");
   const [editMode, setEditMode] = React.useState(false);
   const [customCabinets, setCustomCabinets] = React.useState(()=>db.cabinets||{});
+  const [addingTo, setAddingTo] = React.useState(null);
+  const [addForm, setAddForm] = React.useState({alias:'',makat:'',qty:1});
 
   React.useEffect(()=>setCustomCabinets(db.cabinets||{}),[db.cabinets]);
 
@@ -3050,7 +3054,7 @@ function CabinetsTab({db, setDb, auth}){
     <body><h2>🗄️ ${cabName}</h2>
     <p style="color:#666">סה"כ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
     <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th></tr></thead>
-    <tbody>${items.map(i=>`<tr><td style="font-size:10px;font-family:monospace">${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style="text-align:center;font-weight:bold">${i.qty}</td></tr>`).join("")}
+    <tbody>${items.map(i=>"<tr><td style='font-size:10px;font-family:monospace'>"+(i.makat||"—")+"</td><td>"+(i.alias||i.fullname)+"</td><td style='text-align:center;font-weight:bold'>"+i.qty+"</td></tr>").join("")}
     <tr class="total"><td colspan="2">סה"כ</td><td style="text-align:center">${total}</td></tr>
     </tbody></table>
     <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
@@ -3076,11 +3080,8 @@ function CabinetsTab({db, setDb, auth}){
     ${currentCabinets.map(cab=>{
       const items=getItems(cab);
       const total=items.reduce((s,i)=>s+i.qty,0);
-      return `<h3>${cab} (${total} יחידות)</h3>
-      <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>כמות</th></tr></thead>
-      <tbody>${items.map(i=>`<tr><td style="font-size:10px">${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style="text-align:center;font-weight:bold">${i.qty}</td></tr>`).join("")}
-      <tr class="total"><td colspan="2">סה"כ</td><td style="text-align:center">${total}</td></tr>
-      </tbody></table>`;
+      const itemRows=items.map(i=>"<tr><td style='font-size:10px'>"+(i.makat||"—")+"</td><td>"+(i.alias||i.fullname)+"</td><td style='text-align:center;font-weight:bold'>"+i.qty+"</td></tr>").join("");
+      return "<h3>"+cab+" ("+total+" יחידות)</h3><table><thead><tr><th>מקט</th><th>אמצעי</th><th>כמות</th></tr></thead><tbody>"+itemRows+"<tr class='total'><td colspan='2'>סהכ</td><td style='text-align:center'>"+total+"</td></tr></tbody></table>";
     }).join("")}
     <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
     </body></html>`);
@@ -3300,7 +3301,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
       {/* Summary stat cards */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
         {[
-          {label:"סה\"כ במלאי",val:totalItems,color:"var(--accent-blue)"},
+          {label:"סהכ במלאי",val:totalItems,color:"var(--accent-blue)"},
           {label:"מוקצה לפלוגות",val:totalAssigned,color:"var(--accent-orange)"},
           {label:"פנוי בנשקייה",val:totalFree,color:"var(--accent-green)"},
         ].map(s=>(
