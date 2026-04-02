@@ -254,7 +254,7 @@ function restoreFromFirebase(obj, refObj){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -268,6 +268,23 @@ function saveDB(db){
   fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
   fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
 }
+
+// =================== ACTIVITY LOG ===================
+function logAction(type, details, actorName){
+  const ts = Date.now();
+  const now = new Date();
+  const entry = {
+    ts,
+    type,          // "שיוך" | "ביטול_שיוך" | "חתימה" | "ביטול_חתימה" | "טופס_יציאה" | "אישור_מפ" | "אישור_מגד" | "הוספת_חייל" | "אמצעי_תקול"
+    details,       // תיאור חופשי
+    actor: actorName||"מערכת",
+    date: now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}),
+    time: now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),
+    dateISO: now.toISOString().split("T")[0],
+  };
+  fbSet("db/actLog/"+ts, entry).catch(e=>console.warn("log err:",e));
+}
+
 function initDB(){
   const local=loadDB();
   const empty={assignments:{},signatures:{},customSoldiers:{},bulkGuarantors:{},unitItems:{...IMPORTED_UNIT_ITEMS}};
@@ -649,6 +666,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       bulkGuarantors:newGuarantors
     };
     saveDB(newDb);setDb(newDb);setSigImg(sigData);setStep("done");
+    logAction("חתימה", `${soldierData.name} (${auth.soldierId}) חתם על נשק`, soldierData.name);
   }
   return (
     <div style={{minHeight:"100vh",background:"var(--bg-base)"}}>
@@ -1210,16 +1228,21 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
     const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);onClose();
+    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")).join(", ")}`, auth?.name);
+    onClose();
   }
   function doReturn(){
     if(!retSel.length)return;
     const na={...assigned};retSel.forEach(n=>delete na[n]);
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);onClose();
+    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
+    onClose();
   }
   function clearSig(){
     const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    logAction("ביטול_חתימה", `בוטלה חתימה של ${soldier.name} (${soldier.id})`, auth?.name);
   }
 
   return (
@@ -1511,7 +1534,9 @@ function AddSoldierModal({db, onSave, onClose}){
       assignments:{...(db.assignments||{}),[form.id.trim()]:assigned},
       customSoldiers:{...(db.customSoldiers||{}),[form.id.trim()]:newSoldier},
     };
-    saveDB(newDb);onSave(newDb);onClose();
+    saveDB(newDb);onSave(newDb);
+    logAction("הוספת_חייל", `הוסף חייל: ${form.name.trim()} (${form.id.trim()}) פלוגה ${form.unit}`, "מערכת");
+    onClose();
   }
 
   return (
@@ -1733,6 +1758,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
     const updated=[newItem,...items];
     const ndb={...db, brokenItems:updated};
     saveDB(ndb); setDb(ndb); setItems(updated);
+    logAction("אמצעי_תקול", `דווח אמצעי תקול: ${newItem.itemName}${newItem.serial?" ("+newItem.serial+")":""} — ${newItem.soldierName}`, auth.name);
     setForm({soldierSearch:"",soldierId:"",itemName:"",serial:"",note:"",severity:"בינוני"});
     setShowForm(false);
   }
@@ -1970,7 +1996,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off12 = fbOn("db/loginLog", (log)=>{
       setDb(prev=>({...prev, loginLog: log||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); };
+    const off13 = fbOn("db/actLog", (log)=>{
+      setDb(prev=>({...prev, actLog: log||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -2045,7 +2074,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewInventory!==false?[{id:"mystock",label:"מלאי ארמון",icon:"📋"}]:[]),
     {id:"cabinets",label:"ארונות",icon:"🗄️"},
     ...(perms.canFillExitForm||perms.canApproveExitForm||perms.canCommanderDecide?[{id:"exitform",label:"יציאה הביתה",icon:"🏠"}]:[]),
-    ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
+    ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"actlog",label:"לוג תנועות",icon:"📋"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
   ];
 
   function Sidebar(){
@@ -3033,80 +3062,162 @@ function LoginLogTab({db}){
 
 // =================== ACTIVITY LOG TAB ===================
 function ActivityLogTab({db}){
-  const [logs, setLogs] = React.useState([]);
-  const [filterUser, setFilterUser] = React.useState("הכל");
+  const allLogs = React.useMemo(()=>{
+    const actEntries = Object.values(db.actLog||{});
+    const loginEntries = Object.values(db.loginLog||{}).map(l=>({
+      ...l,
+      type: "כניסה",
+      details: `${l.name||l.username} נכנס למערכת (${l.role||""})`,
+      actor: l.name||l.username,
+      date: (l.loginAt||"").split(",")[0]?.trim()||"",
+      time: (l.loginAt||"").split(",")[1]?.trim()||"",
+    }));
+    return [...actEntries,...loginEntries].sort((a,b)=>b.ts-a.ts);
+  },[db.actLog, db.loginLog]);
 
-  React.useEffect(()=>{
-    // Load from Firebase db.activityLog
-    const fbLogs = db.activityLog ? 
-      Object.values(db.activityLog).sort((a,b)=>b.ts-a.ts) : [];
-    // Also load from localStorage
-    try{
-      const local = JSON.parse(localStorage.getItem('armory_activity_log')||'[]');
-      // Merge, deduplicate by ts
-      const merged = [...fbLogs];
-      local.forEach(l=>{ if(!merged.find(m=>m.ts===l.ts)) merged.push(l); });
-      merged.sort((a,b)=>b.ts-a.ts);
-      setLogs(merged);
-    }catch(e){
-      setLogs(fbLogs);
-    }
-  },[db.activityLog]);
+  const TYPE_ICON = {
+    "שיוך":"➕","ביטול_שיוך":"➖","חתימה":"✍️","ביטול_חתימה":"🗑️",
+    "טופס_יציאה":"🏠","אישור_מפ":'✅',"אישור_מגד":"🔑",
+    "הוספת_חייל":"👤","אמצעי_תקול":"🔧","כניסה":"🔐",
+    "אישור_מרוכז":"✍️"
+  };
+  const TYPE_COLOR = {
+    "שיוך":"var(--accent-green)","ביטול_שיוך":"var(--accent-red)",
+    "חתימה":"var(--accent-blue)","ביטול_חתימה":"var(--accent-red)",
+    "טופס_יציאה":"var(--accent-orange)","אישור_מפ":"var(--accent-green)",
+    "אישור_מגד":"var(--accent-purple)","הוספת_חייל":"var(--accent-green)",
+    "אמצעי_תקול":"var(--accent-orange)","כניסה":"var(--text-muted)",
+  };
 
-  const users = ["הכל",...new Set(logs.map(l=>l.name||l.username).filter(Boolean))];
-  const filtered = filterUser==="הכל" ? logs : logs.filter(l=>(l.name||l.username)===filterUser);
+  // פילטרים
+  const [filterDate, setFilterDate] = React.useState("");
+  const [filterType, setFilterType] = React.useState("הכל");
+  const [filterActor, setFilterActor] = React.useState("הכל");
+  const [search, setSearch] = React.useState("");
 
-  const ROLE_HEB = {admin:"מנהל",manager:"מנפק",viewer:"צפייה"};
+  // ערכים ייחודיים לפילטרים
+  const dates = React.useMemo(()=>{
+    const s = new Set(allLogs.map(l=>l.date).filter(Boolean));
+    return [...s].sort().reverse();
+  },[allLogs]);
+
+  const types = ["הכל",...new Set(allLogs.map(l=>l.type).filter(Boolean))];
+  const actors = ["הכל",...new Set(allLogs.map(l=>l.actor).filter(Boolean))];
+
+  const filtered = React.useMemo(()=>{
+    return allLogs.filter(l=>{
+      if(filterDate && l.date!==filterDate) return false;
+      if(filterType!=="הכל" && l.type!==filterType) return false;
+      if(filterActor!=="הכל" && l.actor!==filterActor) return false;
+      if(search && !l.details?.includes(search) && !l.actor?.includes(search)) return false;
+      return true;
+    });
+  },[allLogs, filterDate, filterType, filterActor, search]);
+
+  // ייצוא Excel
+  function exportExcel(){
+    if(!filtered.length){ alert("אין נתונים לייצוא"); return; }
+    // CSV with BOM for Hebrew
+    const BOM = "\uFEFF";
+    const headers = ["תאריך","שעה","סוג פעולה","פרטים","מבצע"];
+    const rows = filtered.map(l=>[
+      l.date||"—", l.time||"—", l.type||"—",
+      (l.details||"—").replace(/,/g,"،"),
+      l.actor||"—"
+    ]);
+    const csv = BOM + [headers,...rows].map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const dateStr = filterDate || new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
+    a.href=url; a.download=`לוג_תנועות_${dateStr}.csv`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
 
   return (
-    <div style={{maxWidth:800,margin:"0 auto",padding:16}}>
+    <div style={{padding:16,maxWidth:960,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📊 יומן כניסות</h2>
-          <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>{filtered.length} כניסות</div>
+          <h2 style={{fontSize:18,fontWeight:800,margin:0}}>📋 לוג תנועות</h2>
+          <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>{filtered.length} פעולות{filterDate?" — "+filterDate:""}</div>
         </div>
-        <select value={filterUser} onChange={e=>setFilterUser(e.target.value)}
-          style={{...S.input,width:"auto",marginBottom:0}}>
-          {users.map(u=><option key={u} value={u}>{u}</option>)}
-        </select>
+        <button onClick={exportExcel} style={{...S.btn("green"),fontSize:13}}>📥 ייצוא Excel</button>
       </div>
+
+      {/* פילטרים */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <input
+          type="date"
+          value={filterDate ? filterDate.split(".").reverse().join("-") : ""}
+          onChange={e=>{
+            if(!e.target.value){setFilterDate("");return;}
+            const [y,m,d]=e.target.value.split("-");
+            setFilterDate(`${d}.${m}.${y}`);
+          }}
+          style={{...S.input,flex:"0 0 auto",minWidth:140}}
+        />
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...S.input,flex:"0 0 auto"}}>
+          {types.map(t=><option key={t} value={t}>{t==="הכל"?"כל הפעולות":t.replace(/_/g," ")}</option>)}
+        </select>
+        <select value={filterActor} onChange={e=>setFilterActor(e.target.value)} style={{...S.input,flex:"0 0 auto"}}>
+          {actors.map(a=><option key={a} value={a}>{a==="הכל"?"כל המשתמשים":a}</option>)}
+        </select>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="חיפוש בפרטים..." style={{...S.input,flex:1,minWidth:130}}/>
+        {(filterDate||filterType!=="הכל"||filterActor!=="הכל"||search)&&(
+          <button onClick={()=>{setFilterDate("");setFilterType("הכל");setFilterActor("הכל");setSearch("");}}
+            style={{...S.btn("gray"),fontSize:12}}>✕ נקה</button>
+        )}
+      </div>
+
+      {/* קיצורי תאריך */}
+      {dates.length>0&&(
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          <button onClick={()=>setFilterDate("")} style={{...S.btn(filterDate?"":"blue"),padding:"3px 10px",fontSize:11}}>הכל</button>
+          {dates.slice(0,7).map(d=>(
+            <button key={d} onClick={()=>setFilterDate(filterDate===d?"":d)}
+              style={{...S.btn(filterDate===d?"blue":""),padding:"3px 10px",fontSize:11}}>{d}</button>
+          ))}
+        </div>
+      )}
 
       {filtered.length===0?(
         <div style={{textAlign:"center",padding:40,color:"var(--text-muted)"}}>
-          <div style={{fontSize:40,marginBottom:8}}>📊</div>
-          <div>אין נתוני כניסה עדיין</div>
-          <div style={{fontSize:12,marginTop:4}}>נתונים יצטברו מהכניסה הבאה של כל משתמש</div>
+          <div style={{fontSize:40,marginBottom:8}}>📋</div>
+          <div>אין פעולות{filterDate?" בתאריך "+filterDate:""}</div>
         </div>
       ):(
         <div style={{...S.card,padding:0,overflow:"hidden"}}>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead>
-              <tr style={{background:"var(--bg-base)"}}>
-                {["שם","תפקיד","תאריך ושעה"].map(h=>(
-                  <th key={h} style={S.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((log,i)=>(
-                <tr key={log.ts||i}
-                  style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
-                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}>
-                  <td style={{...S.td,fontWeight:600}}>{log.name||log.username||"—"}</td>
-                  <td style={S.td}>
-                    <span style={{
-                      color:log.role==="admin"?"var(--accent-purple)":log.role==="manager"?"var(--accent-blue)":"var(--text-secondary)",
-                      fontSize:12,fontWeight:500
-                    }}>{ROLE_HEB[log.role]||log.role||"—"}</span>
-                  </td>
-                  <td style={{...S.td,fontFamily:"monospace",fontSize:12,color:"var(--text-secondary)"}}>
-                    {log.loginAt||"—"}
-                  </td>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
+              <thead>
+                <tr style={{background:"var(--bg-base)"}}>
+                  {["שעה","תאריך","סוג","פרטים","מבצע"].map(h=>(
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((log,i)=>{
+                  const icon = TYPE_ICON[log.type]||"•";
+                  const color = TYPE_COLOR[log.type]||"var(--text-secondary)";
+                  return (
+                    <tr key={log.ts||i}
+                      style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)",borderBottom:"1px solid var(--border-subtle)"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}>
+                      <td style={{...S.td,fontFamily:"monospace",fontSize:12,color:"var(--text-secondary)",whiteSpace:"nowrap"}}>{log.time||"—"}</td>
+                      <td style={{...S.td,fontSize:12,color:"var(--text-muted)",whiteSpace:"nowrap"}}>{log.date||"—"}</td>
+                      <td style={{...S.td,whiteSpace:"nowrap"}}>
+                        <span style={{fontSize:13,fontWeight:700,color}}>{icon} {(log.type||"").replace(/_/g," ")}</span>
+                      </td>
+                      <td style={{...S.td,fontSize:13}}>{log.details||"—"}</td>
+                      <td style={{...S.td,fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{log.actor||"—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -4136,6 +4247,7 @@ function SoldierExitFormFill({soldier, db, onSave, auth, onBack}){
     const newDb = {...db, exitForms:{...(db.exitForms||{}), [id]:form}};
     onSave(newDb);
     fbSet("db/exitForms/"+id, form).catch(e=>console.warn(e));
+    logAction("טופס_יציאה", `${soldier.name} (${soldier.id}) מילא טופס יציאה הביתה — נשק: ${weaponType}`, auth?.name||soldier.name);
     setSaved(true);
   }
 
@@ -4784,7 +4896,6 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
 
   function saveSection3(){
     if(!mpSig){ alert("חסרה חתימת מ\"פ"); return; }
-    const userInfo = Object.values(USERS||{}).find(u=>u.name===auth.name)||{};
     const updated = {
       ...form,
       mpName: auth.name,
@@ -4792,6 +4903,7 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
       status: "ממתין_מגד",
     };
     updateForm(updated);
+    logAction("אישור_מפ", `${auth.name} אישר טופס יציאה של ${form.soldierName} (${form.soldierId})`, auth.name);
     setSaved("section3");
   }
 
@@ -4805,6 +4917,7 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
       status: magadDecision==="מאשר"?"אושר":"נדחה",
     };
     updateForm(updated);
+    logAction("אישור_מגד", `${auth.name} ${magadDecision==="מאשר"?"אישר":"דחה"} יציאה של ${form.soldierName} (${form.soldierId})`, auth.name);
     setSaved("section4");
   }
 
