@@ -3753,6 +3753,15 @@ function DashDetailModal({type, soldiers, db, onClose}){
   const [unitFilter, setUnitFilter] = React.useState("הכל");
   const units = ["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
 
+  // לטופס יציאה — מציגים את הטפסים עצמם, לא רק חיילים ברשימה
+  const exitFormsList = React.useMemo(()=>{
+    if(type!=="exitform") return [];
+    return Object.entries(db.exitForms||{})
+      .filter(([,f])=>f.soldierSig)
+      .filter(([,f])=>unitFilter==="הכל"||f.unit===unitFilter)
+      .sort(([,a],[,b])=>(b.createdAt||"").localeCompare(a.createdAt||""));
+  },[type, db.exitForms, unitFilter]);
+
   const filtered = React.useMemo(()=>{
     let list = soldiers;
     if(type==="signed") list=list.filter(s=>!!db.signatures?.[s.id]);
@@ -3761,15 +3770,53 @@ function DashDetailModal({type, soldiers, db, onClose}){
       return hasWeapon && !db.signatures?.[s.id];
     });
     else if(type==="withWeapon") list=list.filter(s=>Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k)));
-    else if(type==="exitform"){
-      const ids=new Set(Object.values(db.exitForms||{}).filter(f=>f.soldierSig).map(f=>f.soldierId));
-      list=list.filter(s=>ids.has(s.id));
-    }
+    else if(type==="exitform") return []; // handled separately
     if(unitFilter!=="הכל") list=list.filter(s=>s.unit===unitFilter);
     return list;
   },[type, soldiers, db, unitFilter]);
 
   const TITLES = {signed:"✅ חיילים חתומים", unsigned:"⏳ טרם חתמו", withWeapon:"🔫 חיילים עם נשק", all:"🪖 כל החיילים", exitform:"🏠 מילאו טופס יציאה"};
+
+  // תצוגת טפסי יציאה
+  if(type==="exitform") return (
+    <Modal title={TITLES.exitform} onClose={onClose}>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {units.map(u=>(
+          <button key={u} onClick={()=>setUnitFilter(u)}
+            style={{...S.btn(unitFilter===u?"blue":""),padding:"4px 10px",fontSize:12}}>
+            {u==="הכל"?"כולם":"פלוגה "+u}
+          </button>
+        ))}
+      </div>
+      <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:8}}>{exitFormsList.length} טפסים</div>
+      <div style={{maxHeight:420,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
+        {exitFormsList.length===0&&<div style={{textAlign:"center",color:"var(--text-muted)",padding:24}}>אין טפסים</div>}
+        {exitFormsList.map(([id,f])=>{
+          const statusLabel={ממתין_חייל:"⏳ חייל",ממתין_מפ:'⏳ מ"פ',ממתין_מגד:"⏳ מגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
+          const statusColor={אושר:"var(--accent-green)",נדחה:"var(--accent-red)"}[f.status]||"var(--accent-orange)";
+          const hasRisk = hasAnyRisk(f.answers);
+          return (
+            <div key={id} style={{background:"var(--bg-base)",borderRadius:8,padding:"9px 12px",border:"1px solid var(--border-subtle)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div>
+                  <span style={{fontWeight:700,fontSize:13}}>{f.soldierName||"—"}</span>
+                  <span style={{color:"var(--text-muted)",fontSize:11,marginRight:8}}>{f.soldierId}</span>
+                  {hasRisk&&<span style={{fontSize:10,color:"var(--accent-red)",fontWeight:700}}>⚠️ נדרש סא"ל</span>}
+                </div>
+                <span style={{fontWeight:700,fontSize:12,color:statusColor}}>{statusLabel}</span>
+              </div>
+              <div style={{fontSize:11,color:"var(--text-secondary)",display:"flex",gap:12,flexWrap:"wrap"}}>
+                <span>🏠 {f.address}{f.city?" — "+f.city:""}</span>
+                <span>🔫 {f.weaponType||"—"}</span>
+                <span>📅 {f.createdAt}</span>
+                <Badge color="purple" small>{f.unit}</Badge>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
 
   return (
     <Modal title={TITLES[type]||"פירוט"} onClose={onClose}>
@@ -5200,13 +5247,13 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
 
 // =================== EXIT FORM DIRECT VIEW (חייל נכנס מלינק WA) ===================
 function ExitFormDirectView({auth, onLogout, db, setDb}){
-  const soldier = RAW_SOLDIERS.find(s=>s.id===auth.soldierId);
+  const soldier = RAW_SOLDIERS.find(s=>s.id===auth.soldierId)
+    || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
   const [answers, setAnswers] = React.useState(Array(10).fill(null));
   const [address, setAddress] = React.useState("");
   const [city, setCity] = React.useState("");
   const [weaponType, setWeaponType] = React.useState(()=>{
-    if(!soldier) return "";
-    const assigned = db.assignments?.[auth.soldierId] ?? soldier.assigned ?? {};
+    const assigned = db.assignments?.[auth.soldierId] ?? soldier?.assigned ?? {};
     return Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(k)).join(", ");
   });
   const [showPad, setShowPad] = React.useState(false);
@@ -5380,13 +5427,23 @@ function App(){
     const params=new URLSearchParams(window.location.search);
     const signId=params.get("sign");
     const exitId=params.get("exitform");
+    // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
+    function findSoldier(id){
+      const raw=RAW_SOLDIERS.find(x=>x.id===id);
+      if(raw) return raw;
+      try{
+        const local=JSON.parse(localStorage.getItem("armory_9219_db")||"{}");
+        const custom=Object.values(local.customSoldiers||{});
+        return custom.find(x=>x.id===id)||null;
+      }catch(e){return null;}
+    }
     if(exitId){
-      const s=RAW_SOLDIERS.find(x=>x.id===exitId);
+      const s=findSoldier(exitId);
       if(s) return{role:"soldier",name:s.name,soldierId:exitId,autoExitForm:true,phone:s.phone};
       return{role:"soldier",name:"חייל",soldierId:exitId,autoExitForm:true};
     }
     if(signId){
-      const s=RAW_SOLDIERS.find(x=>x.id===signId);
+      const s=findSoldier(signId);
       let assignedFromLink={};
       const bParam=params.get("b");
       const dParam=params.get("d");
@@ -5436,8 +5493,8 @@ function App(){
 
   if(!auth)return<Login onLogin={handleLogin}/>;
   if(exitFormParam){
-    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam);
-    const exitAuth={role:"soldier",name:s?.name||"חייל",soldierId:exitFormParam,autoExitForm:true};
+    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===exitFormParam);
+    const exitAuth={role:"soldier",name:s?.name||"חייל",soldierId:exitFormParam,autoExitForm:true,phone:s?.phone};
     return<ExitFormDirectView auth={exitAuth} onLogout={()=>window.location.href=window.location.pathname} db={db} setDb={setDb}/>;
   }
   if(auth.role==="soldier"&&auth.autoExitForm)return<ExitFormDirectView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
