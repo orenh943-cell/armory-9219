@@ -5030,6 +5030,151 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   );
 }
 
+// =================== EXIT FORM DIRECT VIEW (חייל נכנס מלינק WA) ===================
+function ExitFormDirectView({auth, onLogout, db, setDb}){
+  const soldier = RAW_SOLDIERS.find(s=>s.id===auth.soldierId);
+  const [answers, setAnswers] = React.useState(Array(10).fill(null));
+  const [address, setAddress] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [weaponType, setWeaponType] = React.useState(()=>{
+    if(!soldier) return "";
+    const assigned = db.assignments?.[auth.soldierId] ?? soldier.assigned ?? {};
+    return Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(k)).join(", ");
+  });
+  const [showPad, setShowPad] = React.useState(false);
+  const [sigImg, setSigImg] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [done, setDone] = React.useState(false);
+
+  function setAns(i,v){ const a=[...answers]; a[i]=v; setAnswers(a); }
+
+  function save(){
+    if(answers.some(a=>a===null)){ setErr("יש לענות על כל 10 השאלות"); return; }
+    if(!address){ setErr("יש למלא כתובת מגורים"); return; }
+    if(!sigImg){ setErr("חסרה חתימה"); return; }
+    const id = "ef_"+Date.now();
+    const form = {
+      soldierId: auth.soldierId,
+      soldierName: soldier?.name||auth.name,
+      unit: soldier?.unit||"",
+      squad: soldier?.squad||"",
+      address, city, weaponType,
+      answers,
+      soldierSig: sigImg,
+      createdAt: todayStr(),
+      createdBy: "חייל — לינק WA",
+      status: "ממתין_מפ",
+      mpName:"", mpNote:"", mpSig:null, mpDate:"",
+      magadName:"", magadDecision:"", magadSig:null, magadDate:"",
+      commanderDecisions: Array(10).fill(""),
+    };
+    const newDb = {...db, exitForms:{...(db.exitForms||{}), [id]:form}};
+    setDb(newDb);
+    fbSet("db/exitForms/"+id, form).catch(e=>console.warn(e));
+    setDone(true);
+  }
+
+  if(done) return (
+    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--bg-base)",padding:24,textAlign:"center"}}>
+      <div style={{fontSize:64,marginBottom:16}}>✅</div>
+      <div style={{fontSize:22,fontWeight:800,color:"var(--text-primary)",marginBottom:8}}>הטופס נשלח בהצלחה!</div>
+      <div style={{color:"var(--text-secondary)",fontSize:15,marginBottom:8}}>הטופס עבר למ"פ לאישור.</div>
+      <div style={{color:"var(--text-muted)",fontSize:13}}>ניתן לסגור חלון זה.</div>
+    </div>
+  );
+
+  return (
+    <div style={{maxWidth:600,margin:"0 auto",padding:16,paddingBottom:40}}>
+      {/* כותרת */}
+      <div style={{textAlign:"center",marginBottom:20,padding:"16px 0",borderBottom:"1px solid var(--border)"}}>
+        <div style={{fontSize:28,marginBottom:4}}>🏠</div>
+        <div style={{fontSize:19,fontWeight:800,color:"var(--text-primary)"}}>אישור יציאה הביתה עם נשק</div>
+        <div style={{fontSize:13,color:"var(--text-secondary)",marginTop:4}}>גדוד 9219 — {soldier?.name||auth.name}</div>
+      </div>
+
+      {/* פרטים */}
+      <div style={{...S.card,marginBottom:12}}>
+        <div style={{fontWeight:700,marginBottom:8,fontSize:14}}>פרטי החייל</div>
+        <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:10}}>
+          שם: <b style={{color:"var(--text-primary)"}}>{soldier?.name||auth.name}</b> &nbsp;|&nbsp; מ.א: <b style={{color:"var(--text-primary)"}}>{auth.soldierId}</b>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+          <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="כתובת מגורים *" style={{...S.input,flex:2,minWidth:140}}/>
+          <input value={city} onChange={e=>setCity(e.target.value)} placeholder="יישוב" style={{...S.input,flex:1,minWidth:90}}/>
+        </div>
+        <input value={weaponType} onChange={e=>setWeaponType(e.target.value)} placeholder="סוג כלי הנשק" style={{...S.input,width:"100%"}}/>
+      </div>
+
+      {/* שאלון */}
+      <div style={{...S.card,marginBottom:12}}>
+        <div style={{fontWeight:700,marginBottom:10,fontSize:14}}>שאלון — יש לענות על כל השאלות</div>
+        {EXIT_QUESTIONS.map((q,i)=>(
+          <div key={i} style={{
+            display:"flex",alignItems:"flex-start",gap:10,
+            padding:"10px 0",
+            borderBottom: i<9?"1px solid var(--border-subtle)":"none"
+          }}>
+            <div style={{
+              minWidth:26,height:26,borderRadius:"50%",
+              background:"var(--bg-elevated)",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:12,fontWeight:700,color:"var(--text-secondary)",
+              flexShrink:0,marginTop:2
+            }}>{i+1}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,marginBottom:8,lineHeight:1.5}}>{q}</div>
+              <div style={{display:"flex",gap:8}}>
+                {["כן","לא"].map(v=>(
+                  <button key={v} onClick={()=>setAns(i,v)} style={{
+                    padding:"7px 24px",borderRadius:8,border:"2px solid",cursor:"pointer",
+                    fontSize:13,fontWeight:700,transition:"all 0.1s",
+                    borderColor:answers[i]===v?"var(--accent-blue)":"var(--border)",
+                    background:answers[i]===v?"var(--btn-blue-bg)":"transparent",
+                    color:answers[i]===v?"var(--accent-blue)":"var(--text-secondary)"
+                  }}>{v}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* הצהרה */}
+      <div style={{...S.card,marginBottom:12,fontSize:12,color:"var(--text-secondary)",lineHeight:1.8}}>
+        <div style={{fontWeight:700,marginBottom:6,color:"var(--text-primary)",fontSize:13}}>הצהרת החייל</div>
+        הריני מצהיר כי תודרכתי והבנתי את האחריות ליציאה עם כלי נשק לחופשה ואקפיד על ההנחיות הבאות:
+        <ol style={{marginTop:8,marginRight:16,paddingRight:0}}>
+          <li><b>כלי הנשק האישי יינעל בארון או בכספת.</b> אם אין ברשותי ארון או כספת, אקפיד לסגור את הנשק בחדר האישי במקום שהגישה אליו מוגבלת ביותר.</li>
+          <li><b>המחסניות יוחזקו בנפרד מכלי הנשק,</b> נעולות ומוסתרות.</li>
+          <li>אקפיד לא להשאיר את הנשק בחדר ריק מאדם.</li>
+          <li>הנני מתחייב שכל המידע הנמסר במסמך זה הינו אמת.</li>
+        </ol>
+      </div>
+
+      {/* חתימה */}
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{fontWeight:700,marginBottom:10,fontSize:14}}>חתימה</div>
+        <button onClick={()=>setShowPad(true)} style={{...S.btn(sigImg?"green":"blue"),width:"100%",padding:"12px 0",fontSize:14}}>
+          {sigImg?"✅ חתימה קיימת — לחץ לחתימה מחדש":"✍️ לחץ לחתימה"}
+        </button>
+        {sigImg&&(
+          <div style={{marginTop:10,textAlign:"center"}}>
+            <img src={sigImg} style={{maxHeight:60,border:"1px solid var(--border)",borderRadius:6,background:"white",padding:4}}/>
+          </div>
+        )}
+      </div>
+
+      {err&&<div style={{color:"var(--accent-red)",fontSize:13,marginBottom:10,padding:"8px 12px",background:"var(--btn-red-bg)",borderRadius:6}}>{err}</div>}
+
+      <button onClick={save} style={{...S.btn("green"),width:"100%",padding:"14px 0",fontSize:16,fontWeight:700}}>
+        💾 שלח טופס למ"פ
+      </button>
+
+      {showPad&&<Modal title="חתימה" onClose={()=>setShowPad(false)}><SignaturePad onSave={d=>{setSigImg(d);setShowPad(false);}}/></Modal>}
+    </div>
+  );
+}
+
 function App(){
   const [theme, setTheme] = React.useState(()=>{
     const saved = localStorage.getItem('armory_theme');
@@ -5046,6 +5191,12 @@ function App(){
     // בדוק אם יש פרמטר ?sign= בURL
     const params=new URLSearchParams(window.location.search);
     const signId=params.get("sign");
+    const exitId=params.get("exitform");
+    if(exitId){
+      const s=RAW_SOLDIERS.find(x=>x.id===exitId);
+      if(s) return{role:"soldier",name:s.name,soldierId:exitId,autoExitForm:true,phone:s.phone};
+      return{role:"soldier",name:"חייל",soldierId:exitId,autoExitForm:true};
+    }
     if(signId){
       const s=RAW_SOLDIERS.find(x=>x.id===signId);
       let assignedFromLink={};
@@ -5092,6 +5243,7 @@ function App(){
 
   const [db,setDb]=useState(()=>initDB());
   if(!auth)return<Login onLogin={handleLogin}/>;
+  if(auth.role==="soldier"&&auth.autoExitForm)return<ExitFormDirectView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   return<ManagerApp auth={auth} onLogout={handleLogout} db={db} setDb={setDb} theme={theme} toggleTheme={toggleTheme}/>;
 }
