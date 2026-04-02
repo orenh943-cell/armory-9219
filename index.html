@@ -4267,6 +4267,16 @@ function ExitFormTab({db, setDb, soldiers, auth}){
 
   function openNew(){ setView("new"); setSelId(null); }
   function openDetail(id){ setSelId(id); setView("detail"); }
+  const [confirmDelete, setConfirmDelete] = React.useState(null);
+
+  function deleteForm(id){
+    const newForms = {...(db.exitForms||{})};
+    delete newForms[id];
+    setDb({...db, exitForms:newForms});
+    fbDelete("db/exitForms/"+id).catch(e=>console.warn(e));
+    setConfirmDelete(null);
+  }
+
   function back(){ setView("list"); setSelId(null); }
 
   if(view==="new") return <ExitFormNew db={db} setDb={setDb} soldiers={soldiers} auth={auth} onBack={back}/>;
@@ -4314,12 +4324,19 @@ function ExitFormTab({db, setDb, soldiers, auth}){
                 const statusLabel = {ממתין_חייל:"⏳ ממתין לחייל",ממתין_מפ:'⏳ ממתין למ"פ',ממתין_מגד:"⏳ ממתין למגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
                 return (
                   <tr key={id} style={{borderBottom:"1px solid var(--border-subtle)",cursor:"pointer"}} onClick={()=>openDetail(id)}>
-                    <td style={{padding:"8px 10px",fontSize:13}}>{f.soldierName}</td>
-                    <td style={{padding:"8px 10px",fontSize:13}}>{f.soldierId}</td>
-                    <td style={{padding:"8px 10px",fontSize:13}}>{f.unit}</td>
+                    <td style={{padding:"8px 10px",fontSize:13}}>{f.soldierName||<span style={{color:"var(--text-muted)"}}>לא ידוע</span>}</td>
+                    <td style={{padding:"8px 10px",fontSize:13,fontFamily:"monospace"}}>{f.soldierId}</td>
+                    <td style={{padding:"8px 10px",fontSize:13}}>{f.unit||"—"}</td>
                     <td style={{padding:"8px 10px",fontSize:13}}>{f.createdAt}</td>
                     <td style={{padding:"8px 10px",fontSize:13}}>{statusLabel}</td>
-                    <td style={{padding:"8px 10px"}}><button style={{...S.btn("blue"),fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();openDetail(id);}}>פתח</button></td>
+                    <td style={{padding:"6px 8px"}}>
+                      <div style={{display:"flex",gap:4}}>
+                        <button style={{...S.btn("blue"),fontSize:11,padding:"3px 8px"}} onClick={e=>{e.stopPropagation();openDetail(id);}}>פתח</button>
+                        {(perms.canEdit||auth.role==="admin")&&(
+                          <button style={{...S.btn("red"),fontSize:11,padding:"3px 8px"}} onClick={e=>{e.stopPropagation();setConfirmDelete(id);}}>🗑️</button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -4333,9 +4350,31 @@ function ExitFormTab({db, setDb, soldiers, auth}){
           <button onClick={()=>printExitFormsBulk(forms, soldiers, db)} style={{...S.btn("gray"),fontSize:12}}>🖨️ הדפסה מרוכזת</button>
         )}
         {perms.canDownload&&Object.keys(forms).length>0&&(
-          <button onClick={()=>downloadExitFormsZip(forms, soldiers, filterUnit)} style={{...S.btn("blue"),fontSize:12}}>📥 הורד ZIP גיבוי{filterUnit!=="הכל"?" — פלוגה "+filterUnit:""}</button>
+          <button onClick={()=>downloadExitFormsZip(forms, soldiers, filterUnit)} style={{...S.btn("blue"),fontSize:12}}>📥 ZIP יציאה הביתה{filterUnit!=="הכל"?" — פלוגה "+filterUnit:""}</button>
+        )}
+        {perms.canDownload&&(
+          <button onClick={()=>downloadAllFormsZip(db, soldiers)} style={{...S.btn("purple"),fontSize:12}}>📦 ZIP כל הטפסים</button>
         )}
       </div>
+
+      {confirmDelete&&(
+        <Modal title="מחיקת טופס" onClose={()=>setConfirmDelete(null)}>
+          <div style={{textAlign:"center",padding:"8px 0"}}>
+            <div style={{fontSize:32,marginBottom:12}}>🗑️</div>
+            <div style={{fontWeight:700,marginBottom:8}}>למחוק את הטופס לצמיתות?</div>
+            <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:8}}>
+              {(db.exitForms||{})[confirmDelete]?.soldierName||"לא ידוע"} — {(db.exitForms||{})[confirmDelete]?.soldierId}
+            </div>
+            <div style={{fontSize:12,color:"var(--text-muted)",marginBottom:20}}>
+              {(db.exitForms||{})[confirmDelete]?.createdAt}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>deleteForm(confirmDelete)} style={{...S.btn("red"),flex:1,padding:"10px 0"}}>✅ כן, מחק</button>
+              <button onClick={()=>setConfirmDelete(null)} style={{...S.btn("gray"),flex:1,padding:"10px 0"}}>ביטול</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -4773,6 +4812,84 @@ function printExitForm(form, db){
   const w = window.open("","_blank");
   w.document.write(html);
   w.document.close();
+}
+
+function downloadAllFormsZip(db, soldiers){
+  if(typeof fflate==="undefined"){ alert("ספריית ZIP לא נטענה, נסה שוב"); return; }
+
+  const files = {};
+  const enc = s => fflate.strToU8(s);
+  const safeName = s => (s||"לא_ידוע").replace(/[\/\\:*?"<>|]/g,"_");
+
+  // helper — מחפש חייל
+  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
+  const getSoldier = id => allSols.find(s=>s.id===id);
+
+  // ——— 1. טפסי יציאה הביתה ———
+  Object.values(db.exitForms||{}).forEach(form=>{
+    const unit  = safeName(form.unit||"ללא_פלוגה");
+    const squad = safeName(form.squad||"ללא_מחלקה");
+    const name  = safeName(form.soldierName||form.soldierId);
+    const date  = (form.createdAt||"").replace(/\//g,"-").replace(/ /g,"_");
+    const path  = `01_יציאה_הביתה/פלוגה_${unit}/${squad}/${name}_${form.soldierId}_${date}.html`;
+    files[path] = enc(buildFormHtml(form));
+  });
+
+  // ——— 2. טפסי חתימה על נשק ———
+  Object.entries(db.signatures||{}).forEach(([soldierId, sig])=>{
+    const s = getSoldier(soldierId);
+    if(!s||!s.name) return;
+    const assigned = db.assignments?.[soldierId]||s.assigned||{};
+    const weps = Object.entries(assigned);
+    if(!weps.length) return;
+    const unit  = safeName(s.unit||"ללא_פלוגה");
+    const squad = safeName(s.squad||"ללא_מחלקה");
+    const name  = safeName(s.name);
+    const date  = (sig.signedAt||"").replace(/[\/:]/g,"-").replace(/ /g,"_");
+    const rows  = weps.map(([k,v])=>`<tr><td>${k}</td><td style="font-family:monospace">${v&&v!==1?v:"—"}</td></tr>`).join("");
+    const sigHtml = sig.sigData?`<img src="${sig.sigData}" style="height:50px;border:1px solid #ccc;margin-top:8px"/>`:"";
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>חתימה — ${s.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#000;font-size:12px}
+h2{font-size:14px;border-bottom:2px solid #000;padding-bottom:4px}
+table{width:100%;border-collapse:collapse;margin:10px 0}
+th,td{border:1px solid #ccc;padding:5px 8px;text-align:right}
+th{background:#e8edf5}</style></head><body>
+<h2>טופס החתמה — גדוד 9219</h2>
+<p><b>${s.name}</b> | מ.א: ${s.id} | פלוגה: ${s.unit||"—"} | ${sig.signedAt||""}</p>
+<table><thead><tr><th>אמצעי</th><th>סידורי</th></tr></thead><tbody>${rows}</tbody></table>
+${sigHtml}
+</body></html>`;
+    const path = `02_חתימות_נשק/פלוגה_${unit}/${squad}/${name}_${soldierId}_${date}.html`;
+    files[path] = enc(html);
+  });
+
+  // ——— 3. README ———
+  const now = new Date().toLocaleString("he-IL");
+  const readme = `גיבוי מערכת ארמון 9219
+=======================
+תאריך גיבוי: ${now}
+
+תיקיות:
+01_יציאה_הביתה  — טפסי אישור יציאה הביתה עם נשק (${Object.keys(db.exitForms||{}).length} טפסים)
+02_חתימות_נשק   — טפסי חתימה על נשק (${Object.keys(db.signatures||{}).length} חתימות)
+
+מבנה: פלוגה → מחלקה → חייל_מ.א_תאריך.html
+`;
+  files["README.txt"] = enc(readme);
+
+  if(!Object.keys(files).length){ alert("אין נתונים לגיבוי"); return; }
+
+  fflate.zip(files, {level:6}, (err,data)=>{
+    if(err){ alert("שגיאה: "+err.message); return; }
+    const blob = new Blob([data],{type:"application/zip"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `גיבוי_ארמון_9219_${new Date().toLocaleDateString("he-IL").replace(/\//g,"-")}.zip`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
 }
 
 // ——— ZIP BACKUP ———
