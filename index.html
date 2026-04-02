@@ -1184,7 +1184,7 @@ function SignatureDocument({soldier, db, onClose}){
   );
 }
 
-function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
+function SoldierDetail({soldier,db,onClose,onSave,onSendWA,auth}){
   const [editingLocation,setEditingLocation]=useState(false);
   const [editingSerial,setEditingSerial]=useState(null);
   const [newSerialVal,setNewSerialVal]=useState("");
@@ -1201,6 +1201,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
   // ערבות מרוכזת — האם חייל זה ערב על אחרים?
   const myGuarantees=Object.values(db.bulkGuarantors||{}).filter(g=>g.repId===soldier.id);
   const totalRemaining=myGuarantees.reduce((sum,g)=>sum+(g.remaining||[]).length,0);
+  const perms=auth?getPerms(auth,db):{};
+  // טופס יציאה — קיים לחייל?
+  const exitForms=db.exitForms||{};
+  const soldierExitForms=Object.entries(exitForms).filter(([,f])=>f.soldierId===soldier.id).sort(([,a],[,b])=>b.createdAt?.localeCompare?.(a.createdAt)||0);
 
   function doCheckout(){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
@@ -1220,9 +1224,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
 
   return (
     <Modal title={`${soldier.name} • ${soldier.id}`} onClose={onClose} wide>
-      <div style={{display:"flex",gap:6,marginBottom:16}}>
-        {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"]].map(([v,l])=>(
-          <button key={v} onClick={()=>setView(v)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"#388bfd":"#30363d",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"#388bfd":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:13}}>{l}</button>
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"],["exitform","🏠 יציאה"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setView(v)} style={{flex:1,minWidth:70,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"#388bfd":"#30363d",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"#388bfd":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:12}}>{l}</button>
         ))}
       </div>
       {view==="profile"&&(
@@ -1400,6 +1404,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA}){
         </div>
       )}
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
+    {view==="exitform"&&(
+      <SoldierExitFormView soldier={soldier} db={db} onSave={onSave} auth={auth} soldierExitForms={soldierExitForms}/>
+    )}
     </Modal>
   );
 }
@@ -2332,7 +2339,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       </div>
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
-      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp}/>}
+      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} auth={auth}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
@@ -3912,6 +3919,188 @@ function SearchModal({onClose, soldiers, db}){
         </div>
       )}
     </Modal>
+  );
+}
+
+// ——— EXIT FORM INSIDE SOLDIER PROFILE ———
+function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms}){
+  const perms = auth ? getPerms(auth, db) : {};
+  const [mode, setMode] = React.useState("list"); // list | new | detail
+  const [selFormId, setSelFormId] = React.useState(null);
+  const [showNewForm, setShowNewForm] = React.useState(false);
+
+  // מצא את הטופס האחרון
+  const latestForm = soldierExitForms[0];
+
+  if(mode==="new") return (
+    <SoldierExitFormFill soldier={soldier} db={db} onSave={onSave} auth={auth} onBack={()=>setMode("list")}/>
+  );
+  if(mode==="detail" && selFormId) return (
+    <ExitFormDetail db={db} setDb={onSave} soldiers={[soldier]} auth={auth} formId={selFormId} onBack={()=>setMode("list")}/>
+  );
+
+  return (
+    <div style={{padding:"4px 0"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14}}>🏠 יציאה הביתה עם נשק</div>
+        {perms.canFillExitForm&&(
+          <button onClick={()=>setMode("new")} style={{...S.btn("green"),fontSize:12,padding:"6px 14px"}}>➕ טופס חדש</button>
+        )}
+      </div>
+
+      {soldierExitForms.length===0?(
+        <div style={{textAlign:"center",padding:24,color:"var(--text-muted)",fontSize:13}}>
+          אין טפסי יציאה לחייל זה
+          {perms.canFillExitForm&&<div style={{marginTop:8}}><button onClick={()=>setMode("new")} style={{...S.btn("blue"),fontSize:12}}>פתח טופס ראשון</button></div>}
+        </div>
+      ):(
+        <div>
+          {soldierExitForms.map(([id,f])=>{
+            const statusLabel = {ממתין_חייל:"⏳ ממתין לחייל",ממתין_מפ:'⏳ ממתין למ"פ',ממתין_מגד:"⏳ ממתין למגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
+            const statusColor = {אושר:"var(--accent-green)",נדחה:"var(--accent-red)"}[f.status]||"var(--accent-orange)";
+            return (
+              <div key={id} onClick={()=>{setSelFormId(id);setMode("detail");}} style={{...S.card,marginBottom:8,cursor:"pointer",borderColor:"var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>טופס יציאה — {f.createdAt}</div>
+                    <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>נשק: {f.weaponType||"—"} | נוצר ע"י: {f.createdBy||"—"}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:statusColor}}>{statusLabel}</span>
+                    {f.magadDecision&&<div style={{fontSize:11,color:"var(--text-muted)"}}>{f.magadDecision}</div>}
+                  </div>
+                </div>
+                {/* פס סטטוס */}
+                <div style={{marginTop:8,display:"flex",gap:4}}>
+                  {["חייל מילא","מ\"פ אישר","מגד אישר"].map((step,i)=>{
+                    const done = (i===0&&f.soldierSig)||(i===1&&f.mpSig)||(i===2&&f.magadSig);
+                    return <div key={i} style={{flex:1,height:4,borderRadius:4,background:done?"var(--accent-green)":"var(--bg-elevated)"}} title={step}/>;
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ——— SOLDIER FILLS THE FORM (simplified for profile context) ———
+function SoldierExitFormFill({soldier, db, onSave, auth, onBack}){
+  const [answers, setAnswers] = React.useState(Array(10).fill(null));
+  const [address, setAddress] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [weaponType, setWeaponType] = React.useState(()=>{
+    const assigned = db.assignments[soldier.id]??soldier.assigned??{};
+    return Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(k)).join(", ");
+  });
+  const [showPad, setShowPad] = React.useState(false);
+  const [sigImg, setSigImg] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+
+  function setAns(i,v){ const a=[...answers]; a[i]=v; setAnswers(a); }
+
+  function save(){
+    if(answers.some(a=>a===null)){ setErr("יש לענות על כל 10 השאלות"); return; }
+    if(!address){ setErr("יש למלא כתובת מגורים"); return; }
+    if(!sigImg){ setErr("חסרה חתימת חייל"); return; }
+
+    const id = "ef_"+Date.now();
+    const form = {
+      soldierId: soldier.id,
+      soldierName: soldier.name,
+      unit: soldier.unit,
+      squad: soldier.squad,
+      address, city, weaponType,
+      answers,
+      soldierSig: sigImg,
+      createdAt: todayStr(),
+      createdBy: auth?.name||"",
+      status: "ממתין_מפ",
+      mpName:"", mpNote:"", mpSig:null, mpDate:"",
+      magadName:"", magadDecision:"", magadSig:null, magadDate:"",
+      commanderDecisions: Array(10).fill(""),
+    };
+    const newDb = {...db, exitForms:{...(db.exitForms||{}), [id]:form}};
+    onSave(newDb);
+    fbSet("db/exitForms/"+id, form).catch(e=>console.warn(e));
+    setSaved(true);
+  }
+
+  if(saved) return (
+    <div style={{textAlign:"center",padding:24}}>
+      <div style={{fontSize:40,marginBottom:10}}>✅</div>
+      <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>הטופס נשמר</div>
+      <div style={{color:"var(--text-secondary)",fontSize:13,marginBottom:16}}>הטופס עבר למ"פ לאישור</div>
+      <button onClick={onBack} style={{...S.btn("blue")}}>חזרה</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <button onClick={onBack} style={{...S.btn("gray"),fontSize:11}}>← חזרה</button>
+        <span style={{fontWeight:700,fontSize:14}}>טופס יציאה הביתה — {soldier.name}</span>
+      </div>
+
+      {/* כתובת + נשק */}
+      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+        <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="כתובת מגורים *" style={{...S.input,flex:2,minWidth:130}}/>
+        <input value={city} onChange={e=>setCity(e.target.value)} placeholder="יישוב" style={{...S.input,flex:1,minWidth:90}}/>
+      </div>
+      <input value={weaponType} onChange={e=>setWeaponType(e.target.value)} placeholder="סוג כלי הנשק" style={{...S.input,width:"100%",marginBottom:10}}/>
+
+      {/* שאלות */}
+      <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>שאלון — יש לענות על כל השאלות</div>
+      <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+        <thead>
+          <tr style={{background:"var(--bg-elevated)"}}>
+            <th style={{width:28,padding:"5px 4px",fontSize:10,border:"1px solid var(--border)",textAlign:"center"}}>#</th>
+            <th style={{padding:"5px 8px",fontSize:10,textAlign:"right",border:"1px solid var(--border)"}}>שאלה</th>
+            <th style={{width:72,padding:"5px 4px",fontSize:10,textAlign:"center",border:"1px solid var(--border)"}}>תשובה</th>
+          </tr>
+        </thead>
+        <tbody>
+          {EXIT_QUESTIONS.map((q,i)=>(
+            <tr key={i} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
+              <td style={{padding:"6px 4px",textAlign:"center",fontSize:12,fontWeight:700,border:"1px solid var(--border)"}}>{i+1}</td>
+              <td style={{padding:"6px 8px",fontSize:12,border:"1px solid var(--border)"}}>{q}</td>
+              <td style={{padding:"4px",textAlign:"center",border:"1px solid var(--border)"}}>
+                <div style={{display:"flex",gap:3,justifyContent:"center"}}>
+                  {["כן","לא"].map(v=>(
+                    <button key={v} onClick={()=>setAns(i,v)} style={{
+                      padding:"3px 9px",borderRadius:4,border:"1px solid",cursor:"pointer",fontSize:11,fontWeight:600,
+                      borderColor:answers[i]===v?"var(--accent-blue)":"var(--border)",
+                      background:answers[i]===v?"var(--btn-blue-bg)":"transparent",
+                      color:answers[i]===v?"var(--accent-blue)":"var(--text-secondary)"
+                    }}>{v}</button>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* הצהרה + חתימה */}
+      <div style={{...S.card,marginBottom:10,fontSize:11,color:"var(--text-secondary)",lineHeight:1.6}}>
+        <b>הצהרה:</b> הריני מצהיר כי תודרכתי ואקפיד על כל הנחיות אבטחת כלי הנשק בבית, כולל נעילה בארון/כספת, שמירת מחסניות בנפרד, ואי-השארת הנשק בחדר ריק.
+      </div>
+
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+        <button onClick={()=>setShowPad(true)} style={{...S.btn(sigImg?"green":"blue"),fontSize:12}}>
+          {sigImg?"✅ חתימה קיימת — עדכון":"✍️ חתימת החייל"}
+        </button>
+        {sigImg&&<img src={sigImg} style={{height:36,border:"1px solid var(--border)",borderRadius:4}}/>}
+      </div>
+
+      {err&&<div style={{color:"var(--accent-red)",fontSize:12,marginBottom:8}}>{err}</div>}
+      <button onClick={save} style={{...S.btn("green"),width:"100%",padding:"11px 0"}}>💾 שמירה ושליחה למ"פ</button>
+
+      {showPad&&<Modal title="חתימת החייל" onClose={()=>setShowPad(false)}><SignaturePad onSave={d=>{setSigImg(d);setShowPad(false);}}/></Modal>}
+    </div>
   );
 }
 
