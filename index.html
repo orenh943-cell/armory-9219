@@ -407,14 +407,13 @@ function SerialPicker({itemName, value, onChange, db}){
     return used;
   },[db]);
 
-  // סידוריים זמינים לאמצעי זה
+  // סידוריים זמינים לאמצעי זה — לא בשימוש ב-DB
   const available = useMemo(()=>{
     if(!itemName) return [];
     const name = itemName.trim();
-    const result = ALL_SERIALS
+    return ALL_SERIALS
       .filter(s=>s.name.trim()===name && !usedSerials.has(s.serial))
       .map(s=>s.serial);
-    return result;
   },[itemName, usedSerials]);
 
   // סידוריים שמתאימים לחיפוש
