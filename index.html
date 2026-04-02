@@ -2287,6 +2287,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                 </body></html>`);
                 win.document.close();
               }} style={{...S.btn("green"),padding:"8px 14px",fontSize:13,whiteSpace:"nowrap"}}>🖨️ הדפס</button>
+              <button onClick={()=>downloadSignaturesZip(db, filtered.filter(s=>s.signature), filterUnit, filterSquad)} style={{...S.btn("blue"),padding:"8px 14px",fontSize:13,whiteSpace:"nowrap"}}>📥 ZIP{filterUnit!=="הכל"?" — פלוגה "+filterUnit:""}</button>
             </div>
             <div style={{...S.card,padding:0,overflow:"hidden"}}>
               <div style={{overflowX:"auto"}}>
@@ -4247,6 +4248,197 @@ function hasAnyRisk(answers){
   return answers && answers.some((a,i)=>isRiskyAnswer(i,a));
 }
 
+// =================== BULK EXIT SIGN MODAL ===================
+function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
+  const perms = getPerms(auth, db);
+  const isMp   = perms.canApproveExitForm;
+  const isMagad = perms.isMagad || perms.canCommanderDecide;
+
+  const forms = db.exitForms || {};
+
+  // סנן טפסים רלוונטיים לפי תפקיד
+  const eligibleForms = Object.entries(forms).filter(([id,f])=>{
+    if(isMagad && f.status==="ממתין_מגד" && !f.magadSig) return true;
+    if(isMp   && f.status==="ממתין_מפ"  && !f.mpSig)    return true;
+    return false;
+  });
+
+  const [selected, setSelected] = React.useState(new Set());
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [mpNote, setMpNote] = React.useState("");
+  const [decision, setDecision] = React.useState(""); // מגד בלבד
+  const [showPad, setShowPad] = React.useState(false);
+  const [sig, setSig] = React.useState(null);
+  const [done, setDone] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const units = ["הכל",...new Set(eligibleForms.map(([,f])=>f.unit).filter(Boolean))].filter((v,i,a)=>a.indexOf(v)===i);
+
+  const visibleForms = eligibleForms.filter(([,f])=>filterUnit==="הכל"||f.unit===filterUnit);
+
+  function toggleAll(){ 
+    if(selected.size===visibleForms.length) setSelected(new Set());
+    else setSelected(new Set(visibleForms.map(([id])=>id)));
+  }
+  function toggle(id){ 
+    const s=new Set(selected); 
+    s.has(id)?s.delete(id):s.add(id); 
+    setSelected(s); 
+  }
+
+  function save(){
+    if(!selected.size){ alert("יש לבחור לפחות טופס אחד"); return; }
+    if(!sig){ alert("חסרה חתימה"); return; }
+    if(isMagad && !decision){ alert("יש לבחור החלטה"); return; }
+    setSaving(true);
+    const newForms = {...forms};
+    selected.forEach(id=>{
+      const f = forms[id];
+      if(!f) return;
+      if(isMagad){
+        newForms[id] = {
+          ...f,
+          commanderDecisions: f.commanderDecisions||Array(10).fill(""),
+          magadName: auth.name,
+          magadDecision: decision,
+          magadSig: sig,
+          magadDate: todayStr()+" "+nowStr(),
+          status: decision==="מאשר"?"אושר":"נדחה",
+        };
+      } else {
+        newForms[id] = {
+          ...f,
+          mpName: auth.name,
+          mpNote,
+          mpSig: sig,
+          mpDate: todayStr()+" "+nowStr(),
+          status: "ממתין_מגד",
+        };
+      }
+      fbSet("db/exitForms/"+id, newForms[id]).catch(e=>console.warn(e));
+    });
+    setDb({...db, exitForms:newForms});
+    setSaving(false);
+    setDone(true);
+  }
+
+  if(done) return (
+    <Modal title="חתימה מרוכזת — יציאה הביתה" onClose={onClose}>
+      <div style={{textAlign:"center",padding:"16px 0"}}>
+        <div style={{fontSize:48,marginBottom:12}}>✅</div>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>{selected.size} טפסים עודכנו בהצלחה</div>
+        <div style={{color:"var(--text-secondary)",fontSize:13,marginBottom:20}}>
+          {isMagad ? `החלטה: ${decision}` : 'הטפסים עברו למגד לאישור'}
+        </div>
+        <button onClick={onClose} style={{...S.btn("blue"),padding:"10px 32px"}}>סגור</button>
+      </div>
+    </Modal>
+  );
+
+  return (
+    <Modal title={`✍️ חתימה מרוכזת — ${isMagad?"החלטת מגד":'אישור מ"פ'}`} onClose={onClose} wide>
+      {eligibleForms.length===0?(
+        <div style={{textAlign:"center",padding:32,color:"var(--text-muted)"}}>
+          <div style={{fontSize:32,marginBottom:8}}>📭</div>
+          <div>אין טפסים הממתינים לאישורך</div>
+        </div>
+      ):(
+        <div>
+          {/* כותרת + מספר */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:13,color:"var(--text-secondary)"}}>
+              {eligibleForms.length} טפסים ממתינים לאישורך
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {units.length>1&&units.map(u=>(
+                <button key={u} onClick={()=>{setFilterUnit(u);setSelected(new Set());}}
+                  style={{...S.btn(filterUnit===u?"blue":""),padding:"4px 10px",fontSize:12}}>
+                  {u==="הכל"?"הכל":"פלוגה "+u}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* רשימת טפסים */}
+          <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",marginBottom:12}}>
+            {/* header row */}
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"var(--bg-elevated)",borderBottom:"1px solid var(--border)"}}>
+              <input type="checkbox" checked={selected.size===visibleForms.length&&visibleForms.length>0}
+                onChange={toggleAll} style={{cursor:"pointer",width:16,height:16}}/>
+              <span style={{fontSize:12,fontWeight:700,flex:1}}>בחר הכל ({visibleForms.length})</span>
+              <span style={{fontSize:12,color:"var(--accent-blue)",fontWeight:700}}>{selected.size} נבחרו</span>
+            </div>
+            <div style={{maxHeight:280,overflowY:"auto"}}>
+              {visibleForms.map(([id,f])=>{
+                const risky = hasAnyRisk(f.answers);
+                return (
+                <div key={id} onClick={()=>toggle(id)} style={{
+                  display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                  cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",
+                  background:selected.has(id)?"var(--btn-blue-bg)":"var(--bg-surface)",
+                }}>
+                  <input type="checkbox" checked={selected.has(id)} onChange={()=>toggle(id)}
+                    onClick={e=>e.stopPropagation()} style={{cursor:"pointer",width:16,height:16}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13}}>{f.soldierName||f.soldierId}</div>
+                    <div style={{fontSize:11,color:"var(--text-secondary)"}}>
+                      מ.א: {f.soldierId} | פלוגה: {f.unit||"—"} | {f.createdAt}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    {risky&&<span style={{fontSize:11,color:"var(--accent-red)",fontWeight:700}}>⚠️</span>}
+                    <span style={{fontSize:11,color:"var(--text-muted)"}}>{f.weaponType||"—"}</span>
+                  </div>
+                </div>
+              );})}
+            </div>
+          </div>
+
+          {/* הערה למ"פ */}
+          {isMp&&!isMagad&&(
+            <textarea value={mpNote} onChange={e=>setMpNote(e.target.value)}
+              placeholder='הערה (אופציונלי) — תחול על כל הטפסים'
+              style={{...S.input,width:"100%",minHeight:60,marginBottom:10,resize:"vertical"}}/>
+          )}
+
+          {/* החלטת מגד */}
+          {isMagad&&(
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              {["מאשר","לא מאשר"].map(v=>(
+                <button key={v} onClick={()=>setDecision(v)} style={{
+                  flex:1,padding:"10px",borderRadius:8,border:"2px solid",cursor:"pointer",
+                  fontWeight:700,fontSize:14,
+                  borderColor:decision===v?(v==="מאשר"?"var(--accent-green)":"var(--accent-red)"):"var(--border)",
+                  background:decision===v?(v==="מאשר"?"var(--btn-green-bg)":"var(--btn-red-bg)"):"transparent",
+                  color:decision===v?(v==="מאשר"?"var(--accent-green)":"var(--accent-red)"):"var(--text-secondary)"
+                }}>{v==="מאשר"?"✅ מאשר יציאה":"❌ לא מאשר"}</button>
+              ))}
+            </div>
+          )}
+
+          {/* חתימה */}
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+            <button onClick={()=>setShowPad(true)} style={{...S.btn(sig?"green":"blue")}}>
+              {sig?"✅ חתימה קיימת — עדכן":"✍️ חתימה"}
+            </button>
+            {sig&&<img src={sig} style={{height:36,border:"1px solid var(--border)",borderRadius:4}}/>}
+            {sig&&<span style={{fontSize:12,color:"var(--accent-green)"}}>חתימה נשמרת על {selected.size} טפסים</span>}
+          </div>
+
+          <button onClick={save} disabled={saving||!selected.size||!sig||(isMagad&&!decision)}
+            style={{...S.btn(isMagad?(decision==="מאשר"?"green":"red"):"green"),width:"100%",padding:"12px 0",fontSize:15,
+              opacity:(!selected.size||!sig||(isMagad&&!decision))?0.5:1}}>
+            {saving?"שומר...":isMagad?`${decision||"בחר החלטה"} — ${selected.size} טפסים`:`✍️ אשר ${selected.size} טפסים`}
+          </button>
+        </div>
+      )}
+      {showPad&&<Modal title="חתימה" onClose={()=>setShowPad(false)}>
+        <SignaturePad onSave={d=>{setSig(d);setShowPad(false);}}/>
+      </Modal>}
+    </Modal>
+  );
+}
+
 function ExitFormTab({db, setDb, soldiers, auth}){
   const perms = getPerms(auth, db);
   const [view, setView] = React.useState("list"); // list | new | detail
@@ -4268,6 +4460,14 @@ function ExitFormTab({db, setDb, soldiers, auth}){
   function openNew(){ setView("new"); setSelId(null); }
   function openDetail(id){ setSelId(id); setView("detail"); }
   const [confirmDelete, setConfirmDelete] = React.useState(null);
+  const [bulkSignOpen, setBulkSignOpen] = React.useState(false);
+
+  // ספירת טפסים שממתינים לי
+  const pendingForMe = Object.values(forms).filter(f=>{
+    if(perms.isMagad||perms.canCommanderDecide) return f.status==="ממתין_מגד"&&!f.magadSig;
+    if(perms.canApproveExitForm) return f.status==="ממתין_מפ"&&!f.mpSig;
+    return false;
+  }).length;
 
   function deleteForm(id){
     const newForms = {...(db.exitForms||{})};
@@ -4286,9 +4486,16 @@ function ExitFormTab({db, setDb, soldiers, auth}){
     <div style={{padding:16}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <h2 style={{margin:0,fontSize:18,fontWeight:800}}>🏠 אישור יציאה הביתה עם נשק</h2>
-        {perms.canFillExitForm&&(
-          <button onClick={openNew} style={{...S.btn("green"),fontSize:13}}>➕ טופס חדש</button>
-        )}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {(perms.canApproveExitForm||perms.canCommanderDecide||perms.isMagad)&&pendingForMe>0&&(
+            <button onClick={()=>setBulkSignOpen(true)} style={{...S.btn("purple"),fontSize:13}}>
+              ✍️ חתימה מרוכזת ({pendingForMe})
+            </button>
+          )}
+          {perms.canFillExitForm&&(
+            <button onClick={openNew} style={{...S.btn("green"),fontSize:13}}>➕ טופס חדש</button>
+          )}
+        </div>
       </div>
 
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
@@ -4375,6 +4582,7 @@ function ExitFormTab({db, setDb, soldiers, auth}){
           </div>
         </Modal>
       )}
+      {bulkSignOpen&&<BulkExitSignModal db={db} setDb={setDb} soldiers={soldiers} auth={auth} onClose={()=>setBulkSignOpen(false)}/>}
     </div>
   );
 }
@@ -4812,6 +5020,78 @@ function printExitForm(form, db){
   const w = window.open("","_blank");
   w.document.write(html);
   w.document.close();
+}
+
+function downloadSignaturesZip(db, signedSoldiers, filterUnit, filterSquad){
+  if(typeof fflate==="undefined"){ alert("ספריית ZIP לא נטענה"); return; }
+  if(!signedSoldiers.length){ alert("אין חיילים חתומים בסינון הנוכחי"); return; }
+
+  const files = {};
+  const enc = s => fflate.strToU8(s);
+  const safeName = s => (s||"לא_ידוע").replace(/[\/\\:*?"<>|]/g,"_");
+
+  signedSoldiers.forEach(s=>{
+    const sig = db.signatures?.[s.id];
+    if(!sig) return;
+    const assigned = s.assigned||{};
+    const weps = Object.entries(assigned);
+    const unit  = safeName(s.unit||"ללא_פלוגה");
+    const squad = safeName(s.squad||"ללא_מחלקה");
+    const name  = safeName(s.name);
+    const date  = (sig.signedAt||"").replace(/[\/:]/g,"-").replace(/ /g,"_");
+
+    const rows = weps.map(([k,v])=>`
+      <tr>
+        <td style="padding:5px 8px;border:1px solid #ccc;font-weight:${WEAPON_KEYS.includes(k)?"bold":"normal"}">${k}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc;font-family:monospace">${v&&v!==1?v:"—"}</td>
+      </tr>`).join("");
+
+    const sigHtml = sig.sigData ? `<div style="margin-top:12px"><div style="font-size:11px;color:#666;margin-bottom:4px">חתימה:</div><img src="${sig.sigData}" style="height:50px;border:1px solid #ccc"/></div>` : "";
+    const testHtml = sig.testImg ? `<div style="margin-top:8px"><div style="font-size:11px;color:#666;margin-bottom:4px">תמונת מבחן:</div><img src="${sig.testImg}" style="height:50px;border-radius:4px"/></div>` : "";
+
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>חתימה — ${s.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#000;font-size:12px}
+h2{font-size:14px;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:10px}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.box{border:1px solid #ccc;padding:5px 8px;border-radius:3px}
+.lbl{font-size:10px;color:#666}
+.val{font-weight:bold;font-size:13px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+th{background:#e8edf5;padding:5px 8px;border:1px solid #ccc;text-align:right;font-size:11px}
+@media print{button{display:none}}</style></head><body>
+<h2>טופס החתמה — גדוד 9219</h2>
+<div class="info">
+  <div class="box"><div class="lbl">שם</div><div class="val">${s.name}</div></div>
+  <div class="box"><div class="lbl">מספר אישי</div><div class="val">${s.id}</div></div>
+  <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
+  <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
+  <div class="box" style="grid-column:1/-1"><div class="lbl">תאריך חתימה</div><div class="val">${sig.signedAt||"—"}</div></div>
+</div>
+<table>
+  <thead><tr><th>אמצעי</th><th>מספר סידורי</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+${sigHtml}${testHtml}
+<button onclick="window.print()" style="margin-top:14px;padding:8px 20px;cursor:pointer;font-size:13px">🖨️ הדפס</button>
+</body></html>`;
+
+    const path = `פלוגה_${unit}/${squad}/${name}_${s.id}_${date}.html`;
+    files[path] = enc(html);
+  });
+
+  const unitLabel = filterUnit==="הכל" ? "כל_הפלוגות" : "פלוגה_"+filterUnit;
+  const squadLabel = filterSquad&&filterSquad!=="הכל" ? "_מחלקה_"+filterSquad : "";
+  const zipName = `חתימות_${unitLabel}${squadLabel}_${new Date().toLocaleDateString("he-IL").replace(/\//g,"-")}.zip`;
+
+  fflate.zip(files, {level:6}, (err,data)=>{
+    if(err){ alert("שגיאה: "+err.message); return; }
+    const blob = new Blob([data],{type:"application/zip"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href=url; a.download=zipName; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
 }
 
 function downloadAllFormsZip(db, soldiers){
