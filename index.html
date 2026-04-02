@@ -4037,7 +4037,7 @@ function SoldierExitFormFill({soldier, db, onSave, auth, onBack}){
       address, city, weaponType,
       answers,
       soldierSig: sigImg,
-      createdAt: todayStr(),
+      createdAt: todayStr()+" "+nowStr(),
       createdBy: auth?.name||"",
       status: "ממתין_מפ",
       mpName:"", mpNote:"", mpSig:null, mpDate:"",
@@ -4063,18 +4063,29 @@ function SoldierExitFormFill({soldier, db, onSave, auth, onBack}){
     <div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
         <button onClick={onBack} style={{...S.btn("gray"),fontSize:11}}>← חזרה</button>
-        <span style={{fontWeight:700,fontSize:14}}>טופס יציאה הביתה — {soldier.name}</span>
+        <span style={{fontWeight:700,fontSize:14}}>טופס יציאה הביתה</span>
       </div>
 
-      {/* כתובת + נשק */}
-      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+      {/* פרטי חייל — קריאה בלבד */}
+      <div style={{...S.card,marginBottom:10,background:"var(--bg-elevated)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:13}}>
+          <div><span style={{color:"var(--text-muted)",fontSize:11}}>שם</span><div style={{fontWeight:700}}>{soldier.name}</div></div>
+          <div><span style={{color:"var(--text-muted)",fontSize:11}}>מספר אישי</span><div style={{fontWeight:700,fontFamily:"monospace"}}>{soldier.id}</div></div>
+          <div style={{gridColumn:"1/-1"}}><span style={{color:"var(--text-muted)",fontSize:11}}>סוג כלי הנשק</span><div style={{fontWeight:700,color:"var(--accent-blue)"}}>{weaponType||"—"}</div></div>
+          <div><span style={{color:"var(--text-muted)",fontSize:11}}>תאריך</span><div style={{fontWeight:600}}>{todayStr()}</div></div>
+          <div><span style={{color:"var(--text-muted)",fontSize:11}}>שעה</span><div style={{fontWeight:600}}>{nowStr()}</div></div>
+        </div>
+      </div>
+
+      {/* כתובת */}
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
         <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="כתובת מגורים *" style={{...S.input,flex:2,minWidth:130}}/>
         <input value={city} onChange={e=>setCity(e.target.value)} placeholder="יישוב" style={{...S.input,flex:1,minWidth:90}}/>
       </div>
-      <input value={weaponType} onChange={e=>setWeaponType(e.target.value)} placeholder="סוג כלי הנשק" style={{...S.input,width:"100%",marginBottom:10}}/>
 
       {/* שאלות */}
-      <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>שאלון — יש לענות על כל השאלות</div>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>שאלון — יש לענות על כל השאלות</div>
+      <div style={{fontSize:11,color:"var(--accent-orange)",marginBottom:8}}>⚠️ שאלות 1–6: "כן" = יבחן ע"י סא"ל &nbsp;|&nbsp; שאלות 7–10: "לא" = יבחן ע"י סא"ל</div>
       <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
         <thead>
           <tr style={{background:"var(--bg-elevated)"}}>
@@ -4084,24 +4095,28 @@ function SoldierExitFormFill({soldier, db, onSave, auth, onBack}){
           </tr>
         </thead>
         <tbody>
-          {EXIT_QUESTIONS.map((q,i)=>(
-            <tr key={i} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
+          {EXIT_QUESTIONS.map((q,i)=>{
+            const risky = isRiskyAnswer(i, answers[i]);
+            return (
+            <tr key={i} style={{background:risky?"rgba(248,81,73,0.08)":i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
               <td style={{padding:"6px 4px",textAlign:"center",fontSize:12,fontWeight:700,border:"1px solid var(--border)"}}>{i+1}</td>
-              <td style={{padding:"6px 8px",fontSize:12,border:"1px solid var(--border)"}}>{q}</td>
+              <td style={{padding:"6px 8px",fontSize:12,border:"1px solid var(--border)",color:risky?"var(--accent-red)":"inherit"}}>{q}</td>
               <td style={{padding:"4px",textAlign:"center",border:"1px solid var(--border)"}}>
                 <div style={{display:"flex",gap:3,justifyContent:"center"}}>
-                  {["כן","לא"].map(v=>(
+                  {["כן","לא"].map(v=>{
+                    const sel=answers[i]===v, tr=isRiskyAnswer(i,v);
+                    return (
                     <button key={v} onClick={()=>setAns(i,v)} style={{
                       padding:"3px 9px",borderRadius:4,border:"1px solid",cursor:"pointer",fontSize:11,fontWeight:600,
-                      borderColor:answers[i]===v?"var(--accent-blue)":"var(--border)",
-                      background:answers[i]===v?"var(--btn-blue-bg)":"transparent",
-                      color:answers[i]===v?"var(--accent-blue)":"var(--text-secondary)"
+                      borderColor:sel?(tr?"var(--accent-red)":"var(--accent-green)"):"var(--border)",
+                      background:sel?(tr?"var(--btn-red-bg)":"var(--btn-green-bg)"):"transparent",
+                      color:sel?(tr?"var(--accent-red)":"var(--accent-green)"):"var(--text-secondary)"
                     }}>{v}</button>
-                  ))}
+                  );})}
                 </div>
               </td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
 
@@ -4138,8 +4153,16 @@ const EXIT_QUESTIONS = [
   "האם בדירתך יש סורגים?",
   "האם אתה מתגורר עם ההורים?",
 ];
-// שאלות 1-6 → "כן" = בעייתי, מי שיש לו "כן" — מפקד יקבל החלטה
-// שאלות 7-10 → "לא" = בעייתי
+// שאלות 1–6: "כן" = בעייתי → דורש בחינה פרטנית ע"י סא"ל
+// שאלות 7–10: "לא" = בעייתי → דורש בחינה פרטנית ע"י סא"ל
+function isRiskyAnswer(questionIndex, answer){
+  if(!answer) return false;
+  if(questionIndex < 6) return answer === "כן";   // שאלות 1-6
+  return answer === "לא";                          // שאלות 7-10
+}
+function hasAnyRisk(answers){
+  return answers && answers.some((a,i)=>isRiskyAnswer(i,a));
+}
 
 function ExitFormTab({db, setDb, soldiers, auth}){
   const perms = getPerms(auth, db);
@@ -4337,7 +4360,8 @@ function ExitFormNew({db, setDb, soldiers, auth, onBack}){
 
       {/* שאלון */}
       <div style={{...S.card,marginBottom:12}}>
-        <div style={{fontWeight:700,marginBottom:10}}>שאלון — סעיף 1</div>
+        <div style={{fontWeight:700,marginBottom:6}}>שאלון — סעיף 1</div>
+        <div style={{fontSize:11,color:"var(--accent-orange)",marginBottom:8}}>⚠️ שאלות 1–6: "כן" = יבחן ע"י סא"ל &nbsp;|&nbsp; שאלות 7–10: "לא" = יבחן ע"י סא"ל</div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:"var(--bg-elevated)"}}>
@@ -4347,24 +4371,31 @@ function ExitFormNew({db, setDb, soldiers, auth, onBack}){
             </tr>
           </thead>
           <tbody>
-            {EXIT_QUESTIONS.map((q,i)=>(
-              <tr key={i} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
+            {EXIT_QUESTIONS.map((q,i)=>{
+              const risky = isRiskyAnswer(i, answers[i]);
+              return (
+              <tr key={i} style={{background:risky?"rgba(248,81,73,0.08)":i%2===0?"var(--bg-surface)":"var(--bg-elevated)"}}>
                 <td style={{padding:"8px",textAlign:"center",fontSize:13,fontWeight:700,border:"1px solid var(--border)"}}>{i+1}</td>
-                <td style={{padding:"8px 10px",fontSize:13,border:"1px solid var(--border)"}}>{q}</td>
+                <td style={{padding:"8px 10px",fontSize:13,border:"1px solid var(--border)",color:risky?"var(--accent-red)":"inherit"}}>
+                  {q}{risky&&<span style={{fontSize:10,marginRight:6,color:"var(--accent-red)",fontWeight:700}}> ⚠️ יבחן ע"י סא"ל</span>}
+                </td>
                 <td style={{padding:"6px",textAlign:"center",border:"1px solid var(--border)"}}>
                   <div style={{display:"flex",gap:4,justifyContent:"center"}}>
-                    {["כן","לא"].map(v=>(
+                    {["כן","לא"].map(v=>{
+                      const sel = answers[i]===v;
+                      const thisRisky = isRiskyAnswer(i,v);
+                      return (
                       <button key={v} onClick={()=>setAns(i,v)} style={{
                         padding:"4px 12px",borderRadius:5,border:"1px solid",cursor:"pointer",fontSize:12,fontWeight:600,
-                        borderColor:answers[i]===v?"var(--accent-blue)":"var(--border)",
-                        background:answers[i]===v?"var(--btn-blue-bg)":"transparent",
-                        color:answers[i]===v?"var(--accent-blue)":"var(--text-secondary)"
+                        borderColor:sel?(thisRisky?"var(--accent-red)":"var(--accent-green)"):"var(--border)",
+                        background:sel?(thisRisky?"var(--btn-red-bg)":"var(--btn-green-bg)"):"transparent",
+                        color:sel?(thisRisky?"var(--accent-red)":"var(--accent-green)"):"var(--text-secondary)"
                       }}>{v}</button>
-                    ))}
+                    );})}
                   </div>
                 </td>
               </tr>
-            ))}
+            );})}
           </tbody>
         </table>
       </div>
@@ -4464,8 +4495,12 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
       {/* סעיף 1 — שאלון */}
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontWeight:700,marginBottom:10}}>סעיף 1 — שאלון</div>
-        <div style={{fontSize:12,color:"var(--text-secondary)",marginBottom:8}}>
-          <b>חייל:</b> {form.soldierName} | מ.א: {form.soldierId} | פלוגה: {form.unit} | כתובת: {form.address} {form.city&&"— "+form.city} | נשק: {form.weaponType}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8,fontSize:12}}>
+          <div><span style={{color:"var(--text-muted)"}}>שם</span><br/><b style={{fontSize:13}}>{form.soldierName}</b></div>
+          <div><span style={{color:"var(--text-muted)"}}>מספר אישי</span><br/><b style={{fontFamily:"monospace",fontSize:13}}>{form.soldierId}</b></div>
+          <div><span style={{color:"var(--text-muted)"}}>תאריך ושעה</span><br/><b>{form.createdAt}</b></div>
+          <div style={{gridColumn:"1/-1"}}><span style={{color:"var(--text-muted)"}}>סוג כלי הנשק</span><br/><b style={{color:"var(--accent-blue)",fontSize:13}}>{form.weaponType||"—"}</b></div>
+          {form.address&&<div style={{gridColumn:"1/-1"}}><span style={{color:"var(--text-muted)"}}>כתובת</span><br/><b>{form.address}{form.city?" — "+form.city:""}</b></div>}
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
@@ -4482,7 +4517,7 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
                 <td style={{padding:"7px",textAlign:"center",fontSize:12,fontWeight:700,border:"1px solid var(--border)"}}>{i+1}</td>
                 <td style={{padding:"7px 10px",fontSize:12,border:"1px solid var(--border)"}}>{q}</td>
                 <td style={{padding:"6px",textAlign:"center",border:"1px solid var(--border)"}}>
-                  <span style={{fontWeight:700,color:form.answers[i]==="כן"?"var(--accent-orange)":"var(--accent-green)"}}>{form.answers[i]||"—"}</span>
+                  <span style={{fontWeight:700,color:isRiskyAnswer(i,form.answers[i])?"var(--accent-red)":"var(--accent-green)"}}>{form.answers[i]||"—"}</span>
                 </td>
                 <td style={{padding:"5px",textAlign:"center",border:"1px solid var(--border)"}}>
                   {isMagad&&form.status==="ממתין_מגד"?(
@@ -4506,6 +4541,15 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
         </table>
       </div>
 
+      {/* באנר סיכון */}
+      {hasAnyRisk(form.answers)&&(
+        <div style={{...S.card,marginBottom:12,background:"rgba(248,81,73,0.1)",borderColor:"var(--accent-red)"}}>
+          <div style={{fontWeight:700,color:"var(--accent-red)",marginBottom:6}}>⚠️ נדרשת בחינה פרטנית ע"י סא"ל</div>
+          <div style={{fontSize:12,color:"var(--text-secondary)"}}>
+            שאלות בעייתיות: {form.answers.map((a,i)=>isRiskyAnswer(i,a)?i+1:null).filter(Boolean).join(", ")}
+          </div>
+        </div>
+      )}
       {/* סעיף 2 — הצהרת חייל */}
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontWeight:700,marginBottom:6}}>סעיף 2 — הצהרת החייל</div>
@@ -5060,7 +5104,7 @@ function ExitFormDirectView({auth, onLogout, db, setDb}){
       address, city, weaponType,
       answers,
       soldierSig: sigImg,
-      createdAt: todayStr(),
+      createdAt: todayStr()+" "+nowStr(),
       createdBy: "חייל — לינק WA",
       status: "ממתין_מפ",
       mpName:"", mpNote:"", mpSig:null, mpDate:"",
@@ -5093,49 +5137,77 @@ function ExitFormDirectView({auth, onLogout, db, setDb}){
 
       {/* פרטים */}
       <div style={{...S.card,marginBottom:12}}>
-        <div style={{fontWeight:700,marginBottom:8,fontSize:14}}>פרטי החייל</div>
-        <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:10}}>
-          שם: <b style={{color:"var(--text-primary)"}}>{soldier?.name||auth.name}</b> &nbsp;|&nbsp; מ.א: <b style={{color:"var(--text-primary)"}}>{auth.soldierId}</b>
+        <div style={{fontWeight:700,marginBottom:10,fontSize:14}}>פרטי החייל</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+          <div style={{background:"var(--bg-elevated)",borderRadius:6,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:2}}>שם</div>
+            <div style={{fontWeight:700,fontSize:14}}>{soldier?.name||auth.name}</div>
+          </div>
+          <div style={{background:"var(--bg-elevated)",borderRadius:6,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:2}}>מספר אישי</div>
+            <div style={{fontWeight:700,fontSize:14,fontFamily:"monospace"}}>{auth.soldierId}</div>
+          </div>
+          <div style={{background:"var(--bg-elevated)",borderRadius:6,padding:"8px 10px",gridColumn:"1/-1"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:2}}>סוג כלי הנשק</div>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--accent-blue)"}}>{weaponType||"—"}</div>
+          </div>
+          <div style={{background:"var(--bg-elevated)",borderRadius:6,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:2}}>תאריך</div>
+            <div style={{fontWeight:600}}>{todayStr()}</div>
+          </div>
+          <div style={{background:"var(--bg-elevated)",borderRadius:6,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"var(--text-muted)",marginBottom:2}}>שעה</div>
+            <div style={{fontWeight:600}}>{nowStr()}</div>
+          </div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
           <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="כתובת מגורים *" style={{...S.input,flex:2,minWidth:140}}/>
           <input value={city} onChange={e=>setCity(e.target.value)} placeholder="יישוב" style={{...S.input,flex:1,minWidth:90}}/>
         </div>
-        <input value={weaponType} onChange={e=>setWeaponType(e.target.value)} placeholder="סוג כלי הנשק" style={{...S.input,width:"100%"}}/>
       </div>
 
       {/* שאלון */}
       <div style={{...S.card,marginBottom:12}}>
         <div style={{fontWeight:700,marginBottom:10,fontSize:14}}>שאלון — יש לענות על כל השאלות</div>
-        {EXIT_QUESTIONS.map((q,i)=>(
+        {EXIT_QUESTIONS.map((q,i)=>{
+          const risky = isRiskyAnswer(i, answers[i]);
+          return (
           <div key={i} style={{
             display:"flex",alignItems:"flex-start",gap:10,
             padding:"10px 0",
-            borderBottom: i<9?"1px solid var(--border-subtle)":"none"
+            borderBottom: i<9?"1px solid var(--border-subtle)":"none",
+            background:risky?"rgba(248,81,73,0.06)":"transparent",
+            borderRadius:risky?6:0,paddingRight:risky?8:0
           }}>
             <div style={{
               minWidth:26,height:26,borderRadius:"50%",
-              background:"var(--bg-elevated)",
+              background:risky?"var(--btn-red-bg)":"var(--bg-elevated)",
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:12,fontWeight:700,color:"var(--text-secondary)",
+              fontSize:12,fontWeight:700,color:risky?"var(--accent-red)":"var(--text-secondary)",
               flexShrink:0,marginTop:2
             }}>{i+1}</div>
             <div style={{flex:1}}>
-              <div style={{fontSize:13,marginBottom:8,lineHeight:1.5}}>{q}</div>
+              <div style={{fontSize:13,marginBottom:8,lineHeight:1.5,color:risky?"var(--accent-red)":"inherit"}}>
+                {q}
+                {risky&&<span style={{display:"block",fontSize:11,fontWeight:700,color:"var(--accent-red)",marginTop:2}}>⚠️ תשובה זו דורשת בחינה פרטנית ע"י סא"ל</span>}
+              </div>
               <div style={{display:"flex",gap:8}}>
-                {["כן","לא"].map(v=>(
+                {["כן","לא"].map(v=>{
+                  const sel = answers[i]===v;
+                  const thisRisky = isRiskyAnswer(i,v);
+                  return (
                   <button key={v} onClick={()=>setAns(i,v)} style={{
                     padding:"7px 24px",borderRadius:8,border:"2px solid",cursor:"pointer",
                     fontSize:13,fontWeight:700,transition:"all 0.1s",
-                    borderColor:answers[i]===v?"var(--accent-blue)":"var(--border)",
-                    background:answers[i]===v?"var(--btn-blue-bg)":"transparent",
-                    color:answers[i]===v?"var(--accent-blue)":"var(--text-secondary)"
+                    borderColor:sel?(thisRisky?"var(--accent-red)":"var(--accent-green)"):"var(--border)",
+                    background:sel?(thisRisky?"var(--btn-red-bg)":"var(--btn-green-bg)"):"transparent",
+                    color:sel?(thisRisky?"var(--accent-red)":"var(--accent-green)"):"var(--text-secondary)"
                   }}>{v}</button>
-                ))}
+                );})}
               </div>
             </div>
           </div>
-        ))}
+        );})}
       </div>
 
       {/* הצהרה */}
