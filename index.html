@@ -1184,7 +1184,7 @@ function SignatureDocument({soldier, db, onClose}){
   );
 }
 
-function SoldierDetail({soldier,db,onClose,onSave,onSendWA,auth}){
+function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [editingLocation,setEditingLocation]=useState(false);
   const [editingSerial,setEditingSerial]=useState(null);
   const [newSerialVal,setNewSerialVal]=useState("");
@@ -1405,7 +1405,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,auth}){
       )}
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
     {view==="exitform"&&(
-      <SoldierExitFormView soldier={soldier} db={db} onSave={onSave} auth={auth} soldierExitForms={soldierExitForms}/>
+      <SoldierExitFormView soldier={soldier} db={db} onSave={onSave} auth={auth} soldierExitForms={soldierExitForms} onSendExitWA={onSendExitWA}/>
     )}
     </Modal>
   );
@@ -1445,7 +1445,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
       {matched.length>0&&!sid&&(
         <div style={{background:"var(--bg-base)",border:"1px solid var(--border)",borderRadius:8,marginTop:-8,marginBottom:10,overflow:"hidden"}}>
           {matched.map(s=>(
-            <div key={s.id} onClick={()=>{setSid(s.id);setSearch(s.name);}} style={{padding:"9px 14px",cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background="#1c2128"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <div key={s.id} onClick={()=>{setSid(s.id);setSearch(s.name);}} style={{padding:"9px 14px",cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background="var(--bg-elevated)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <strong>{s.name}</strong> <span style={{color:"var(--text-secondary)"}}>{s.id} • פלוגה {s.unit}</span>
             </div>
           ))}
@@ -2018,6 +2018,16 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
   }
 
+  function sendExitFormWA(soldier){
+    const phone=phoneToWA(soldier.phone);
+    if(!phone){alert("אין מספר טלפון לחייל זה");return;}
+    const link="https://orenh943-cell.github.io/armory-9219";
+    // מעביר את מ.א כפרמטר — האפליקציה תדע לפתוח את הטופס בפרופיל החייל
+    const exitLink=link+"?exitform="+soldier.id;
+    const msg=`שלום ${soldier.name},\nנא למלא את טופס אישור היציאה הביתה עם כלי נשק:\n${exitLink}\n\nיש להיכנס עם הקוד האישי שלך, ללחוץ על 🏠 יציאה ולמלא את הטופס.`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
+  }
+
   const perms = getPerms(auth, db);
   const tabs=[
     {id:"dashboard",label:"בקרה",icon:"🛡️"},
@@ -2163,7 +2173,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     {filtered.slice(0,100).map(s=>{
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       return (
-                        <tr key={s.id} style={{background:"var(--bg-surface)",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#1c2128"} onMouseLeave={e=>e.currentTarget.style.background="#161b22"}>
+                        <tr key={s.id} style={{background:"var(--bg-surface)",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="var(--bg-elevated)"} onMouseLeave={e=>e.currentTarget.style.background="var(--bg-surface)"}>
                           <td style={{...S.td,color:"var(--text-secondary)",fontFamily:"monospace",fontSize:12}}>{s.id}</td>
                           <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
@@ -2283,7 +2293,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       const sig=db.signatures?.[s.id];
                       return (
-                        <tr key={s.id} style={{background:"var(--bg-surface)"}} onMouseEnter={e=>e.currentTarget.style.background="#1c2128"} onMouseLeave={e=>e.currentTarget.style.background="#161b22"}>
+                        <tr key={s.id} style={{background:"var(--bg-surface)"}} onMouseEnter={e=>e.currentTarget.style.background="var(--bg-elevated)"} onMouseLeave={e=>e.currentTarget.style.background="var(--bg-surface)"}>
                           <td style={{...S.td,color:"var(--text-secondary)",fontFamily:"monospace",fontSize:12}}>{s.id}</td>
                           <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
@@ -2339,7 +2349,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       </div>
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
-      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} auth={auth}/>}
+      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
@@ -3923,14 +3933,10 @@ function SearchModal({onClose, soldiers, db}){
 }
 
 // ——— EXIT FORM INSIDE SOLDIER PROFILE ———
-function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms}){
+function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms, onSendExitWA}){
   const perms = auth ? getPerms(auth, db) : {};
   const [mode, setMode] = React.useState("list"); // list | new | detail
   const [selFormId, setSelFormId] = React.useState(null);
-  const [showNewForm, setShowNewForm] = React.useState(false);
-
-  // מצא את הטופס האחרון
-  const latestForm = soldierExitForms[0];
 
   if(mode==="new") return (
     <SoldierExitFormFill soldier={soldier} db={db} onSave={onSave} auth={auth} onBack={()=>setMode("list")}/>
@@ -3941,17 +3947,33 @@ function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms}){
 
   return (
     <div style={{padding:"4px 0"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:6}}>
         <div style={{fontWeight:700,fontSize:14}}>🏠 יציאה הביתה עם נשק</div>
-        {perms.canFillExitForm&&(
-          <button onClick={()=>setMode("new")} style={{...S.btn("green"),fontSize:12,padding:"6px 14px"}}>➕ טופס חדש</button>
-        )}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {soldier.phone&&onSendExitWA&&(
+            <button onClick={()=>onSendExitWA(soldier)} style={{...S.btn("wa"),fontSize:12,padding:"6px 12px"}}>
+              💬 שלח לחייל ב-WA
+            </button>
+          )}
+          {perms.canFillExitForm&&(
+            <button onClick={()=>setMode("new")} style={{...S.btn("green"),fontSize:12,padding:"6px 14px"}}>➕ טופס חדש</button>
+          )}
+        </div>
       </div>
 
       {soldierExitForms.length===0?(
         <div style={{textAlign:"center",padding:24,color:"var(--text-muted)",fontSize:13}}>
           אין טפסי יציאה לחייל זה
-          {perms.canFillExitForm&&<div style={{marginTop:8}}><button onClick={()=>setMode("new")} style={{...S.btn("blue"),fontSize:12}}>פתח טופס ראשון</button></div>}
+          <div style={{marginTop:12,display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+            {soldier.phone&&onSendExitWA&&(
+              <button onClick={()=>onSendExitWA(soldier)} style={{...S.btn("wa"),fontSize:12}}>
+                💬 שלח לחייל ב-WhatsApp
+              </button>
+            )}
+            {perms.canFillExitForm&&(
+              <button onClick={()=>setMode("new")} style={{...S.btn("blue"),fontSize:12}}>פתח טופס</button>
+            )}
+          </div>
         </div>
       ):(
         <div>
