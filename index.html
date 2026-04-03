@@ -1732,232 +1732,381 @@ const INITIAL_BROKEN = [{"id": "broken_sheet_0", "soldierId": "5786027", "soldie
 
 // =================== INSPECTION TAB (בחינות נשק) ===================
 function InspectionTab({db, setDb, soldiers, auth}){
-  const [search, setSearch]   = React.useState("");
-  const [results, setResults] = React.useState([]); // [{s, wepName, serial, assigned}]
-  const [selected, setSelected] = React.useState(new Set()); // set of "soldierId|wepName"
+  const [view, setView] = React.useState("dashboard"); // dashboard | inspect
+  const [search, setSearch] = React.useState("");
+  const [results, setResults] = React.useState([]);
+  const [selected, setSelected] = React.useState(new Set());
   const [inspectorName, setInspectorName] = React.useState(auth?.name||"");
   const [showPad, setShowPad] = React.useState(false);
-  const [sigImg, setSigImg]   = React.useState(null);
-  const [done, setDone]       = React.useState(false);
+  const [sigImg, setSigImg] = React.useState(null);
   const [savedReport, setSavedReport] = React.useState(null);
+  const [filterWep, setFilterWep] = React.useState("הכל");
 
-  // כל החיילים כולל ידניים
+  // כל החיילים
   const allSoldiers = React.useMemo(()=>
     [...soldiers,...Object.values(db.customSoldiers||{})].filter(s=>s.name)
-  ,[soldiers, db.customSoldiers]);
+  ,[soldiers,db.customSoldiers]);
 
-  // חיפוש לפי שם / מ.א / סידורי / שם נשק
-  React.useEffect(()=>{
-    const q = search.trim();
-    if(!q){ setResults([]); return; }
-    const ql = q.toLowerCase();
-    const res = [];
+  // כל הבחינות שנשמרו
+  const allInspections = React.useMemo(()=>
+    Object.values(db.inspections||{})
+  ,[db.inspections]);
+
+  // Set של מפתחות שכבר נבחנו: "soldierId|wepName"
+  const inspectedKeys = React.useMemo(()=>{
+    const s = new Set();
+    allInspections.forEach(insp=>{
+      (insp.items||[]).forEach(it=>s.add(it.soldierId+"|"+it.wepName));
+    });
+    return s;
+  },[allInspections]);
+
+  // סטטיסטיקה לפי סוג אמצעי
+  const stats = React.useMemo(()=>{
+    const map = {}; // wepName -> {total, inspected, soldiers:[]}
     allSoldiers.forEach(s=>{
       const assigned = db.assignments?.[s.id]??s.assigned??{};
-      Object.entries(assigned).forEach(([wepName, val])=>{
-        const serial = val&&val!==1 ? String(val) : "";
-        const match =
-          s.name.toLowerCase().includes(ql) ||
-          s.id.includes(q) ||
-          wepName.toLowerCase().includes(ql) ||
-          serial.includes(q);
-        if(match) res.push({s, wepName, serial, key:`${s.id}|${wepName}`});
+      Object.entries(assigned).forEach(([wepName,val])=>{
+        if(!map[wepName]) map[wepName]={total:0,inspected:0,soldiers:[]};
+        map[wepName].total++;
+        const key = s.id+"|"+wepName;
+        if(inspectedKeys.has(key)) map[wepName].inspected++;
+        map[wepName].soldiers.push({s,wepName,serial:val&&val!==1?String(val):"—",key,done:inspectedKeys.has(key)});
       });
     });
-    setResults(res.slice(0,80));
-  },[search, allSoldiers, db.assignments]);
+    return Object.entries(map)
+      .map(([name,d])=>({name,...d,pct:Math.round(d.inspected/d.total*100)}))
+      .sort((a,b)=>a.inspected/a.total - b.inspected/b.total); // פחות נבחן קודם
+  },[allSoldiers,db.assignments,inspectedKeys]);
 
-  function toggle(key){
-    const s=new Set(selected);
-    s.has(key)?s.delete(key):s.add(key);
-    setSelected(s);
-  }
+  const totalAll = stats.reduce((s,x)=>s+x.total,0);
+  const totalInspected = stats.reduce((s,x)=>s+x.inspected,0);
+  const totalPct = totalAll>0?Math.round(totalInspected/totalAll*100):0;
+
+  // חיפוש
+  React.useEffect(()=>{
+    const q=search.trim();
+    if(!q){setResults([]);return;}
+    const ql=q.toLowerCase();
+    const res=[];
+    allSoldiers.forEach(s=>{
+      const assigned=db.assignments?.[s.id]??s.assigned??{};
+      Object.entries(assigned).forEach(([wepName,val])=>{
+        if(filterWep!=="הכל" && wepName!==filterWep) return;
+        const serial=val&&val!==1?String(val):"";
+        if(s.name.toLowerCase().includes(ql)||s.id.includes(q)||
+           wepName.toLowerCase().includes(ql)||serial.includes(q)){
+          const key=s.id+"|"+wepName;
+          res.push({s,wepName,serial,key,done:inspectedKeys.has(key)});
+        }
+      });
+    });
+    setResults(res.slice(0,100));
+  },[search,allSoldiers,db.assignments,filterWep,inspectedKeys]);
+
+  function toggle(key){const s=new Set(selected);s.has(key)?s.delete(key):s.add(key);setSelected(s);}
   function toggleAll(){
-    if(selected.size===results.length) setSelected(new Set());
-    else setSelected(new Set(results.map(r=>r.key)));
+    const undone=results.filter(r=>!r.done);
+    if(selected.size===undone.length) setSelected(new Set());
+    else setSelected(new Set(undone.map(r=>r.key)));
+  }
+  function selectWepAll(wepName){
+    const wepSoldiers = stats.find(s=>s.name===wepName)?.soldiers.filter(r=>!r.done)||[];
+    const keys = wepSoldiers.map(r=>r.key);
+    const newSel=new Set(selected);
+    keys.forEach(k=>newSel.add(k));
+    setSelected(newSel);
+    setView("inspect");
+    setSearch(wepName);
   }
 
-  function doSign(sig){
-    setSigImg(sig);
-    setShowPad(false);
-  }
+  function doSign(sig){setSigImg(sig);setShowPad(false);}
 
   function saveInspection(){
-    if(!selected.size){ alert("יש לסמן לפחות אמצעי אחד"); return; }
-    if(!inspectorName.trim()){ alert("יש להזין שם בוחן"); return; }
-    if(!sigImg){ alert("חסרה חתימת בוחן"); return; }
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
-    const timeStr = now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
-    const ts = Date.now();
-
-    const inspectedItems = results.filter(r=>selected.has(r.key)).map(r=>({
-      soldierId: r.s.id,
-      soldierName: r.s.name,
-      unit: r.s.unit||"—",
-      squad: r.s.squad||"—",
-      wepName: r.wepName,
-      serial: r.serial||"—",
-    }));
-
-    const report = {
-      id: "insp_"+ts,
-      inspector: inspectorName.trim(),
-      sig: sigImg,
-      date: dateStr,
-      time: timeStr,
-      ts,
-      items: inspectedItems,
-      searchQuery: search,
-    };
-
-    // שמור ב-Firebase
-    const newInspections = {...(db.inspections||{}), [report.id]: report};
-    const ndb = {...db, inspections: newInspections};
+    if(!selected.size){alert("יש לסמן לפחות אמצעי אחד");return;}
+    if(!inspectorName.trim()){alert("יש להזין שם בוחן");return;}
+    if(!sigImg){alert("חסרה חתימת בוחן");return;}
+    const now=new Date();
+    const dateStr=now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
+    const timeStr=now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+    const ts=Date.now();
+    const allItems=[...results,...(stats.flatMap(s=>s.soldiers))];
+    const seen=new Set();
+    const inspectedItems=[];
+    selected.forEach(key=>{
+      if(seen.has(key)) return; seen.add(key);
+      const r=allItems.find(x=>x.key===key);
+      if(r) inspectedItems.push({soldierId:r.s.id,soldierName:r.s.name,unit:r.s.unit||"—",squad:r.s.squad||"—",wepName:r.wepName,serial:r.serial||"—"});
+    });
+    const report={id:"insp_"+ts,inspector:inspectorName.trim(),sig:sigImg,date:dateStr,time:timeStr,ts,items:inspectedItems};
+    const ndb={...db,inspections:{...(db.inspections||{}),[report.id]:report}};
     setDb(ndb);
-    fbSet("db/inspections/"+report.id, report).catch(e=>console.warn(e));
-
-    // לוג תנועות
-    logAction("בחינת_נשק",
-      `${inspectorName} בחן ${inspectedItems.length} אמצעים: ${inspectedItems.map(i=>i.wepName+(i.serial!=="—"?" ("+i.serial+")":"")).join(", ")}`,
-      inspectorName
-    );
-
+    fbSet("db/inspections/"+report.id,report).catch(e=>console.warn(e));
+    logAction("בחינת_נשק",`${inspectorName} בחן ${inspectedItems.length} אמצעים`,inspectorName);
     setSavedReport(report);
-    setDone(true);
+    setSelected(new Set());setSigImg(null);setSearch("");
   }
 
-  // ——— הורדת דוח ———
-  function downloadReport(report){
-    const rows = report.items.map((item,i)=>`
+  function downloadReport(report,wepFilter){
+    const items=(report?[report]:allInspections).flatMap(r=>(r.items||[]).map(it=>({...it,inspector:r.inspector,date:r.date,time:r.time})));
+    const filtered=wepFilter?items.filter(it=>it.wepName===wepFilter):items;
+
+    // חישוב טרם נבחן
+    const pending=[];
+    stats.forEach(st=>{
+      if(wepFilter&&st.name!==wepFilter) return;
+      st.soldiers.filter(r=>!r.done).forEach(r=>{
+        pending.push({soldierName:r.s.name,soldierId:r.s.id,unit:r.s.unit||"—",squad:r.s.squad||"—",wepName:r.wepName,serial:r.serial,status:"טרם נבחן"});
+      });
+    });
+
+    const inspectedRows=filtered.map((it,i)=>`<tr>
+      <td>${i+1}</td><td>${it.soldierName}</td><td style="font-family:monospace">${it.soldierId}</td>
+      <td>${it.unit}</td><td>${it.squad}</td><td style="font-weight:bold">${it.wepName}</td>
+      <td style="font-family:monospace">${it.serial||"—"}</td>
+      <td style="text-align:center">${it.inspector||"—"}</td>
+      <td>${it.date||"—"} ${it.time||""}</td>
+      <td style="text-align:center;color:green;font-weight:bold">✓ נבחן</td>
+    </tr>`).join("");
+
+    const pendingRows=pending.map((it,i)=>`<tr style="background:#fff8e1">
+      <td>${filtered.length+i+1}</td><td>${it.soldierName}</td><td style="font-family:monospace">${it.soldierId}</td>
+      <td>${it.unit}</td><td>${it.squad}</td><td style="font-weight:bold">${it.wepName}</td>
+      <td style="font-family:monospace">${it.serial||"—"}</td>
+      <td style="text-align:center">—</td><td>—</td>
+      <td style="text-align:center;color:#e67e22;font-weight:bold">⏳ טרם נבחן</td>
+    </tr>`).join("");
+
+    const statsRows=stats.filter(s=>!wepFilter||s.name===wepFilter).map(s=>`
       <tr>
-        <td style="text-align:center">${i+1}</td>
-        <td>${item.soldierName}</td>
-        <td style="font-family:monospace">${item.soldierId}</td>
-        <td>${item.unit}</td>
-        <td>${item.squad}</td>
-        <td style="font-weight:bold">${item.wepName}</td>
-        <td style="font-family:monospace">${item.serial}</td>
-        <td style="text-align:center;color:green">✓</td>
+        <td style="font-weight:bold">${s.name}</td>
+        <td style="text-align:center">${s.total}</td>
+        <td style="text-align:center;color:green">${s.inspected}</td>
+        <td style="text-align:center;color:#e67e22">${s.total-s.inspected}</td>
+        <td style="text-align:center">
+          <div style="background:#ddd;border-radius:4px;height:12px;width:100px;display:inline-block;overflow:hidden">
+            <div style="background:${s.pct===100?"green":"#388bfd"};height:100%;width:${s.pct}%"></div>
+          </div>
+          <span style="margin-right:6px;font-weight:bold">${s.pct}%</span>
+        </td>
       </tr>`).join("");
 
-    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>דוח בחינת נשק — ${report.date}</title>
+    const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>דוח בחינת נשק — גדוד 9219</title>
 <style>
-body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px}
-h2{text-align:center;font-size:16px;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:16px}
-.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
-.meta-box{border:1px solid #ccc;padding:8px 12px;border-radius:4px}
-.meta-lbl{font-size:10px;color:#666;margin-bottom:2px}
-.meta-val{font-weight:bold;font-size:13px}
-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-th{background:#1a1a2e;color:#fff;padding:7px 10px;text-align:right;font-size:11px}
-td{padding:6px 10px;border:1px solid #ccc;font-size:11px}
-tr:nth-child(even){background:#f5f5f5}
-.sig-section{display:flex;align-items:center;gap:20px;border-top:2px solid #000;padding-top:16px;margin-top:8px}
-.sig-box{text-align:center}
-.sig-lbl{font-size:10px;color:#666;margin-top:4px}
+body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:11px}
+h1{text-align:center;font-size:18px;border-bottom:3px solid #1a1a2e;padding-bottom:8px;color:#1a1a2e}
+h2{font-size:13px;color:#1a1a2e;margin:20px 0 8px;border-right:4px solid #388bfd;padding-right:8px}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.sum-box{border:2px solid #e0e0e0;padding:12px;border-radius:6px;text-align:center}
+.sum-num{font-size:28px;font-weight:800;line-height:1}
+.sum-lbl{font-size:10px;color:#666;margin-top:4px}
+.green{color:green}.orange{color:#e67e22}.blue{color:#388bfd}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:right;font-size:10px}
+td{padding:5px 8px;border:1px solid #ddd;font-size:10px}
+.progress{width:80px;background:#ddd;border-radius:3px;height:10px;display:inline-block;overflow:hidden;vertical-align:middle}
+.progress-bar{height:100%;background:#388bfd}
 @media print{button{display:none}}
 </style></head><body>
-<h2>דוח בחינת נשק — גדוד 9219</h2>
-<div class="meta">
-  <div class="meta-box"><div class="meta-lbl">בוחן</div><div class="meta-val">${report.inspector}</div></div>
-  <div class="meta-box"><div class="meta-lbl">תאריך</div><div class="meta-val">${report.date}</div></div>
-  <div class="meta-box"><div class="meta-lbl">שעה</div><div class="meta-val">${report.time}</div></div>
-</div>
-<table>
-  <thead><tr>
-    <th style="width:30px">מס"ד</th><th>שם חייל</th><th>מ.א</th>
-    <th>פלוגה</th><th>מחלקה</th><th>אמצעי</th><th>סידורי</th><th style="width:40px">נבחן</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<div style="font-size:12px;color:#666;margin-bottom:16px">סה"כ: ${report.items.length} אמצעים נבחנו</div>
-<div class="sig-section">
-  <div class="sig-box">
-    ${report.sig?`<img src="${report.sig}" style="height:55px;border:1px solid #ccc"/>`:""}
-    <div class="sig-lbl">חתימת הבוחן — ${report.inspector}</div>
-  </div>
-  <div style="flex:1;text-align:left;font-size:11px;color:#999">הופק: ${report.date} ${report.time}</div>
-</div>
-<button onclick="window.print()" style="margin-top:14px;padding:9px 24px;font-size:13px;cursor:pointer">🖨️ הדפס / PDF</button>
-</body></html>`;
+<h1>דוח בחינת נשק — גדוד 9219${wepFilter?" | "+wepFilter:""}</h1>
+<p style="text-align:center;color:#666;font-size:12px">הופק: ${new Date().toLocaleString("he-IL")} | ${report?("בוחן: "+report.inspector):"כל הבחינות"}</p>
 
-    const w = window.open("","_blank");
+<div class="summary">
+  <div class="sum-box"><div class="sum-num blue">${totalAll}</div><div class="sum-lbl">סה"כ אמצעים</div></div>
+  <div class="sum-box"><div class="sum-num green">${totalInspected}</div><div class="sum-lbl">נבחנו</div></div>
+  <div class="sum-box"><div class="sum-num orange">${totalAll-totalInspected}</div><div class="sum-lbl">טרם נבחנו</div></div>
+  <div class="sum-box"><div class="sum-num ${totalPct===100?"green":totalPct>=50?"blue":"orange"}">${totalPct}%</div><div class="sum-lbl">כוסה</div></div>
+</div>
+
+<h2>סיכום לפי סוג אמצעי</h2>
+<table>
+  <thead><tr><th>אמצעי</th><th>סה"כ</th><th>נבחנו</th><th>טרם</th><th>התקדמות</th></tr></thead>
+  <tbody>${statsRows}</tbody>
+</table>
+
+<h2>אמצעים שנבחנו (${filtered.length})</h2>
+<table>
+  <thead><tr><th>#</th><th>שם</th><th>מ.א</th><th>פלוגה</th><th>מחלקה</th><th>אמצעי</th><th>סידורי</th><th>בוחן</th><th>תאריך ושעה</th><th>סטטוס</th></tr></thead>
+  <tbody>${inspectedRows}</tbody>
+</table>
+
+${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
+<table>
+  <thead><tr><th>#</th><th>שם</th><th>מ.א</th><th>פלוגה</th><th>מחלקה</th><th>אמצעי</th><th>סידורי</th><th>בוחן</th><th>תאריך</th><th>סטטוס</th></tr></thead>
+  <tbody>${pendingRows}</tbody>
+</table>`:""}
+
+<button onclick="window.print()" style="margin-top:14px;padding:9px 24px;font-size:13px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px">🖨️ הדפס / שמור PDF</button>
+</body></html>`;
+    const w=window.open("","_blank");
     w.document.write(html);
     w.document.close();
   }
 
-  // ——— מסך סיום ———
-  if(done && savedReport) return (
-    <div style={{padding:16,maxWidth:700,margin:"0 auto"}}>
-      <div style={{textAlign:"center",padding:24}}>
-        <div style={{fontSize:56,marginBottom:12}}>✅</div>
-        <div style={{fontWeight:800,fontSize:18,marginBottom:8}}>הבחינה נשמרה!</div>
-        <div style={{color:"var(--text-secondary)",fontSize:14,marginBottom:20}}>
-          {savedReport.items.length} אמצעים נבחנו על ידי {savedReport.inspector}
+  // ——— DASHBOARD ———
+  if(view==="dashboard") return (
+    <div style={{padding:16,maxWidth:960,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+        <div>
+          <h2 style={{margin:0,fontSize:20,fontWeight:800}}>🔍 בחינות נשק</h2>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginTop:2}}>סטטוס בחינות בזמן אמת</div>
         </div>
-        <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-          <button onClick={()=>downloadReport(savedReport)} style={{...S.btn("purple"),padding:"11px 24px",fontSize:14}}>
-            📄 הורד דוח בחינה
-          </button>
-          <button onClick={()=>{setDone(false);setSelected(new Set());setSigImg(null);setSearch("");}} style={{...S.btn("blue"),padding:"11px 24px",fontSize:14}}>
-            🔍 בחינה חדשה
-          </button>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>downloadReport(null,null)} style={{...S.btn("purple"),fontSize:13}}>📄 דוח מלא</button>
+          <button onClick={()=>setView("inspect")} style={{...S.btn("green"),fontSize:13}}>🔍 התחל בחינה</button>
         </div>
       </div>
+
+      {/* כרטיסי סיכום */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}}>
+        {[
+          {label:"סה\"כ אמצעים",val:totalAll,color:"#388bfd"},
+          {label:"נבחנו",val:totalInspected,color:"#3fb950"},
+          {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"#f85149":"#3fb950"},
+          {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"#3fb950":totalPct>=50?"#388bfd":"#e3b341"},
+        ].map(c=>(
+          <div key={c.label} style={{...S.card,textAlign:"center",padding:"16px 8px",marginBottom:0}}>
+            <div style={{fontSize:32,fontWeight:800,color:c.color,lineHeight:1}}>{c.val}</div>
+            <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:6,fontWeight:600}}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* פס התקדמות כולל */}
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
+          <span style={{fontWeight:700}}>התקדמות כוללת</span>
+          <span style={{color:"var(--text-secondary)"}}>{totalInspected} / {totalAll}</span>
+        </div>
+        <div style={{height:12,background:"var(--bg-elevated)",borderRadius:6,overflow:"hidden"}}>
+          <div style={{height:"100%",width:totalPct+"%",background:totalPct===100?"var(--accent-green)":"var(--accent-blue)",transition:"width .5s",borderRadius:6}}/>
+        </div>
+        <div style={{fontSize:11,color:"var(--text-muted)",marginTop:6}}>{totalPct}% מכלל האמצעים נבחנו</div>
+      </div>
+
+      {/* טבלת אמצעים */}
+      <div style={{...S.card,padding:0,overflow:"hidden"}}>
+        <div style={{padding:"12px 16px",fontWeight:700,fontSize:14,borderBottom:"1px solid var(--border)"}}>
+          סטטוס לפי סוג אמצעי
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:"var(--bg-base)"}}>
+                {["אמצעי","סה\"כ","נבחנו","טרם","התקדמות",""].map(h=>(
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((st,i)=>{
+                const pct=st.pct;
+                const barColor=pct===100?"var(--accent-green)":pct>=50?"var(--accent-blue)":"var(--accent-orange)";
+                return (
+                <tr key={st.name} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)",borderBottom:"1px solid var(--border-subtle)"}}>
+                  <td style={{...S.td,fontWeight:700}}>{st.name}</td>
+                  <td style={{...S.td,textAlign:"center"}}>{st.total}</td>
+                  <td style={{...S.td,textAlign:"center",color:"var(--accent-green)",fontWeight:700}}>{st.inspected}</td>
+                  <td style={{...S.td,textAlign:"center",color:st.total-st.inspected>0?"var(--accent-orange)":"var(--accent-green)",fontWeight:700}}>{st.total-st.inspected}</td>
+                  <td style={{...S.td,minWidth:140}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,height:8,background:"var(--bg-elevated)",borderRadius:4,overflow:"hidden",border:"1px solid var(--border)"}}>
+                        <div style={{height:"100%",width:pct+"%",background:barColor,transition:"width .4s"}}/>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:700,color:barColor,minWidth:32}}>{pct}%</span>
+                    </div>
+                  </td>
+                  <td style={{...S.td}}>
+                    <div style={{display:"flex",gap:4}}>
+                      {st.total-st.inspected>0&&(
+                        <button onClick={()=>selectWepAll(st.name)} style={{...S.btn("blue"),padding:"4px 8px",fontSize:11}}>בחן הכל</button>
+                      )}
+                      <button onClick={()=>downloadReport(null,st.name)} style={{...S.btn("gray"),padding:"4px 8px",fontSize:11}}>📄</button>
+                    </div>
+                  </td>
+                </tr>
+              );})}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* בחינות אחרונות */}
+      {allInspections.length>0&&(
+        <div style={{...S.card,marginTop:16,padding:0,overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:14,borderBottom:"1px solid var(--border)"}}>
+            📋 בחינות אחרונות
+          </div>
+          {[...allInspections].sort((a,b)=>b.ts-a.ts).slice(0,5).map(insp=>(
+            <div key={insp.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:"1px solid var(--border-subtle)"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13}}>{insp.inspector}</div>
+                <div style={{fontSize:11,color:"var(--text-secondary)"}}>{insp.date} {insp.time} • {(insp.items||[]).length} אמצעים</div>
+              </div>
+              <button onClick={()=>downloadReport(insp,null)} style={{...S.btn("purple"),padding:"4px 10px",fontSize:11}}>📄 דוח</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
-  // ——— מסך ראשי ———
+  // ——— INSPECTION VIEW ———
   return (
     <div style={{padding:16,maxWidth:900,margin:"0 auto"}}>
-      <h2 style={{marginBottom:4,fontSize:20,fontWeight:800}}>🔍 בחינות נשק</h2>
-      <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:16}}>
-        חפש לפי שם חייל, מ.א, שם אמצעי או מספר סידורי — סמן את מה שנבחן וחתום
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+        <button onClick={()=>{setView("dashboard");setSelected(new Set());setSearch("");}} style={{...S.btn("gray"),padding:"6px 12px",fontSize:12}}>← לוח בקרה</button>
+        <h2 style={{margin:0,fontSize:18,fontWeight:800}}>🔍 בחינה חדשה</h2>
       </div>
 
       {/* חיפוש */}
-      <input
-        value={search} onChange={e=>setSearch(e.target.value)}
-        placeholder="🔍 חפש שם / מ.א / שם נשק / סידורי..."
-        style={{...S.input,fontSize:15,padding:"11px 14px"}}
-        autoFocus
-      />
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="🔍 שם / מ.א / שם נשק / סידורי..."
+          style={{...S.input,flex:1,fontSize:14,marginBottom:0}} autoFocus/>
+        <select value={filterWep} onChange={e=>setFilterWep(e.target.value)} style={{...S.input,flex:"0 0 auto",marginBottom:0}}>
+          <option value="הכל">כל האמצעים</option>
+          {stats.map(s=><option key={s.name} value={s.name}>{s.name} ({s.total-s.inspected} נותרו)</option>)}
+        </select>
+      </div>
 
       {/* תוצאות */}
       {results.length>0&&(
         <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",marginBottom:14}}>
-          {/* header */}
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"var(--bg-elevated)",borderBottom:"1px solid var(--border)"}}>
             <input type="checkbox"
-              checked={selected.size===results.length&&results.length>0}
+              checked={selected.size===results.filter(r=>!r.done).length&&results.filter(r=>!r.done).length>0}
               onChange={toggleAll} style={{cursor:"pointer",width:16,height:16}}/>
-            <span style={{fontSize:12,fontWeight:700,flex:1}}>{results.length} תוצאות — בחר הכל</span>
-            <span style={{fontSize:12,color:"var(--accent-blue)",fontWeight:700}}>{selected.size} נסמנו</span>
+            <span style={{fontSize:12,fontWeight:700,flex:1}}>{results.length} תוצאות</span>
+            <span style={{fontSize:12,color:"var(--accent-blue)",fontWeight:700}}>{selected.size} נסמנו לבחינה</span>
           </div>
           <div style={{maxHeight:380,overflowY:"auto"}}>
             {results.map(r=>(
-              <div key={r.key} onClick={()=>toggle(r.key)} style={{
+              <div key={r.key} onClick={()=>!r.done&&toggle(r.key)} style={{
                 display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
-                cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",
-                background:selected.has(r.key)?"var(--btn-blue-bg)":"var(--bg-surface)",
+                cursor:r.done?"default":"pointer",
+                borderBottom:"1px solid var(--border-subtle)",
+                background:r.done?"rgba(63,185,80,0.05)":selected.has(r.key)?"var(--btn-blue-bg)":"var(--bg-surface)",
+                opacity:r.done?0.7:1,
               }}>
-                <input type="checkbox" checked={selected.has(r.key)}
-                  onChange={()=>toggle(r.key)} onClick={e=>e.stopPropagation()}
-                  style={{cursor:"pointer",width:16,height:16}}/>
+                {r.done
+                  ? <span style={{fontSize:16,color:"var(--accent-green)"}}>✅</span>
+                  : <input type="checkbox" checked={selected.has(r.key)} onChange={()=>toggle(r.key)}
+                      onClick={e=>e.stopPropagation()} style={{cursor:"pointer",width:16,height:16}}/>
+                }
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{r.s.name}
+                  <div style={{fontWeight:700,fontSize:13}}>
+                    {r.s.name}
                     <span style={{color:"var(--text-muted)",fontSize:11,marginRight:6}}>({r.s.id})</span>
                     <span style={{color:"var(--text-muted)",fontSize:11}}>פלוגה {r.s.unit||"—"}</span>
                   </div>
                   <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>
-                    <span style={{fontWeight:600,color:"var(--accent-blue)"}}>{r.wepName}</span>
+                    <span style={{fontWeight:600,color:r.done?"var(--accent-green)":"var(--accent-blue)"}}>{r.wepName}</span>
                     {r.serial&&r.serial!=="—"&&<span style={{fontFamily:"monospace",marginRight:8,color:"var(--text-muted)"}}> {r.serial}</span>}
                   </div>
                 </div>
-                {selected.has(r.key)&&<span style={{color:"var(--accent-green)",fontWeight:700,fontSize:14}}>✓</span>}
+                {r.done&&<span style={{fontSize:11,color:"var(--accent-green)",fontWeight:600}}>נבחן ✓</span>}
               </div>
             ))}
           </div>
@@ -1965,18 +2114,16 @@ tr:nth-child(even){background:#f5f5f5}
       )}
 
       {search&&results.length===0&&(
-        <div style={{textAlign:"center",padding:32,color:"var(--text-muted)"}}>אין תוצאות לחיפוש זה</div>
+        <div style={{textAlign:"center",padding:32,color:"var(--text-muted)"}}>אין תוצאות</div>
       )}
 
-      {/* פרטי בוחן + חתימה */}
+      {/* חתימת בוחן */}
       {selected.size>0&&(
-        <div style={{...S.card,marginBottom:0}}>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>
-            ✍️ חתימת בוחן — {selected.size} אמצעים נסמנו
-          </div>
+        <div style={{...S.card}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>✍️ חתימת בוחן — {selected.size} אמצעים נסמנו</div>
           <label style={S.label}>שם הבוחן</label>
           <input value={inspectorName} onChange={e=>setInspectorName(e.target.value)}
-            placeholder="שם מלא של הבוחן" style={S.input}/>
+            placeholder="שם מלא" style={S.input}/>
           <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
             <button onClick={()=>setShowPad(true)} style={{...S.btn(sigImg?"green":"blue")}}>
               {sigImg?"✅ חתימה קיימת — עדכן":"✍️ חתום"}
@@ -1986,8 +2133,20 @@ tr:nth-child(even){background:#f5f5f5}
           <button onClick={saveInspection} disabled={!sigImg||!inspectorName.trim()}
             style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:15,
               opacity:sigImg&&inspectorName.trim()?1:0.4}}>
-            💾 שמור דוח בחינה
+            💾 שמור בחינה
           </button>
+        </div>
+      )}
+
+      {savedReport&&(
+        <div style={{...S.card,background:"rgba(63,185,80,0.08)",borderColor:"var(--accent-green)",marginTop:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontWeight:700,color:"var(--accent-green)"}}>✅ נשמרה בחינה — {savedReport.items.length} אמצעים</div>
+              <div style={{fontSize:12,color:"var(--text-secondary)"}}>{savedReport.date} {savedReport.time} | {savedReport.inspector}</div>
+            </div>
+            <button onClick={()=>downloadReport(savedReport,null)} style={{...S.btn("purple"),fontSize:12}}>📄 הורד דוח</button>
+          </div>
         </div>
       )}
 
@@ -2302,7 +2461,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off13 = fbOn("db/actLog", (log)=>{
       setDb(prev=>({...prev, actLog: log||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); };
+    const off14 = fbOn("db/inspections", (data)=>{
+      setDb(prev=>({...prev, inspections: data||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
