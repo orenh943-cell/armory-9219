@@ -80,13 +80,32 @@ function fbDelete(path){ return rtdb.ref(path).remove(); }
   --text-muted:  #8c959f;
   --btn-gray-bg: #e1e8ef;
   --btn-blue-bg: #dbeafe;
+  --btn-green-bg: #dcfce7;
+  --btn-red-bg:  #fee2e2;
+  --btn-orange-bg: #ffedd5;
+  --btn-purple-bg: #f3e8ff;
   --accent-blue: #0969da;
   --accent-green: #1a7f37;
   --accent-red: #d1242f;
   --accent-orange: #9a6700;
   --accent-purple: #8250df;
-  --shadow: 0 4px 16px rgba(0,0,0,.1);
-  --shadow-lg: 0 24px 60px rgba(0,0,0,.2);
+  --accent-wa: #075e54;
+  --shadow: 0 4px 16px rgba(0,0,0,.08);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.15);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 18px;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+  --tap-target: 44px;
+  --sidebar-width: 200px;
+  --transition: .15s ease;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
 }
 /* ===== RESET & BASE ===== */
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -267,7 +286,7 @@ function restoreFromFirebase(obj, refObj){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -489,7 +508,7 @@ function SerialPicker({itemName, value, onChange, db}){
           </div>
           {filtered.map(serial=>(
             <div key={serial} onClick={()=>select(serial)}
-              style={{padding:"8px 12px",cursor:"pointer",fontSize:13,fontFamily:"monospace",borderBottom:"1px solid #161b22"}}
+              style={{padding:"8px 12px",cursor:"pointer",fontSize:13,fontFamily:"monospace",borderBottom:"1px solid var(--border-subtle)"}}
               onMouseEnter={e=>e.currentTarget.style.background="#1f3a5f"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               {serial}
@@ -828,7 +847,7 @@ function DailyModal({db,onClose,type,auth}){
 
   // סגנון טבלה
   const TH = {padding:"5px 6px",border:"1px solid #1a1a2e",background:"#1a1a2e",color:"#fff",textAlign:"right",fontSize:11};
-  const TD = (ok) => ({padding:"4px 6px",border:"1px solid #ccc",textAlign:"right",fontSize:11,
+  const TD = (ok) => ({padding:"4px 6px",border:"1px solid var(--border)",textAlign:"right",fontSize:11,
     background: ok===false?"#fff0f0":ok===true?"#f0fff0":"#fff"});
   const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
 
@@ -1107,7 +1126,7 @@ function SignatureDocument({soldier, db, onClose}){
         {/* כותרת */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,borderBottom:"2px solid #000",paddingBottom:6}}>
           <div style={{textAlign:"right"}}>
-            <div style={{fontSize:9,color:"#555"}}>מספר טופס</div>
+            <div style={{fontSize:9,color:"var(--text-secondary)"}}>מספר טופס</div>
             <div style={{fontWeight:"bold"}}>1008</div>
           </div>
           <div style={{textAlign:"center",flex:1}}>
@@ -1115,7 +1134,7 @@ function SignatureDocument({soldier, db, onClose}){
             <div style={{fontSize:11}}>גדוד 9219</div>
           </div>
           <div style={{textAlign:"left"}}>
-            <div style={{fontSize:9,color:"#555"}}>פלוגה</div>
+            <div style={{fontSize:9,color:"var(--text-secondary)"}}>פלוגה</div>
             <div style={{fontWeight:"bold"}}>{soldier.unit}</div>
           </div>
         </div>
@@ -1136,7 +1155,7 @@ function SignatureDocument({soldier, db, onClose}){
               </thead>
               <tbody>
                 {items.length===0
-                  ? <tr><td colSpan={4} style={{border:"1px solid #000",padding:"4px",textAlign:"center",color:"#888"}}>אין אמצעים</td></tr>
+                  ? <tr><td colSpan={4} style={{border:"1px solid #000",padding:"4px",textAlign:"center",color:"var(--text-muted)"}}>אין אמצעים</td></tr>
                   : items.map(([name,serial],i)=>(
                     <tr key={i} style={{background:i%2===0?"#fff":"#f9f9f9"}}>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{NAME_TO_MAKAT[name]||"—"}</td>
@@ -1166,11 +1185,11 @@ function SignatureDocument({soldier, db, onClose}){
               <div style={{fontWeight:"bold",fontSize:10,borderBottom:"1px solid #ccc",marginBottom:4,paddingBottom:2}}>פרטי חייל</div>
               <table style={{width:"100%",fontSize:10}}>
                 <tbody>
-                  <tr><td style={{color:"#555",width:55}}>מספר אישי</td><td style={{fontWeight:"bold"}}>{soldier.id}</td></tr>
-                  <tr><td style={{color:"#555"}}>שם מלא</td><td style={{fontWeight:"bold"}}>{soldier.name}</td></tr>
-                  <tr><td style={{color:"#555"}}>טלפון</td><td>{soldier.phone||"—"}</td></tr>
-                  <tr><td style={{color:"#555"}}>פלוגה</td><td>{soldier.unit}</td></tr>
-                  <tr><td style={{color:"#555"}}>תאריך</td><td>{sig?.signedAt||today}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)",width:55}}>מספר אישי</td><td style={{fontWeight:"bold"}}>{soldier.id}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>שם מלא</td><td style={{fontWeight:"bold"}}>{soldier.name}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>טלפון</td><td>{soldier.phone||"—"}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>פלוגה</td><td>{soldier.unit}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>תאריך</td><td>{sig?.signedAt||today}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1179,10 +1198,10 @@ function SignatureDocument({soldier, db, onClose}){
               <div style={{fontWeight:"bold",fontSize:10,borderBottom:"1px solid #ccc",marginBottom:4,paddingBottom:2}}>פרטי מנפק</div>
               <table style={{width:"100%",fontSize:10}}>
                 <tbody>
-                  <tr><td style={{color:"#555",width:55}}>מספר אישי</td><td style={{fontWeight:"bold"}}>7680832</td></tr>
-                  <tr><td style={{color:"#555"}}>שם מלא</td><td>אורן חלפון</td></tr>
-                  <tr><td style={{color:"#555"}}>טלפון</td><td>054-9488244</td></tr>
-                  <tr><td style={{color:"#555"}}>תאריך</td><td>{today}</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)",width:55}}>מספר אישי</td><td style={{fontWeight:"bold"}}>7680832</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>שם מלא</td><td>אורן חלפון</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>טלפון</td><td>054-9488244</td></tr>
+                  <tr><td style={{color:"var(--text-secondary)"}}>תאריך</td><td>{today}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1195,9 +1214,9 @@ function SignatureDocument({soldier, db, onClose}){
             <div style={{fontSize:10,fontWeight:"bold",marginBottom:4}}>חתימת חייל</div>
             {sig
               ? <img src={sig.sigData} style={{height:50,maxWidth:"100%"}} alt="חתימה"/>
-              : <div style={{height:50,display:"flex",alignItems:"center",justifyContent:"center",color:"#aaa",fontSize:10}}>טרם חתם</div>
+              : <div style={{height:50,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text-muted)",fontSize:10}}>טרם חתם</div>
             }
-            <div style={{fontSize:9,color:"#555",marginTop:2}}>{sig?.signedAt||""}</div>
+            <div style={{fontSize:9,color:"var(--text-secondary)",marginTop:2}}>{sig?.signedAt||""}</div>
           </div>
           <div style={{flex:1,border:"1px solid #000",padding:"6px 8px",minHeight:70}}>
             <div style={{fontSize:10,fontWeight:"bold",marginBottom:4}}>חתימת מנפק</div>
@@ -1682,7 +1701,7 @@ function GroupSignModal({db, soldiers, onClose}){
                 const sel=selectedIds.includes(s.id);
                 const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                 return (
-                  <label key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid #161b22",background:sel?"#1a2f4a":"transparent"}}>
+                  <label key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",background:sel?"var(--btn-blue-bg)":"transparent"}}>
                     <input type="checkbox" checked={sel} onChange={()=>toggleSoldier(s.id)} style={{width:16,height:16}}/>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:600}}>{s.name} <span style={{color:"var(--text-muted)",fontSize:11}}>({s.id})</span></div>
@@ -1743,6 +1762,16 @@ function GroupSignModal({db, soldiers, onClose}){
 
 const INITIAL_BROKEN = [{"id": "broken_sheet_0", "soldierId": "5786027", "soldierName": "תום שוורץ", "itemName": "מאג", "serial": "6702100", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_1", "soldierId": "8265093", "soldierName": "יהונתן שוורץ", "itemName": "נגב 7_62", "serial": "49158598", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_2", "soldierId": "8336677", "soldierName": "דן רמצון", "itemName": "נגב 5_56", "serial": "96500279", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_3", "soldierId": "8656206", "soldierName": "רחמים עידן", "itemName": "נגב 7_62", "serial": "49158616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_4", "soldierId": "9166274", "soldierName": "דוד קפלן", "itemName": "נגב 5_56", "serial": "97500947", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_5", "soldierId": "8359634", "soldierName": "סחר עידן", "itemName": "נגב 5_56", "serial": "97500197", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_6", "soldierId": "8807573", "soldierName": "סער מחול", "itemName": "נגב 5_56", "serial": "96500309", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_7", "soldierId": "8736682", "soldierName": "דוראל מושזאדה", "itemName": "נגב 5_56", "serial": "31500254", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_8", "soldierId": "7561457", "soldierName": "נוי קרידי", "itemName": "אקילה X4", "serial": "1085662", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_9", "soldierId": "8825435", "soldierName": "עיליי אביטן", "itemName": "M4", "serial": "922284", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_10", "soldierId": "8278738", "soldierName": "פנש מאירי", "itemName": "אקילה X4", "serial": "97020173", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_11", "soldierId": "8427230", "soldierName": "מיכאל ברנדס", "itemName": "עכבר", "serial": "7052697", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_12", "soldierId": "8508192", "soldierName": "מתן אביטבול", "itemName": "M16", "serial": "5071674", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_13", "soldierId": "7068405", "soldierName": "חורב שלו", "itemName": "M4", "serial": "926637", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_14", "soldierId": "8412746", "soldierName": "גל גלבוע", "itemName": "אקילה X4", "serial": "98062959", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_15", "soldierId": "8651541", "soldierName": "מזרחי עמית", "itemName": "קלע סער", "serial": "4042616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_16", "soldierId": "6178836", "soldierName": "חי נחמני", "itemName": "M16", "serial": "5169571", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_17", "soldierId": "8751717", "soldierName": "ירדן אזולאי", "itemName": "M4", "serial": "932644", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_18", "soldierId": "8693817", "soldierName": "נדב שוסברג", "itemName": "עמית", "serial": "10120765", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}];
 
+// =================== משפחות פריטים לבחינה ===================
+// רשימת משפחות ברירת מחדל — Admin יכול לשנות
+const DEFAULT_INSPECTION_FAMILIES = [
+  "M4","M16","קלע סער","מאג","נגב 5.56","נגב 7.62","מטולון M320",
+  'מק"כ 0.5',"HTR 338","מקלרון","M-24 חדש","אקילה X4","אקילה X6",
+  "NYX","עידו","עמית","ערמון","מיקרון","פליר T75","עכבר","ליאור",
+  "מכבית","שח″ע","שח″ע ממותג","שח″מ כחולה","שח'מ ירוקה","וילון",
+  "רחפן איבו","אבטה","צגון"
+];
+
 // =================== INSPECTION TAB (בחינות נשק) ===================
 function InspectionTab({db, setDb, soldiers, auth}){
   const [view, setView] = React.useState("dashboard"); // dashboard | inspect
@@ -1754,6 +1783,15 @@ function InspectionTab({db, setDb, soldiers, auth}){
   const [sigImg, setSigImg] = React.useState(null);
   const [savedReport, setSavedReport] = React.useState(null);
   const [filterWep, setFilterWep] = React.useState("הכל");
+
+  // משפחות פריטים לבחינה (מ-DB או ברירת מחדל)
+  const inspectionFamilies = React.useMemo(()=>
+    db.inspectionFamilies || DEFAULT_INSPECTION_FAMILIES
+  ,[db.inspectionFamilies]);
+
+  const [showFamilyMgr, setShowFamilyMgr] = React.useState(false);
+  const [showAddSerial, setShowAddSerial] = React.useState(null); // {wepName, soldierId, soldierName}
+  const [newSerialVal, setNewSerialVal] = React.useState("");
 
   // כל החיילים
   const allSoldiers = React.useMemo(()=>
@@ -1780,6 +1818,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
     allSoldiers.forEach(s=>{
       const assigned = db.assignments?.[s.id]??s.assigned??{};
       Object.entries(assigned).forEach(([wepName,val])=>{
+        if(!inspectionFamilies.includes(wepName)) return; // רק משפחות שנדרשת בהן בחינה
         if(!map[wepName]) map[wepName]={total:0,inspected:0,soldiers:[]};
         map[wepName].total++;
         const key = s.id+"|"+wepName;
@@ -1805,6 +1844,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
     allSoldiers.forEach(s=>{
       const assigned=db.assignments?.[s.id]??s.assigned??{};
       Object.entries(assigned).forEach(([wepName,val])=>{
+        if(!inspectionFamilies.includes(wepName)) return;
         if(filterWep!=="הכל" && wepName!==filterWep) return;
         const serial=val&&val!==1?String(val):"";
         if(s.name.toLowerCase().includes(ql)||s.id.includes(q)||
@@ -1963,9 +2003,12 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div>
           <h2 style={{margin:0,fontSize:20,fontWeight:800}}>🔍 בחינות נשק</h2>
-          <div style={{fontSize:13,color:"var(--text-secondary)",marginTop:2}}>סטטוס בחינות בזמן אמת</div>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginTop:2}}>
+            סטטוס בחינות בזמן אמת • <span style={{color:"var(--accent-blue)"}}>{inspectionFamilies.length} משפחות פריטים</span>
+          </div>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {auth.role==="admin"&&<button onClick={()=>setShowFamilyMgr(true)} style={{...S.btn("gray"),fontSize:12}}>⚙️ משפחות</button>}
           <button onClick={()=>downloadReport(null,null)} style={{...S.btn("purple"),fontSize:13}}>📄 דוח מלא</button>
           <button onClick={()=>setView("inspect")} style={{...S.btn("green"),fontSize:13}}>🔍 התחל בחינה</button>
         </div>
@@ -2036,6 +2079,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
                         <button onClick={()=>selectWepAll(st.name)} style={{...S.btn("blue"),padding:"4px 8px",fontSize:11}}>בחן הכל</button>
                       )}
                       <button onClick={()=>downloadReport(null,st.name)} style={{...S.btn("gray"),padding:"4px 8px",fontSize:11}}>📄</button>
+                      <button onClick={()=>setShowAddSerial({wepName:st.name})} style={{...S.btn("blue"),padding:"4px 8px",fontSize:11}} title="הוסף סידורי">➕</button>
                     </div>
                   </td>
                 </tr>
@@ -2069,6 +2113,82 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+
+      {/* מנהל משפחות */}
+      {showFamilyMgr&&(
+        <Modal title="⚙️ משפחות פריטים לבחינה" onClose={()=>setShowFamilyMgr(false)} wide>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:12}}>
+            בחר את סוגי האמצעים שנדרשת להם בחינה. רק הם יופיעו בדשבורד ובחיפוש.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:400,overflowY:"auto",marginBottom:12}}>
+            {[...new Set(ALL_SERIALS.map(s=>s.name))].sort().map(name=>{
+              const active = inspectionFamilies.includes(name);
+              return (
+                <div key={name} onClick={()=>{
+                  const cur = db.inspectionFamilies || DEFAULT_INSPECTION_FAMILIES;
+                  const updated = active ? cur.filter(x=>x!==name) : [...cur, name];
+                  const ndb={...db, inspectionFamilies: updated};
+                  setDb(ndb);
+                  fbSet("db/inspectionFamilies", updated).catch(e=>console.warn(e));
+                }} style={{
+                  display:"flex",alignItems:"center",gap:8,padding:"7px 10px",
+                  borderRadius:6,cursor:"pointer",
+                  border:`1px solid ${active?"var(--accent-blue)":"var(--border)"}`,
+                  background:active?"var(--btn-blue-bg)":"var(--bg-base)"
+                }}>
+                  <div style={{width:14,height:14,borderRadius:3,background:active?"var(--accent-blue)":"var(--bg-elevated)",flexShrink:0}}/>
+                  <span style={{fontSize:12,color:active?"var(--accent-blue)":"var(--text-secondary)"}}>{name}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{
+              const ndb={...db,inspectionFamilies:DEFAULT_INSPECTION_FAMILIES};
+              setDb(ndb); fbSet("db/inspectionFamilies",DEFAULT_INSPECTION_FAMILIES).catch(()=>{});
+            }} style={{...S.btn("gray"),fontSize:12}}>↩️ איפוס לברירת מחדל</button>
+            <button onClick={()=>setShowFamilyMgr(false)} style={{...S.btn("blue"),fontSize:12,flex:1}}>✅ שמור וסגור</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* הוספת סידורי לפריט */}
+      {showAddSerial&&(
+        <Modal title={`➕ הוסף סידורי — ${showAddSerial.wepName}`} onClose={()=>{setShowAddSerial(null);setNewSerialVal("");}}>
+          <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:12}}>
+            הסידורי יתווסף למערכת ויופיע בחיפוש הבחינה ובשיוך נשק.
+          </div>
+          <label style={S.label}>מספר סידורי</label>
+          <input value={newSerialVal} onChange={e=>setNewSerialVal(e.target.value)}
+            placeholder="הכנס מספר סידורי..." style={S.input} inputMode="numeric" autoFocus/>
+          {newSerialVal.trim()&&ALL_SERIALS.find(s=>s.name===showAddSerial.wepName&&String(s.serial)===newSerialVal.trim())&&(
+            <div style={{color:"var(--accent-orange)",fontSize:12,marginBottom:8}}>⚠️ סידורי זה כבר קיים במערכת</div>
+          )}
+          <button onClick={()=>{
+            const serial = newSerialVal.trim();
+            if(!serial) return;
+            // Add to ALL_SERIALS (runtime)
+            const existing = ALL_SERIALS.find(s=>s.name===showAddSerial.wepName&&String(s.serial)===serial);
+            if(!existing){
+              ALL_SERIALS.push({name:showAddSerial.wepName, serial:parseInt(serial)||serial, unit:"פנוי", assignedToSoldier:false, broken:false});
+            }
+            // Also save to db.unitItems so it persists
+            const itemKey = "manual_"+showAddSerial.wepName.replace(/\s/g,"_")+"_"+serial;
+            const ndb={...db, unitItems:{...(db.unitItems||{}), [itemKey]:{name:showAddSerial.wepName, serial, unit:"פנוי", addedAt:todayStr()+" "+nowStr(), note:"הוסף ידנית מבחינות"}}};
+            setDb(ndb);
+            fbSet("db/unitItems/"+itemKey, ndb.unitItems[itemKey]).catch(e=>console.warn(e));
+            logAction("הוספת_סידורי", `נוסף סידורי ${serial} ל${showAddSerial.wepName}`, auth?.name||"מערכת");
+            setNewSerialVal("");
+            setShowAddSerial(null);
+            alert("✅ סידורי "+serial+" נוסף ל"+showAddSerial.wepName);
+          }} disabled={!newSerialVal.trim()}
+            style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:newSerialVal.trim()?1:0.4}}>
+            ✅ הוסף סידורי
+          </button>
+        </Modal>
       )}
     </div>
   );
@@ -2335,7 +2455,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
               <div style={{background:"var(--bg-base)",border:"1px solid #388bfd",borderRadius:8,marginTop:-8,marginBottom:8}}>
                 {soldierSuggestions.map(s=>(
                   <div key={s.id} onClick={()=>{setF("soldierSearch",s.name);setF("soldierId",s.id);setSoldierSuggestions([]);}}
-                    style={{padding:"8px 12px",cursor:"pointer",fontSize:13,borderBottom:"1px solid #161b22"}}
+                    style={{padding:"8px 12px",cursor:"pointer",fontSize:13,borderBottom:"1px solid var(--border-subtle)"}}
                     onMouseEnter={e=>e.currentTarget.style.background="#1f3a5f"}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     {s.name} <span style={{color:"var(--text-secondary)"}}>{s.id} • פלוגה {s.unit}</span>
@@ -2485,7 +2605,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off14 = fbOn("db/inspections", (data)=>{
       setDb(prev=>({...prev, inspections: data||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); };
+    const off15 = fbOn("db/inspectionFamilies", (data)=>{
+      if(data) setDb(prev=>({...prev, inspectionFamilies: data}));
+      setDb(prev=>({...prev, inspections: data||{}}));
+    });
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); off15(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
