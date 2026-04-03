@@ -1730,6 +1730,274 @@ function GroupSignModal({db, soldiers, onClose}){
 
 const INITIAL_BROKEN = [{"id": "broken_sheet_0", "soldierId": "5786027", "soldierName": "תום שוורץ", "itemName": "מאג", "serial": "6702100", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_1", "soldierId": "8265093", "soldierName": "יהונתן שוורץ", "itemName": "נגב 7_62", "serial": "49158598", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_2", "soldierId": "8336677", "soldierName": "דן רמצון", "itemName": "נגב 5_56", "serial": "96500279", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_3", "soldierId": "8656206", "soldierName": "רחמים עידן", "itemName": "נגב 7_62", "serial": "49158616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_4", "soldierId": "9166274", "soldierName": "דוד קפלן", "itemName": "נגב 5_56", "serial": "97500947", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_5", "soldierId": "8359634", "soldierName": "סחר עידן", "itemName": "נגב 5_56", "serial": "97500197", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_6", "soldierId": "8807573", "soldierName": "סער מחול", "itemName": "נגב 5_56", "serial": "96500309", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_7", "soldierId": "8736682", "soldierName": "דוראל מושזאדה", "itemName": "נגב 5_56", "serial": "31500254", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_8", "soldierId": "7561457", "soldierName": "נוי קרידי", "itemName": "אקילה X4", "serial": "1085662", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_9", "soldierId": "8825435", "soldierName": "עיליי אביטן", "itemName": "M4", "serial": "922284", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_10", "soldierId": "8278738", "soldierName": "פנש מאירי", "itemName": "אקילה X4", "serial": "97020173", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_11", "soldierId": "8427230", "soldierName": "מיכאל ברנדס", "itemName": "עכבר", "serial": "7052697", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_12", "soldierId": "8508192", "soldierName": "מתן אביטבול", "itemName": "M16", "serial": "5071674", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_13", "soldierId": "7068405", "soldierName": "חורב שלו", "itemName": "M4", "serial": "926637", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_14", "soldierId": "8412746", "soldierName": "גל גלבוע", "itemName": "אקילה X4", "serial": "98062959", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_15", "soldierId": "8651541", "soldierName": "מזרחי עמית", "itemName": "קלע סער", "serial": "4042616", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_16", "soldierId": "6178836", "soldierName": "חי נחמני", "itemName": "M16", "serial": "5169571", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_17", "soldierId": "8751717", "soldierName": "ירדן אזולאי", "itemName": "M4", "serial": "932644", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}, {"id": "broken_sheet_18", "soldierId": "8693817", "soldierName": "נדב שוסברג", "itemName": "עמית", "serial": "10120765", "note": "מסומן כתקול בגיליון", "severity": "בינוני", "reportedAt": "16.03.2025", "reportedBy": "אורן חלפון", "status": "פתוח"}];
 
+// =================== INSPECTION TAB (בחינות נשק) ===================
+function InspectionTab({db, setDb, soldiers, auth}){
+  const [search, setSearch]   = React.useState("");
+  const [results, setResults] = React.useState([]); // [{s, wepName, serial, assigned}]
+  const [selected, setSelected] = React.useState(new Set()); // set of "soldierId|wepName"
+  const [inspectorName, setInspectorName] = React.useState(auth?.name||"");
+  const [showPad, setShowPad] = React.useState(false);
+  const [sigImg, setSigImg]   = React.useState(null);
+  const [done, setDone]       = React.useState(false);
+  const [savedReport, setSavedReport] = React.useState(null);
+
+  // כל החיילים כולל ידניים
+  const allSoldiers = React.useMemo(()=>
+    [...soldiers,...Object.values(db.customSoldiers||{})].filter(s=>s.name)
+  ,[soldiers, db.customSoldiers]);
+
+  // חיפוש לפי שם / מ.א / סידורי / שם נשק
+  React.useEffect(()=>{
+    const q = search.trim();
+    if(!q){ setResults([]); return; }
+    const ql = q.toLowerCase();
+    const res = [];
+    allSoldiers.forEach(s=>{
+      const assigned = db.assignments?.[s.id]??s.assigned??{};
+      Object.entries(assigned).forEach(([wepName, val])=>{
+        const serial = val&&val!==1 ? String(val) : "";
+        const match =
+          s.name.toLowerCase().includes(ql) ||
+          s.id.includes(q) ||
+          wepName.toLowerCase().includes(ql) ||
+          serial.includes(q);
+        if(match) res.push({s, wepName, serial, key:`${s.id}|${wepName}`});
+      });
+    });
+    setResults(res.slice(0,80));
+  },[search, allSoldiers, db.assignments]);
+
+  function toggle(key){
+    const s=new Set(selected);
+    s.has(key)?s.delete(key):s.add(key);
+    setSelected(s);
+  }
+  function toggleAll(){
+    if(selected.size===results.length) setSelected(new Set());
+    else setSelected(new Set(results.map(r=>r.key)));
+  }
+
+  function doSign(sig){
+    setSigImg(sig);
+    setShowPad(false);
+  }
+
+  function saveInspection(){
+    if(!selected.size){ alert("יש לסמן לפחות אמצעי אחד"); return; }
+    if(!inspectorName.trim()){ alert("יש להזין שם בוחן"); return; }
+    if(!sigImg){ alert("חסרה חתימת בוחן"); return; }
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
+    const timeStr = now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+    const ts = Date.now();
+
+    const inspectedItems = results.filter(r=>selected.has(r.key)).map(r=>({
+      soldierId: r.s.id,
+      soldierName: r.s.name,
+      unit: r.s.unit||"—",
+      squad: r.s.squad||"—",
+      wepName: r.wepName,
+      serial: r.serial||"—",
+    }));
+
+    const report = {
+      id: "insp_"+ts,
+      inspector: inspectorName.trim(),
+      sig: sigImg,
+      date: dateStr,
+      time: timeStr,
+      ts,
+      items: inspectedItems,
+      searchQuery: search,
+    };
+
+    // שמור ב-Firebase
+    const newInspections = {...(db.inspections||{}), [report.id]: report};
+    const ndb = {...db, inspections: newInspections};
+    setDb(ndb);
+    fbSet("db/inspections/"+report.id, report).catch(e=>console.warn(e));
+
+    // לוג תנועות
+    logAction("בחינת_נשק",
+      `${inspectorName} בחן ${inspectedItems.length} אמצעים: ${inspectedItems.map(i=>i.wepName+(i.serial!=="—"?" ("+i.serial+")":"")).join(", ")}`,
+      inspectorName
+    );
+
+    setSavedReport(report);
+    setDone(true);
+  }
+
+  // ——— הורדת דוח ———
+  function downloadReport(report){
+    const rows = report.items.map((item,i)=>`
+      <tr>
+        <td style="text-align:center">${i+1}</td>
+        <td>${item.soldierName}</td>
+        <td style="font-family:monospace">${item.soldierId}</td>
+        <td>${item.unit}</td>
+        <td>${item.squad}</td>
+        <td style="font-weight:bold">${item.wepName}</td>
+        <td style="font-family:monospace">${item.serial}</td>
+        <td style="text-align:center;color:green">✓</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>דוח בחינת נשק — ${report.date}</title>
+<style>
+body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px}
+h2{text-align:center;font-size:16px;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:16px}
+.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.meta-box{border:1px solid #ccc;padding:8px 12px;border-radius:4px}
+.meta-lbl{font-size:10px;color:#666;margin-bottom:2px}
+.meta-val{font-weight:bold;font-size:13px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+th{background:#1a1a2e;color:#fff;padding:7px 10px;text-align:right;font-size:11px}
+td{padding:6px 10px;border:1px solid #ccc;font-size:11px}
+tr:nth-child(even){background:#f5f5f5}
+.sig-section{display:flex;align-items:center;gap:20px;border-top:2px solid #000;padding-top:16px;margin-top:8px}
+.sig-box{text-align:center}
+.sig-lbl{font-size:10px;color:#666;margin-top:4px}
+@media print{button{display:none}}
+</style></head><body>
+<h2>דוח בחינת נשק — גדוד 9219</h2>
+<div class="meta">
+  <div class="meta-box"><div class="meta-lbl">בוחן</div><div class="meta-val">${report.inspector}</div></div>
+  <div class="meta-box"><div class="meta-lbl">תאריך</div><div class="meta-val">${report.date}</div></div>
+  <div class="meta-box"><div class="meta-lbl">שעה</div><div class="meta-val">${report.time}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th style="width:30px">מס"ד</th><th>שם חייל</th><th>מ.א</th>
+    <th>פלוגה</th><th>מחלקה</th><th>אמצעי</th><th>סידורי</th><th style="width:40px">נבחן</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div style="font-size:12px;color:#666;margin-bottom:16px">סה"כ: ${report.items.length} אמצעים נבחנו</div>
+<div class="sig-section">
+  <div class="sig-box">
+    ${report.sig?`<img src="${report.sig}" style="height:55px;border:1px solid #ccc"/>`:""}
+    <div class="sig-lbl">חתימת הבוחן — ${report.inspector}</div>
+  </div>
+  <div style="flex:1;text-align:left;font-size:11px;color:#999">הופק: ${report.date} ${report.time}</div>
+</div>
+<button onclick="window.print()" style="margin-top:14px;padding:9px 24px;font-size:13px;cursor:pointer">🖨️ הדפס / PDF</button>
+</body></html>`;
+
+    const w = window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+  }
+
+  // ——— מסך סיום ———
+  if(done && savedReport) return (
+    <div style={{padding:16,maxWidth:700,margin:"0 auto"}}>
+      <div style={{textAlign:"center",padding:24}}>
+        <div style={{fontSize:56,marginBottom:12}}>✅</div>
+        <div style={{fontWeight:800,fontSize:18,marginBottom:8}}>הבחינה נשמרה!</div>
+        <div style={{color:"var(--text-secondary)",fontSize:14,marginBottom:20}}>
+          {savedReport.items.length} אמצעים נבחנו על ידי {savedReport.inspector}
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+          <button onClick={()=>downloadReport(savedReport)} style={{...S.btn("purple"),padding:"11px 24px",fontSize:14}}>
+            📄 הורד דוח בחינה
+          </button>
+          <button onClick={()=>{setDone(false);setSelected(new Set());setSigImg(null);setSearch("");}} style={{...S.btn("blue"),padding:"11px 24px",fontSize:14}}>
+            🔍 בחינה חדשה
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ——— מסך ראשי ———
+  return (
+    <div style={{padding:16,maxWidth:900,margin:"0 auto"}}>
+      <h2 style={{marginBottom:4,fontSize:20,fontWeight:800}}>🔍 בחינות נשק</h2>
+      <div style={{fontSize:13,color:"var(--text-secondary)",marginBottom:16}}>
+        חפש לפי שם חייל, מ.א, שם אמצעי או מספר סידורי — סמן את מה שנבחן וחתום
+      </div>
+
+      {/* חיפוש */}
+      <input
+        value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="🔍 חפש שם / מ.א / שם נשק / סידורי..."
+        style={{...S.input,fontSize:15,padding:"11px 14px"}}
+        autoFocus
+      />
+
+      {/* תוצאות */}
+      {results.length>0&&(
+        <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",marginBottom:14}}>
+          {/* header */}
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"var(--bg-elevated)",borderBottom:"1px solid var(--border)"}}>
+            <input type="checkbox"
+              checked={selected.size===results.length&&results.length>0}
+              onChange={toggleAll} style={{cursor:"pointer",width:16,height:16}}/>
+            <span style={{fontSize:12,fontWeight:700,flex:1}}>{results.length} תוצאות — בחר הכל</span>
+            <span style={{fontSize:12,color:"var(--accent-blue)",fontWeight:700}}>{selected.size} נסמנו</span>
+          </div>
+          <div style={{maxHeight:380,overflowY:"auto"}}>
+            {results.map(r=>(
+              <div key={r.key} onClick={()=>toggle(r.key)} style={{
+                display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                cursor:"pointer",borderBottom:"1px solid var(--border-subtle)",
+                background:selected.has(r.key)?"var(--btn-blue-bg)":"var(--bg-surface)",
+              }}>
+                <input type="checkbox" checked={selected.has(r.key)}
+                  onChange={()=>toggle(r.key)} onClick={e=>e.stopPropagation()}
+                  style={{cursor:"pointer",width:16,height:16}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{r.s.name}
+                    <span style={{color:"var(--text-muted)",fontSize:11,marginRight:6}}>({r.s.id})</span>
+                    <span style={{color:"var(--text-muted)",fontSize:11}}>פלוגה {r.s.unit||"—"}</span>
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text-secondary)",marginTop:2}}>
+                    <span style={{fontWeight:600,color:"var(--accent-blue)"}}>{r.wepName}</span>
+                    {r.serial&&r.serial!=="—"&&<span style={{fontFamily:"monospace",marginRight:8,color:"var(--text-muted)"}}> {r.serial}</span>}
+                  </div>
+                </div>
+                {selected.has(r.key)&&<span style={{color:"var(--accent-green)",fontWeight:700,fontSize:14}}>✓</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {search&&results.length===0&&(
+        <div style={{textAlign:"center",padding:32,color:"var(--text-muted)"}}>אין תוצאות לחיפוש זה</div>
+      )}
+
+      {/* פרטי בוחן + חתימה */}
+      {selected.size>0&&(
+        <div style={{...S.card,marginBottom:0}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>
+            ✍️ חתימת בוחן — {selected.size} אמצעים נסמנו
+          </div>
+          <label style={S.label}>שם הבוחן</label>
+          <input value={inspectorName} onChange={e=>setInspectorName(e.target.value)}
+            placeholder="שם מלא של הבוחן" style={S.input}/>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+            <button onClick={()=>setShowPad(true)} style={{...S.btn(sigImg?"green":"blue")}}>
+              {sigImg?"✅ חתימה קיימת — עדכן":"✍️ חתום"}
+            </button>
+            {sigImg&&<img src={sigImg} style={{height:36,border:"1px solid var(--border)",borderRadius:4}}/>}
+          </div>
+          <button onClick={saveInspection} disabled={!sigImg||!inspectorName.trim()}
+            style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:15,
+              opacity:sigImg&&inspectorName.trim()?1:0.4}}>
+            💾 שמור דוח בחינה
+          </button>
+        </div>
+      )}
+
+      {showPad&&<Modal title="חתימת בוחן" onClose={()=>setShowPad(false)}>
+        <SignaturePad onSave={doSign}/>
+      </Modal>}
+    </div>
+  );
+}
+
 function BrokenEquipmentTab({db, setDb, soldiers, auth}){
   const [items, setItems] = useState(()=>(db.brokenItems||[]));
   const [showForm, setShowForm] = useState(false);
@@ -1763,10 +2031,24 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
     setShowForm(false);
   }
 
+  const [closeModalId, setCloseModalId] = React.useState(null);
+  const [closeNote, setCloseNote] = React.useState("");
+
   function closeItem(id){
-    const updated=items.map(i=>i.id===id?{...i,status:"סגור",closedAt:todayStr()}:i);
+    const item = items.find(i=>i.id===id);
+    setCloseModalId(id);
+    setCloseNote("");
+  }
+
+  function confirmClose(){
+    const id = closeModalId;
+    const item = items.find(i=>i.id===id);
+    const updated=items.map(i=>i.id===id?{...i,status:"סגור",closedAt:todayStr()+" "+nowStr(),closeNote}:i);
     const ndb={...db,brokenItems:updated};
     saveDB(ndb); setDb(ndb); setItems(updated);
+    logAction("סגירת_תקול", `נסגר אמצעי תקול: ${item?.itemName}${item?.serial?" ("+item.serial+")":""} — ${item?.soldierName||"—"}${closeNote?" | הערה: "+closeNote:""}`, auth.name);
+    setCloseModalId(null);
+    setCloseNote("");
   }
 
   function deleteItem(id){
@@ -1830,6 +2112,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
                   <div style={{fontSize:11,color:"var(--text-muted)"}}>
                     דווח ע"י {item.reportedBy} • {item.reportedAt}
                     {item.closedAt&&<span> • נסגר: {item.closedAt}</span>}
+                    {item.closeNote&&<div style={{fontSize:12,color:"var(--accent-green)",marginTop:3}}>💬 {item.closeNote}</div>}
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -1842,6 +2125,26 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
         </div>
       }
 
+      {closeModalId&&(
+        <Modal title="סגירת תקול" onClose={()=>setCloseModalId(null)}>
+          <div style={{padding:"4px 0"}}>
+            <div style={{fontWeight:700,marginBottom:12,fontSize:15}}>
+              {items.find(i=>i.id===closeModalId)?.itemName} — {items.find(i=>i.id===closeModalId)?.soldierName||"—"}
+            </div>
+            <label style={S.label}>הערת סגירה (אופציונלי)</label>
+            <textarea
+              value={closeNote} onChange={e=>setCloseNote(e.target.value)}
+              placeholder="מה תוקן? על ידי מי? פרטים נוספים..."
+              style={{...S.input,minHeight:80,resize:"vertical"}}
+              autoFocus
+            />
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={confirmClose} style={{...S.btn("green"),flex:1,padding:"10px 0"}}>✅ סגור תקול</button>
+              <button onClick={()=>setCloseModalId(null)} style={{...S.btn("gray"),flex:1,padding:"10px 0"}}>ביטול</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {showForm&&(
         <Modal title="דיווח אמצעי תקול" onClose={()=>setShowForm(false)} wide>
           <div style={{position:"relative",marginBottom:8}}>
@@ -2069,6 +2372,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewSoldiers!==false?[{id:"soldiers",label:"חיילים",icon:"🪖"}]:[]),
     ...(perms.canViewSignatures!==false?[{id:"signatures",label:"חתימות",icon:"✍️",badge:unsigned}]:[]),
     ...(perms.canViewSignatures!==false?[{id:"signed",label:"חתומים",icon:"✅"}]:[]),
+    ...(perms.canViewSignatures!==false?[{id:"inspection",label:"בחינות נשק",icon:"🔍"}]:[]),
     ...(perms.canViewBroken!==false?[{id:"broken",label:"תקולים",icon:"🔧"}]:[]),
     {id:"daily",label:"יומי",icon:"📋"},
     ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
@@ -2361,6 +2665,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
 
         {tab==="broken"&&(
           <BrokenEquipmentTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+        )}
+        {tab==="inspection"&&(
+          <InspectionTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="loginlog"&&auth.role==="admin"&&(
           <LoginLogTab db={db}/>
