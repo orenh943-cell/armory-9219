@@ -2114,6 +2114,8 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           ))}
         </div>
       )}
+    </div>
+    </div>
 {/* מנהל משפחות */}
       {showFamilyMgr&&(
         <Modal title="⚙️ משפחות פריטים לבחינה" onClose={()=>setShowFamilyMgr(false)} wide>
@@ -2188,6 +2190,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
         </Modal>
       )}
     </div>
+  </div>
   );
 
   // ——— INSPECTION VIEW ———
@@ -3008,6 +3011,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
+  </div>
     </div>
   );
 }
@@ -3611,6 +3615,8 @@ function InventoryTab({db, setDb, soldiers, auth}){
         </div>
       )}
     </div>
+  </div>
+  </div>
   );
 }
 
@@ -4820,6 +4826,7 @@ function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms, onSen
         </Modal>
       )}
     </div>
+  </div>
   );
 }
 
@@ -6241,7 +6248,7 @@ function PermissionsTab({db, setDb}){
               <label style={S.label}>דרגה (תופיע בטפסים)</label>
               <select value={newUser.rank||""} onChange={e=>setNewUser({...newUser,rank:e.target.value})} style={S.input}>
                 <option value="">— ללא דרגה —</option>
-                {["רב-אלוף","אלוף","תת-אלוף","אל"מ","סא"ל","רס"ן","סרן","רב-סרן","סגן","רב-סמל","סמל ראשון","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
+                {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-סמל","סמל ראשון","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
