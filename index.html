@@ -3008,7 +3008,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
-  </div>
     </div>
   );
 }
@@ -3612,7 +3611,6 @@ function InventoryTab({db, setDb, soldiers, auth}){
         </div>
       )}
     </div>
-  </div>
   </div>
   );
 }
@@ -4823,7 +4821,6 @@ function SoldierExitFormView({soldier, db, onSave, auth, soldierExitForms, onSen
         </Modal>
       )}
     </div>
-  </div>
   );
 }
 
