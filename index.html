@@ -2116,7 +2116,6 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           ))}
         </div>
       )}
-      </div>
 {/* מנהל משפחות */}
       {showFamilyMgr&&(
         <Modal title="⚙️ משפחות פריטים לבחינה" onClose={()=>setShowFamilyMgr(false)} wide>
@@ -2144,6 +2143,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
                 </div>
               );
             })}
+          </div>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>{
