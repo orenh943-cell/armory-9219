@@ -2040,6 +2040,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
         </div>
         <div style={{fontSize:11,color:"var(--text-muted)",marginTop:6}}>{totalPct}% מכלל האמצעים נבחנו</div>
       </div>
+      </div>
 
       {/* טבלת אמצעים */}
       <div style={{...S.card,padding:0,overflow:"hidden"}}>
@@ -2088,6 +2089,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           </table>
         </div>
       </div>
+      </div>
 
       {/* בחינות אחרונות */}
       {allInspections.length>0&&(
@@ -2114,7 +2116,6 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           ))}
         </div>
       )}
-      </div>
       </div>
 {/* מנהל משפחות */}
       {showFamilyMgr&&(
@@ -2190,7 +2191,6 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
         </Modal>
       )}
     </div>
-  </div>
   );
 
   // ——— INSPECTION VIEW ———
