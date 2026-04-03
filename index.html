@@ -537,7 +537,7 @@ function SignaturePad({onSave}){
     e.preventDefault();if(!drawing.current)return;
     const c=canvasRef.current,ctx=c.getContext("2d"),p=pos(e,c);
     ctx.beginPath();ctx.moveTo(last.current.x,last.current.y);ctx.lineTo(p.x,p.y);
-    ctx.strokeStyle="#3fb950";ctx.lineWidth=2.5;ctx.lineCap="round";ctx.stroke();
+    ctx.strokeStyle="var(--accent-green)";ctx.lineWidth=2.5;ctx.lineCap="round";ctx.stroke();
     last.current=p;setHasStrokes(true);
   }
   function end(e){e.preventDefault();drawing.current=false;}
@@ -644,7 +644,7 @@ function Login({onLogin}){
         <label style={S.label}>מספר אישי (סיסמה)</label>
         <input value={pass} onChange={e=>{setPass(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&go()}
           placeholder="מספר אישי" style={S.input} inputMode="numeric" type="password"/>
-        {err&&<p style={{color:"#f85149",fontSize:13,textAlign:"center",marginBottom:10}}>{err}</p>}
+        {err&&<p style={{color:"var(--accent-red)",fontSize:13,textAlign:"center",marginBottom:10}}>{err}</p>}
         <button onClick={go} style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:16}}>
           {loading?"⏳ כניסה...":"כניסה"}
         </button>
@@ -676,7 +676,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   if(!soldier){
     // חייל מותאם אישית — צור אובייקט זמני
     const customSoldier = Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
-    if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#f85149",flexDirection:"column",gap:10}}><div style={{fontSize:40}}>⚠️</div><div>חייל לא נמצא במערכת</div><div style={{fontSize:12,color:"var(--text-secondary)"}}>מ.א: {auth.soldierId}</div></div>;
+    if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--accent-red)",flexDirection:"column",gap:10}}><div style={{fontSize:40}}>⚠️</div><div>חייל לא נמצא במערכת</div><div style={{fontSize:12,color:"var(--text-secondary)"}}>מ.א: {auth.soldierId}</div></div>;
   }
   const soldierData = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId) || {id:auth.soldierId,name:auth.name,unit:"—",phone:"—"};
   const items=Object.entries(assigned);
@@ -712,14 +712,14 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       <div style={{maxWidth:520,margin:"0 auto",padding:"20px 14px"}}>
         {step==="review"&&(
           <div style={{...S.card,border:"1px solid var(--accent-blue)"}}>
-            <div style={{color:"#388bfd",fontWeight:700,fontSize:14,marginBottom:12}}>📋 טופס החתמה אישי</div>
+            <div style={{color:"var(--accent-blue)",fontWeight:700,fontSize:14,marginBottom:12}}>📋 טופס החתמה אישי</div>
             <div style={{background:"var(--bg-base)",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--text-secondary)"}}>
               שם: <strong style={{color:"var(--text-primary)"}}>{soldierData.name}</strong> • מ.א: <strong style={{color:"var(--text-primary)"}}>{soldierData.id}</strong> • פלוגה: <strong style={{color:"var(--text-primary)"}}>{soldierData.unit}</strong>
             </div>
             {items.length===0
               ?<div style={{textAlign:"center",padding:20}}>
               <div style={{fontSize:40,marginBottom:8}}>⚠️</div>
-              <p style={{color:"#e3b341",fontWeight:700,fontSize:15,marginBottom:6}}>אין אמצעים משויכים</p>
+              <p style={{color:"var(--accent-orange)",fontWeight:700,fontSize:15,marginBottom:6}}>אין אמצעים משויכים</p>
               <p style={{color:"var(--text-secondary)",fontSize:13}}>פנה למנפק לשיוך אמצעים לפני החתימה</p>
             </div>
               :<table style={{width:"100%",borderCollapse:"collapse",marginBottom:16}}>
@@ -731,7 +731,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                     <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--text-muted)",fontSize:10,fontWeight:"normal"}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--text-secondary)",fontSize:12}}>{isSerial(val)?val:"—"}</td><td style={{...S.td,textAlign:"center"}}>1</td></tr>
                   ))}
                   {accessories.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,color:"#388bfd"}}>{name}<br/><span style={{color:"var(--text-muted)",fontSize:10}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--text-secondary)",fontSize:12}}>{isSerial(val)?val:"—"}</td><td style={{...S.td,textAlign:"center"}}>1</td></tr>
+                    <tr key={name}><td style={{...S.td,color:"var(--accent-blue)"}}>{name}<br/><span style={{color:"var(--text-muted)",fontSize:10}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--text-secondary)",fontSize:12}}>{isSerial(val)?val:"—"}</td><td style={{...S.td,textAlign:"center"}}>1</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -742,16 +742,16 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         {step==="sign"&&(
           <div>
             <div style={{...S.card,border:"1px solid var(--accent-orange)",marginBottom:12}}>
-              <div style={{color:"#e3b341",fontWeight:700,marginBottom:8}}>✍️ חתימה על {items.length} אמצעים</div>
+              <div style={{color:"var(--accent-orange)",fontWeight:700,marginBottom:8}}>✍️ חתימה על {items.length} אמצעים</div>
               <p style={{color:"var(--text-secondary)",fontSize:13,marginBottom:14}}>בחתימתך אתה מאשר קבלת האמצעים המפורטים</p>
               <SignaturePad onSave={doSign}/>
             </div>
             <div style={{background:"var(--bg-surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
-              <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:"#e3b341"}}>📸 העלה צילום מסך מבחן (אופציונלי)</div>
+              <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:"var(--accent-orange)"}}>📸 העלה צילום מסך מבחן (אופציונלי)</div>
               {testImg
                 ?<div style={{position:"relative",display:"inline-block"}}>
                   <img src={testImg} style={{maxHeight:80,borderRadius:6,border:"1px solid var(--border)"}} alt="מבחן"/>
-                  <button onClick={()=>setTestImg(null)} style={{position:"absolute",top:-6,right:-6,background:"#f85149",border:"none",borderRadius:"50%",width:18,height:18,color:"#fff",cursor:"pointer",fontSize:11}}>×</button>
+                  <button onClick={()=>setTestImg(null)} style={{position:"absolute",top:-6,right:-6,background:"var(--accent-red)",border:"none",borderRadius:"50%",width:18,height:18,color:"#fff",cursor:"pointer",fontSize:11}}>×</button>
                 </div>
                 :<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",color:"var(--text-secondary)",fontSize:13}}>
                   <span style={{...S.btn(),padding:"6px 12px",fontSize:12}}>📎 בחר קובץ</span>
@@ -769,7 +769,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         {step==="done"&&(
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:60,marginBottom:12}}>✅</div>
-            <h2 style={{color:"#3fb950",fontSize:20,fontWeight:800,marginBottom:6}}>החתימה התקבלה!</h2>
+            <h2 style={{color:"var(--accent-green)",fontSize:20,fontWeight:800,marginBottom:6}}>החתימה התקבלה!</h2>
             <p style={{color:"var(--text-secondary)",fontSize:13,marginBottom:16}}>נשמר במערכת • {db.signatures?.[auth.soldierId]?.signedAt}</p>
             <button onClick={()=>{
               const rows=items.map(([name,val])=>`<tr><td style="padding:6px 8px;border:1px solid #ccc;font-weight:${WEAPON_KEYS.includes(name)?"bold":"normal"}">${name}</td><td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${isSerial(val)?val:"—"}</td></tr>`).join("");
@@ -784,13 +784,13 @@ function SoldierSignView({auth,onLogout,db,setDb}){
               ⬇️ הורד עותק
             </button>
             <div style={{...S.card,textAlign:"right",border:"1px solid #238636"}}>
-              <div style={{fontWeight:700,fontSize:14,marginBottom:10,color:"#3fb950"}}>📄 העתק שלך</div>
+              <div style={{fontWeight:700,fontSize:14,marginBottom:10,color:"var(--accent-green)"}}>📄 העתק שלך</div>
               <div style={{color:"var(--text-secondary)",fontSize:12,marginBottom:10}}>{soldierData.name} • {soldierData.id} • {todayStr()}</div>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:12}}>
                 <tbody>
                   {items.map(([name,val])=>(
                     <tr key={name}>
-                      <td style={{padding:"4px 0",fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>{name}</td>
+                      <td style={{padding:"4px 0",fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>{name}</td>
                       <td style={{padding:"4px 0",color:"var(--text-secondary)",fontFamily:"monospace",textAlign:"left"}}>{isSerial(val)?val:"—"}</td>
                     </tr>
                   ))}
@@ -846,7 +846,7 @@ function DailyModal({db,onClose,type,auth}){
   const allCalc = [...leftCalc,...rightCalc];
 
   // סגנון טבלה
-  const TH = {padding:"5px 6px",border:"1px solid #1a1a2e",background:"#1a1a2e",color:"#fff",textAlign:"right",fontSize:11};
+  const TH = {padding:"5px 6px",border:"1px solid var(--border)",background:"var(--bg-base)",color:"#fff",textAlign:"right",fontSize:11};
   const TD = (ok) => ({padding:"4px 6px",border:"1px solid var(--border)",textAlign:"right",fontSize:11,
     background: ok===false?"#fff0f0":ok===true?"#f0fff0":"#fff"});
   const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
@@ -1111,7 +1111,7 @@ function SignatureDocument({soldier, db, onClose}){
   function printDoc(){window.print();}
 
   return (
-    <div style={{position:"fixed",inset:0,background:"#fff",zIndex:2000,overflowY:"auto",direction:"rtl",fontFamily:"Arial, sans-serif",color:"#000"}}>
+    <div style={{position:"fixed",inset:0,background:"var(--bg-surface)",zIndex:2000,overflowY:"auto",direction:"rtl",fontFamily:"Arial, sans-serif",color:"#000"}}>
 
       {/* כפתורי פעולה — לא מודפסים */}
       <div className="no-print" style={{background:"var(--bg-surface)",padding:"10px 16px",display:"flex",gap:10,alignItems:"center",position:"sticky",top:0,zIndex:10}}>
@@ -1146,7 +1146,7 @@ function SignatureDocument({soldier, db, onClose}){
           <div style={{flex:2}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
               <thead>
-                <tr style={{background:"#f0f0f0"}}>
+                <tr style={{background:"var(--bg-elevated)"}}>
                   <th style={{border:"1px solid #000",padding:"3px 6px",textAlign:"right"}}>מק"ט</th>
                   <th style={{border:"1px solid #000",padding:"3px 6px",textAlign:"right"}}>תיאור פריט</th>
                   <th style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",width:80}}>סידורי</th>
@@ -1157,7 +1157,7 @@ function SignatureDocument({soldier, db, onClose}){
                 {items.length===0
                   ? <tr><td colSpan={4} style={{border:"1px solid #000",padding:"4px",textAlign:"center",color:"var(--text-muted)"}}>אין אמצעים</td></tr>
                   : items.map(([name,serial],i)=>(
-                    <tr key={i} style={{background:i%2===0?"#fff":"#f9f9f9"}}>
+                    <tr key={i} style={{background:i%2===0?"#fff":"var(--bg-surface)"}}>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{NAME_TO_MAKAT[name]||"—"}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontWeight:WEAPON_KEYS.includes(name)?"bold":"normal"}}>{name}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{isSerial(serial)?serial:"—"}</td>
@@ -1281,7 +1281,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     <Modal title={`${soldier.name} • ${soldier.id}`} onClose={onClose} wide>
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"],["exitform","🏠 יציאה"]].map(([v,l])=>(
-          <button key={v} onClick={()=>setView(v)} style={{flex:1,minWidth:70,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"#388bfd":"#30363d",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"#388bfd":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:12}}>{l}</button>
+          <button key={v} onClick={()=>setView(v)} style={{flex:1,minWidth:70,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"var(--accent-blue)":"var(--border)",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"var(--accent-blue)":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:12}}>{l}</button>
         ))}
       </div>
       {view==="profile"&&(
@@ -1345,7 +1345,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           {myGuarantees.length>0&&(
             <div style={{background:"var(--bg-elevated)",border:"1px solid #3d2a6e",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#c084fc"}}>🛡️ ערבות מרוכזת</div>
+                <div style={{fontWeight:700,fontSize:13,color:"var(--accent-purple)"}}>🛡️ ערבות מרוכזת</div>
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={()=>{
                     const allSols=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
@@ -1389,7 +1389,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                           const sName=s?s.name:id;
                           return (
                             <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #1a1a2e"}}>
-                              <span style={{fontSize:12,color:"#e3b341"}}>⚠️ {sName}</span>
+                              <span style={{fontSize:12,color:"var(--accent-orange)"}}>⚠️ {sName}</span>
                               <button onClick={()=>{
                                 const gKey2=Object.keys(db.bulkGuarantors||{}).find(k=>{
                                   const gg=db.bulkGuarantors[k];
@@ -1408,7 +1408,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                         })}
                       </div>
                     )}
-                    {remIds.length===0&&<div style={{color:"#3fb950",fontSize:12}}>✅ כולם חתמו! הערבות הושלמה</div>}
+                    {remIds.length===0&&<div style={{color:"var(--accent-green)",fontSize:12}}>✅ כולם חתמו! הערבות הושלמה</div>}
                   </div>
                 );
               })}
@@ -1418,7 +1418,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
               {Object.entries(assigned).map(([name,val])=>(
                 <div key={name} style={{display:"flex",justifyContent:"space-between",background:"var(--bg-base)",borderRadius:7,padding:"7px 12px"}}>
-                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>{name}</span><span style={{color:"var(--text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div><span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{isSerial(val)?val:"—"}</span>
+                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>{name}</span><span style={{color:"var(--text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div><span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{isSerial(val)?val:"—"}</span>
                 </div>
               ))}
             </div>
@@ -1448,9 +1448,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             ?<p style={{color:"var(--text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
               {Object.entries(assigned).map(([name,val])=>(
-                <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"#1a2f4a":"#0d1117",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"#388bfd":"#21262d"}`}}>
+                <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"#1a2f4a":"#0d1117",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"var(--accent-blue)":"var(--border-subtle)"}`}}>
                   <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
-                  <div style={{flex:1}}><span style={{fontSize:13,fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>{name}</span><span style={{color:"var(--text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div>{isSerial(val)&&<span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{val}</span>}
+                  <div style={{flex:1}}><span style={{fontSize:13,fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>{name}</span><span style={{color:"var(--text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div>{isSerial(val)&&<span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{val}</span>}
                 </label>
               ))}
               <button onClick={doReturn} disabled={!retSel.length} style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>🔄 בטל שיוך ({retSel.length})</button>
@@ -1493,7 +1493,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
     <Modal title="משיכה / החזרה" onClose={onClose} wide>
       <div style={{display:"flex",gap:8,marginBottom:16}}>
         {[["checkout","➕ משיכה"],["return","➖ החזרה"]].map(([t,l])=>(
-          <button key={t} onClick={()=>setType(t)} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1.5px solid",borderColor:type===t?"#388bfd":"#30363d",background:type===t?"#1f3a5f":"#0d1117",color:type===t?"#388bfd":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:14}}>{l}</button>
+          <button key={t} onClick={()=>setType(t)} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1.5px solid",borderColor:type===t?"var(--accent-blue)":"var(--border)",background:type===t?"#1f3a5f":"#0d1117",color:type===t?"var(--accent-blue)":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:14}}>{l}</button>
         ))}
       </div>
       <input value={search} onChange={e=>{setSearch(e.target.value);setSid("");}} placeholder="🔍 חיפוש שם / מספר אישי..." style={S.input}/>
@@ -1528,9 +1528,9 @@ function QuickModal({soldiers,db,onSave,onClose}){
           {Object.keys(assigned).length===0?<p style={{color:"var(--text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>:
           <>
             {Object.entries(assigned).map(([name,val])=>(
-              <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"#1a2f4a":"#0d1117",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"#388bfd":"#21262d"}`}}>
+              <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"#1a2f4a":"#0d1117",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"var(--accent-blue)":"var(--border-subtle)"}`}}>
                 <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
-                <span style={{flex:1,fontSize:13,fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>{name}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>{name}</span>
                 {isSerial(val)&&<span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{val}</span>}
               </label>
             ))}
@@ -1613,7 +1613,7 @@ function AddSoldierModal({db, onSave, onClose}){
         <button onClick={()=>setItems(p=>[...p,{name:"",serial:""}])} style={{...S.btn(),fontSize:12,marginBottom:4}}>+ הוסף אמצעי</button>
       </div>
 
-      {err&&<p style={{color:"#f85149",fontSize:13,marginBottom:10}}>⚠️ {err}</p>}
+      {err&&<p style={{color:"var(--accent-red)",fontSize:13,marginBottom:10}}>⚠️ {err}</p>}
 
       <div style={{display:"flex",gap:10,marginTop:12}}>
         <button onClick={save} style={{...S.btn("green"),flex:2,padding:"11px 0",fontSize:15}}>✅ הוסף חייל</button>
@@ -1716,7 +1716,7 @@ function GroupSignModal({db, soldiers, onClose}){
 
           {selectedIds.length>0&&(
             <div style={{...S.card,border:"1px solid #388bfd",marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:"#388bfd"}}>📋 סיכום שובר ({selectedIds.length} חיילים, {allEquipment.length} אמצעים)</div>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:"var(--accent-blue)"}}>📋 סיכום שובר ({selectedIds.length} חיילים, {allEquipment.length} אמצעים)</div>
               <div style={{maxHeight:150,overflowY:"auto",fontSize:12}}>
                 {selected.map(s=>(
                   <div key={s.id} style={{marginBottom:6}}>
@@ -1749,7 +1749,7 @@ function GroupSignModal({db, soldiers, onClose}){
       ):(
         <div style={{textAlign:"center",padding:20}}>
           <div style={{fontSize:60,marginBottom:12}}>✅</div>
-          <h3 style={{color:"#3fb950",fontSize:18,fontWeight:800,marginBottom:8}}>השובר נחתם!</h3>
+          <h3 style={{color:"var(--accent-green)",fontSize:18,fontWeight:800,marginBottom:8}}>השובר נחתם!</h3>
           <p style={{color:"var(--text-secondary)",marginBottom:4}}>{selectedIds.length} חיילים חתמו במרוכז</p>
           <p style={{color:"var(--text-muted)",fontSize:12}}>{groupName||"שובר מרוכז"} • {todayStr()}</p>
           <button onClick={onClose} style={{...S.btn("green"),marginTop:16,padding:"10px 30px"}}>סגור</button>
@@ -1938,7 +1938,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
         <td style="text-align:center;color:#e67e22">${s.total-s.inspected}</td>
         <td style="text-align:center">
           <div style="background:#ddd;border-radius:4px;height:12px;width:100px;display:inline-block;overflow:hidden">
-            <div style="background:${s.pct===100?"green":"#388bfd"};height:100%;width:${s.pct}%"></div>
+            <div style="background:${s.pct===100?"green":"var(--accent-blue)"};height:100%;width:${s.pct}%"></div>
           </div>
           <span style="margin-right:6px;font-weight:bold">${s.pct}%</span>
         </td>
@@ -2017,10 +2017,10 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
       {/* כרטיסי סיכום */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}}>
         {[
-          {label:"סה\"כ אמצעים",val:totalAll,color:"#388bfd"},
-          {label:"נבחנו",val:totalInspected,color:"#3fb950"},
-          {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"#f85149":"#3fb950"},
-          {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"#3fb950":totalPct>=50?"#388bfd":"#e3b341"},
+          {label:"סה\"כ אמצעים",val:totalAll,color:"var(--accent-blue)"},
+          {label:"נבחנו",val:totalInspected,color:"var(--accent-green)"},
+          {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"var(--accent-red)":"var(--accent-green)"},
+          {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"var(--accent-green)":totalPct>=50?"var(--accent-blue)":"var(--accent-orange)"},
         ].map(c=>(
           <div key={c.label} style={{...S.card,textAlign:"center",padding:"16px 8px",marginBottom:0}}>
             <div style={{fontSize:32,fontWeight:800,color:c.color,lineHeight:1}}>{c.val}</div>
@@ -2372,7 +2372,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:20,fontWeight:800}}>🔧 אמצעי תקול</h2>
-          {openCount>0&&<div style={{color:"#f85149",fontSize:13,marginTop:2}}>{openCount} תקלות פתוחות</div>}
+          {openCount>0&&<div style={{color:"var(--accent-red)",fontSize:13,marginTop:2}}>{openCount} תקלות פתוחות</div>}
         </div>
         <button onClick={()=>setShowForm(true)} style={{...S.btn("orange")}}>+ דווח תקלה</button>
       </div>
@@ -2381,8 +2381,8 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
         {["הכל","פתוח","סגור"].map(s=>(
           <button key={s} onClick={()=>setFilterSev(s)}
             style={{padding:"6px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:600,
-              borderColor:filterSev===s?"#e3b341":"#30363d",background:filterSev===s?"#3d2a1a":"#0d1117",
-              color:filterSev===s?"#e3b341":"#8b949e"}}>{s}</button>
+              borderColor:filterSev===s?"var(--accent-orange)":"var(--border)",background:filterSev===s?"#3d2a1a":"#0d1117",
+              color:filterSev===s?"var(--accent-orange)":"#8b949e"}}>{s}</button>
         ))}
       </div>
 
@@ -2393,7 +2393,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
         </div>
         :<div style={{display:"flex",flexDirection:"column",gap:8}}>
           {shown.map(item=>(
-            <div key={item.id} style={{...S.card,marginBottom:0,border:`1px solid ${item.status==="סגור"?"#21262d":item.severity==="חמור"?"#6e2020":item.severity==="בינוני"?"#5a3e1b":"#1f3a5f"}`}}>
+            <div key={item.id} style={{...S.card,marginBottom:0,border:`1px solid ${item.status==="סגור"?"var(--border-subtle)":item.severity==="חמור"?"#6e2020":item.severity==="בינוני"?"#5a3e1b":"#1f3a5f"}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
                 <div style={{flex:1,minWidth:200}}>
                   <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
@@ -2479,9 +2479,9 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
             {["קל","בינוני","חמור"].map(sev=>(
               <button key={sev} onClick={()=>setF("severity",sev)}
                 style={{flex:1,padding:"8px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontWeight:600,fontSize:13,
-                  borderColor:form.severity===sev?"#388bfd":"#30363d",
+                  borderColor:form.severity===sev?"var(--accent-blue)":"var(--border)",
                   background:form.severity===sev?"#1f3a5f":"#0d1117",
-                  color:form.severity===sev?"#388bfd":"#8b949e"}}>{sev}</button>
+                  color:form.severity===sev?"var(--accent-blue)":"#8b949e"}}>{sev}</button>
             ))}
           </div>
           <label style={S.label}>תיאור התקלה</label>
@@ -2693,14 +2693,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         <div style={{padding:"16px",borderBottom:"1px solid var(--border-subtle)"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}><img src="data:image/png;base64,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" style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/><div style={{fontWeight:800,fontSize:15}}>ארמון 9219</div></div>
           <div style={{color:"var(--text-secondary)",fontSize:11,marginTop:3}}>{auth.name}</div>
-          {auth.role==="viewer"&&<div style={{fontSize:10,color:"#e3b341",marginTop:2}}>👁️ צפייה בלבד</div>}
+          {auth.role==="viewer"&&<div style={{fontSize:10,color:"var(--accent-orange)",marginTop:2}}>👁️ צפייה בלבד</div>}
         </div>
         <nav style={{flex:1,padding:"8px 0",overflowY:"auto",overflowX:"hidden"}}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>{setTab(t.id);setMobileMenu(false);}}
               style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 16px",background:tab===t.id?"var(--btn-blue-bg)":"none",border:"none",color:tab===t.id?"var(--accent-blue)":"var(--text-secondary)",cursor:"pointer",fontSize:13,fontWeight:600,borderRight:tab===t.id?"3px solid #388bfd":"3px solid transparent",textAlign:"right"}}>
               {t.icon} {t.label}
-              {t.badge>0&&<span style={{background:"#f85149",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10,marginRight:"auto"}}>{t.badge}</span>}
+              {t.badge>0&&<span style={{background:"var(--accent-red)",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10,marginRight:"auto"}}>{t.badge}</span>}
             </button>
           ))}
         </nav>
@@ -2745,11 +2745,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             <h2 style={{marginBottom:18,fontSize:20,fontWeight:800}}>לוח בקרה</h2>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:18}}>
               {[
-                {label:"חיילים",val:soldiers.length,color:"#a371f7",k:"all"},
-                {label:"עם נשק",val:withWeapons,color:"#388bfd",k:"withWeapon"},
-                {label:"חתמו",val:signedCount,color:"#3fb950",k:"signed"},
-                {label:"טרם חתמו",val:unsigned,color:unsigned>0?"#f85149":"#3fb950",k:"unsigned"},
-                {label:"טופס יציאה",val:exitFormsCount,color:"#e3b341",k:"exitform"}
+                {label:"חיילים",val:soldiers.length,color:"var(--accent-purple)",k:"all"},
+                {label:"עם נשק",val:withWeapons,color:"var(--accent-blue)",k:"withWeapon"},
+                {label:"חתמו",val:signedCount,color:"var(--accent-green)",k:"signed"},
+                {label:"טרם חתמו",val:unsigned,color:unsigned>0?"var(--accent-red)":"var(--accent-green)",k:"unsigned"},
+                {label:"טופס יציאה",val:exitFormsCount,color:"var(--accent-orange)",k:"exitform"}
               ].map(s=>(
                 <div key={s.label} onClick={()=>setDashModal(s.k)} style={{...S.card,textAlign:"center",padding:"18px 8px",marginBottom:0,cursor:"pointer",transition:"border .15s",border:"1px solid var(--border)"}}
                   onMouseEnter={e=>e.currentTarget.style.border="1px solid "+s.color}
@@ -2766,7 +2766,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <span style={{fontSize:20}}>⚠️</span>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:700,color:"#f85149"}}>{unsigned} חיילים עם נשק טרם חתמו</div>
+                    <div style={{fontWeight:700,color:"var(--accent-red)"}}>{unsigned} חיילים עם נשק טרם חתמו</div>
                     <div style={{color:"var(--text-secondary)",fontSize:12}}>שלח לינק חתימה בוואטסאפ</div>
                   </div>
                   <button onClick={()=>setTab("signatures")} style={{...S.btn("red"),fontSize:12,padding:"6px 12px"}}>ניהול</button>
@@ -2860,7 +2860,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     <div style={{flex:1,minWidth:150}}>
                       <div style={{fontWeight:700,fontSize:14}}>{s.name} <span style={{color:"var(--text-secondary)",fontSize:11}}>({s.id})</span></div>
                       <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:1}}>פלוגה {s.unit} • {weps.map(([k])=>nameWithMakat(k)).join(" | ")}</div>
-                      {sig&&<div style={{color:"#3fb950",fontSize:11,marginTop:2}}>✅ חתם ב-{sig.signedAt}</div>}
+                      {sig&&<div style={{color:"var(--accent-green)",fontSize:11,marginTop:2}}>✅ חתם ב-{sig.signedAt}</div>}
                     </div>
                     {sig&&<img src={sig.sigData} style={{height:30,borderRadius:4,border:"1px solid var(--border)"}} alt="חתימה"/>}
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -2947,7 +2947,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
                           <td style={{...S.td,fontSize:12,color:"var(--text-secondary)"}}>{weps.map(([k])=>k).join(", ")||"—"}</td>
-                          <td style={{...S.td,fontSize:11,color:"#3fb950"}}>{sig?.signedAt||"—"}</td>
+                          <td style={{...S.td,fontSize:11,color:"var(--accent-green)"}}>{sig?.signedAt||"—"}</td>
                           <td style={S.td}>{sig&&<img src={sig.sigData} style={{height:28,borderRadius:4,border:"1px solid var(--border)"}} alt="חתימה"/>}</td>
                           <td style={S.td}>
                             <div style={{display:"flex",gap:4}}>
@@ -3052,9 +3052,9 @@ function ViewerApp({auth, onLogout, db}){
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
           {[
-            {l:'סה"כ בסינון',v:filtered.length,c:"#388bfd"},
-            {l:"חתומים",v:signed,c:"#3fb950"},
-            {l:"ממתינים",v:withWeapon-signed,c:"#e3b341"},
+            {l:'סה"כ בסינון',v:filtered.length,c:"var(--accent-blue)"},
+            {l:"חתומים",v:signed,c:"var(--accent-green)"},
+            {l:"ממתינים",v:withWeapon-signed,c:"var(--accent-orange)"},
           ].map(s=>(
             <div key={s.label} style={{background:"var(--bg-surface)",border:"1px solid var(--border)",borderRadius:8,padding:"12px 8px",textAlign:"center"}}>
               <div style={{fontSize:26,fontWeight:800,color:s.color}}>{s.val}</div>
@@ -3091,7 +3091,7 @@ function ViewerApp({auth, onLogout, db}){
                       <td style={S.td}>
                         {sig?<Badge color="green" small>✅ חתום</Badge>:weps.length>0?<Badge color="orange" small>⏳ ממתין</Badge>:<Badge color="gray" small>אין נשק</Badge>}
                       </td>
-                      <td style={{...S.td,fontSize:11,color:"#3fb950"}}>{sig?.signedAt||"—"}</td>
+                      <td style={{...S.td,fontSize:11,color:"var(--accent-green)"}}>{sig?.signedAt||"—"}</td>
                     </tr>
                   );
                 })}
@@ -3296,9 +3296,9 @@ function AssignToSoldierPanel({item, itemId, soldiers, db, onAssign, onClose}){
 // =================== INVENTORY TAB (מלאי גדודי/פלוגתי) ===================
 const UNIT_LIST = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי","נעורה","חטיבה 6","פנוי"];
 const UNIT_COLORS = {
-  "א":"#388bfd","ב":"#a371f7","ג":"#3fb950","מסייעת":"#e3b341",
-  "אגמ":"#f85149","פלסמ":"#58a6ff","גדודי":"#ff9500","נעורה":"#8b949e",
-  "חטיבה 6":"#ff6b6b","פנוי":"#3fb950"
+  "א":"var(--accent-blue)","ב":"var(--accent-purple)","ג":"var(--accent-green)","מסייעת":"var(--accent-orange)",
+  "אגמ":"var(--accent-red)","פלסמ":"#58a6ff","גדודי":"#ff9500","נעורה":"#8b949e",
+  "חטיבה 6":"#ff6b6b","פנוי":"var(--accent-green)"
 };
 
 function InventoryTab({db, setDb, soldiers, auth}){
@@ -3433,10 +3433,10 @@ function InventoryTab({db, setDb, soldiers, auth}){
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["הכל",...UNIT_LIST].map(u=>{
             const count = u==="הכל"?items.length:(stats[u]||0);
-            const color = UNIT_COLORS[u]||"#388bfd";
+            const color = UNIT_COLORS[u]||"var(--accent-blue)";
             return (
               <button key={u} onClick={()=>setFilterUnit(u)}
-                style={{padding:"4px 10px",borderRadius:7,border:`1px solid ${filterUnit===u?color:"#30363d"}`,
+                style={{padding:"4px 10px",borderRadius:7,border:`1px solid ${filterUnit===u?color:"var(--border)"}`,
                   background:filterUnit===u?color+"22":"#0d1117",color:filterUnit===u?color:"var(--text-secondary)",
                   cursor:"pointer",fontSize:12,fontWeight:filterUnit===u?700:400}}>
                 {u==="הכל"?"כולם":u==="פנוי"?"פנוי":u} ({count})
@@ -3451,7 +3451,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
         <span style={{fontSize:11,color:"var(--text-secondary)"}}>סוג:</span>
         {[["הכל","הכל",items.length],["soldier","🔵 משויך לחייל",soldierCount],["unit","🟡 מוקצה לפלוגה",unitCount]].map(([val,label,cnt])=>(
           <button key={val} onClick={()=>setFilterType(val)}
-            style={{padding:"3px 9px",borderRadius:6,border:`1px solid ${filterType===val?"#388bfd":"#30363d"}`,
+            style={{padding:"3px 9px",borderRadius:6,border:`1px solid ${filterType===val?"var(--accent-blue)":"var(--border)"}`,
               background:filterType===val?"#1f3a5f":"#0d1117",color:filterType===val?"#e6edf3":"#8b949e",
               cursor:"pointer",fontSize:12}}>
             {label} ({cnt})
@@ -3467,7 +3467,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
       {/* רשימה מקובצת לפי פלוגה */}
       {sortedUnits.map(unit=>{
         const unitItems2 = groupedByUnit[unit];
-        const color = UNIT_COLORS[unit]||"#388bfd";
+        const color = UNIT_COLORS[unit]||"var(--accent-blue)";
         const unitLabel = unit==="גדודי"?"🎖️ גדודי":unit==="נעורה"?"📦 נעורה":unit==="פנוי"?"🟢 פנוי":unit==="חטיבה 6"?"🔺 חטיבה 6":"פלוגה "+unit;
         const allSolsList=[...Object.values(db.customSoldiers||{}),...soldiers];
 
@@ -3500,19 +3500,19 @@ function InventoryTab({db, setDb, soldiers, auth}){
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:10}}>
               {sortedByName.map(([name,info])=>{
                 const isExp = expandedItem2===unit+"_"+name;
-                const borderColor = info.soldiers>0&&info.unitQty===0?"#388bfd":info.unitQty>0&&info.soldiers===0?"#e3b341":"#a371f7";
+                const borderColor = info.soldiers>0&&info.unitQty===0?"var(--accent-blue)":info.unitQty>0&&info.soldiers===0?"var(--accent-orange)":"var(--accent-purple)";
                 return (
                   <div key={name} onClick={()=>setExpandedItem2(isExp?null:unit+"_"+name)}
                     style={{background:isExp?"#1a1f2e":"#0d1117",borderRadius:9,padding:"10px 12px",cursor:"pointer",
-                      border:`1px solid ${isExp?color:"#21262d"}`,
+                      border:`1px solid ${isExp?color:"var(--border-subtle)"}`,
                       borderTop:`3px solid ${borderColor}`,transition:"border .15s"}}>
                     <div style={{fontWeight:800,fontSize:24,color,lineHeight:1}}>{info.total}</div>
                     <div style={{fontWeight:600,fontSize:12,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#58a6ff",
                       marginTop:4,marginBottom:4,lineHeight:1.2}}>{name}</div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {info.soldiers>0&&<span style={{fontSize:10,color:"#388bfd"}}>🔵{info.soldiers}</span>}
-                      {info.unitQty>0&&<span style={{fontSize:10,color:"#e3b341"}}>🟡{info.unitQty}</span>}
-                      {info.broken>0&&<span style={{fontSize:10,color:"#f85149"}}>⚠️{info.broken}</span>}
+                      {info.soldiers>0&&<span style={{fontSize:10,color:"var(--accent-blue)"}}>🔵{info.soldiers}</span>}
+                      {info.unitQty>0&&<span style={{fontSize:10,color:"var(--accent-orange)"}}>🟡{info.unitQty}</span>}
+                      {info.broken>0&&<span style={{fontSize:10,color:"var(--accent-red)"}}>⚠️{info.broken}</span>}
                     </div>
                   </div>
                 );
@@ -3554,15 +3554,15 @@ function InventoryTab({db, setDb, soldiers, auth}){
                       return (
                         <div key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
                           background:"var(--bg-base)",borderRadius:6,
-                          borderRight:`3px solid ${isSoldier?"#388bfd":"#e3b341"}`}}>
+                          borderRight:`3px solid ${isSoldier?"var(--accent-blue)":"var(--accent-orange)"}`}}>
                           <div style={{width:9,height:9,borderRadius:2,flexShrink:0,
-                            background:isSoldier?"#388bfd":"#e3b341"}}/>
+                            background:isSoldier?"var(--accent-blue)":"var(--accent-orange)"}}/>
                           <span style={{flex:1,fontSize:12,color:"var(--text-primary)"}}>
                             {isSoldier?(soldierDisplayName||item.assignedSoldierName||"לא ידוע"):"מוקצה לפלוגה"}
                           {item.bundle&&<span style={{fontSize:9,color:"var(--text-muted)",marginRight:4}}>📎{item.bundle}</span>}
                           </span>
                           {item.serial&&<span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:11}}>{item.serial}</span>}
-                          {item.broken&&<span style={{color:"#f85149",fontSize:10}}>⚠️ תקול</span>}
+                          {item.broken&&<span style={{color:"var(--accent-red)",fontSize:10}}>⚠️ תקול</span>}
                           {auth.role!=="viewer"&&<div style={{display:"flex",gap:3}}>
                             {!isSoldier&&<>
                               <button onClick={e=>{e.stopPropagation();setShowTransfer(showTransfer===id?null:id);setShowAssign(null);}}
@@ -4575,7 +4575,7 @@ function DashDetailModal({type, soldiers, db, onClose}){
               {items.length>0&&(
                 <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                   {items.map(([name,val])=>(
-                    <span key={name} style={{background:"var(--bg-surface)",borderRadius:4,padding:"2px 6px",fontSize:10,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>
+                    <span key={name} style={{background:"var(--bg-surface)",borderRadius:4,padding:"2px 6px",fontSize:10,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>
                       {name}{isSerial(val)?" · "+val:""}
                     </span>
                   ))}
@@ -4664,7 +4664,7 @@ function SearchModal({onClose, soldiers, db}){
                     {items.length>0&&(
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         {items.map(([name,val])=>(
-                          <span key={name} style={{background:"var(--bg-surface)",borderRadius:4,padding:"2px 7px",fontSize:11,color:WEAPON_KEYS.includes(name)?"#e6edf3":"#388bfd"}}>
+                          <span key={name} style={{background:"var(--bg-surface)",borderRadius:4,padding:"2px 7px",fontSize:11,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--accent-blue)"}}>
                             {name}{isSerial(val)?" · "+val:""}
                           </span>
                         ))}
@@ -4682,7 +4682,7 @@ function SearchModal({onClose, soldiers, db}){
                 <div key={i} style={{background:"var(--bg-base)",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid var(--border-subtle)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
                     <div>
-                      <span style={{fontWeight:700,fontSize:14,color:WEAPON_KEYS.includes(r.itemName)?"#e6edf3":"#388bfd"}}>{r.itemName}</span>
+                      <span style={{fontWeight:700,fontSize:14,color:WEAPON_KEYS.includes(r.itemName)?"#e6edf3":"var(--accent-blue)"}}>{r.itemName}</span>
                       <span style={{color:"var(--text-secondary)",fontFamily:"monospace",fontSize:12,marginRight:8}}>· {r.serial}</span>
                     </div>
                     <div style={{display:"flex",gap:4}}>
@@ -6167,7 +6167,7 @@ function PermissionsTab({db, setDb}){
   return (
     <div style={{padding:16,maxWidth:700,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <h2 style={{fontSize:16,color:"#c084fc",margin:0}}>🔑 ניהול משתמשים והרשאות</h2>
+        <h2 style={{fontSize:16,color:"var(--accent-purple)",margin:0}}>🔑 ניהול משתמשים והרשאות</h2>
         <button onClick={()=>setShowAdd(!showAdd)} style={{...S.btn("green"),padding:"7px 14px",fontSize:13}}>
           {showAdd?"✕ ביטול":"＋ הוסף משתמש"}
         </button>
@@ -6181,7 +6181,7 @@ function PermissionsTab({db, setDb}){
       </div>
       {showAdd&&(
         <div style={{background:"var(--bg-surface)",border:"1px solid #238636",borderRadius:10,padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"#3fb950"}}>➕ הוספת משתמש חדש</div>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"var(--accent-green)"}}>➕ הוספת משתמש חדש</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <label style={S.label}>שם משתמש (לכניסה)</label>
@@ -6251,7 +6251,7 @@ function PermissionsTab({db, setDb}){
               </select>
             </div>
           </div>
-          {err&&<div style={{color:"#f85149",fontSize:12,marginBottom:8}}>{err}</div>}
+          {err&&<div style={{color:"var(--accent-red)",fontSize:12,marginBottom:8}}>{err}</div>}
           <button onClick={addUser} style={{...S.btn("green"),width:"100%",padding:"10px 0"}}>שמור משתמש</button>
         </div>
       )}
@@ -6275,7 +6275,7 @@ function PermissionsTab({db, setDb}){
               </div>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:14}}>{u.name}</div>
-                <div style={{fontSize:11,color:"var(--text-secondary)"}}>{ROLE_LABELS[baseRole]||baseRole}{u.roleTitle&&<span style={{marginRight:6,color:"var(--accent-blue)",fontWeight:700}}>· {u.roleTitle}</span>}{u.rank&&<span style={{marginRight:6,color:"var(--accent-orange)",fontSize:10}}>{u.rank}</span>} • {username} {isDynamic&&<span style={{color:"#3fb950",fontSize:10}}>● דינמי</span>}</div>
+                <div style={{fontSize:11,color:"var(--text-secondary)"}}>{ROLE_LABELS[baseRole]||baseRole}{u.roleTitle&&<span style={{marginRight:6,color:"var(--accent-blue)",fontWeight:700}}>· {u.roleTitle}</span>}{u.rank&&<span style={{marginRight:6,color:"var(--accent-orange)",fontSize:10}}>{u.rank}</span>} • {username} {isDynamic&&<span style={{color:"var(--accent-green)",fontSize:10}}>● דינמי</span>}</div>
               </div>
               {isDynamic&&(
                 <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:11}}>מחק</button>
@@ -6292,6 +6292,7 @@ function PermissionsTab({db, setDb}){
                       const newPerms = {...(db.userPerms||{}), [username]: {...preset}};
                       const ndb={...db,userPerms:newPerms};
                       saveDB(ndb); setDb(ndb);
+                      alert("✅ הרשאות "+roleTitle+" נשמרו ל-"+username);
                     }} style={{
                       padding:"3px 10px",borderRadius:6,border:"1px solid var(--border)",
                       cursor:"pointer",fontSize:11,fontWeight:600,
@@ -6303,6 +6304,7 @@ function PermissionsTab({db, setDb}){
                     delete newPerms[username];
                     const ndb={...db,userPerms:newPerms};
                     saveDB(ndb); setDb(ndb);
+                    alert("↩️ הרשאות "+username+" אופסו לברירת מחדל");
                   }} style={{padding:"3px 8px",borderRadius:6,border:"1px solid var(--border)",cursor:"pointer",fontSize:11,color:"var(--accent-red)",background:"transparent"}}>
                     איפוס
                   </button>
@@ -6317,11 +6319,11 @@ function PermissionsTab({db, setDb}){
                         const enabled = merged[perm];
                         return (
                           <div key={perm} onClick={()=>togglePerm(username,perm,isDynamic)}
-                            style={{display:"flex",alignItems:"center",gap:7,background:"var(--bg-base)",borderRadius:6,padding:"6px 9px",cursor:"pointer",border:`1px solid ${enabled?"#238636":"#30363d"}`}}>
-                            <div style={{width:14,height:14,borderRadius:3,background:enabled?"#238636":"#21262d",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,color:"#fff"}}>
+                            style={{display:"flex",alignItems:"center",gap:7,background:"var(--bg-base)",borderRadius:6,padding:"6px 9px",cursor:"pointer",border:`1px solid ${enabled?"#238636":"var(--border)"}`}}>
+                            <div style={{width:14,height:14,borderRadius:3,background:enabled?"var(--accent-green)":"var(--border-subtle)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0,color:"#fff"}}>
                               {enabled?"✓":""}
                             </div>
-                            <span style={{fontSize:11,color:enabled?"#3fb950":"#8b949e"}}>{label}</span>
+                            <span style={{fontSize:11,color:enabled?"var(--accent-green)":"#8b949e"}}>{label}</span>
                           </div>
                         );
                       })}
@@ -6566,7 +6568,7 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
     <Modal title="✍️ החתמה מרוכזת" onClose={onClose} wide>
       {step==="select"&&(
         <div>
-          <div style={{background:"rgba(63,185,80,.08)",border:"1px solid #238636",borderRadius:8,padding:12,marginBottom:16,fontSize:13,color:"#3fb950"}}>
+          <div style={{background:"rgba(63,185,80,.08)",border:"1px solid #238636",borderRadius:8,padding:12,marginBottom:16,fontSize:13,color:"var(--accent-green)"}}>
             🪖 פיצר זה מאפשר לאדם אחד (כגון אביאל דיטור) לחתום על כל ציוד הפלוגה בחתימה אחת
           </div>
 
@@ -6623,14 +6625,14 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
               <SignaturePad onSave={doSign}/>
               <button onClick={()=>setStep("select")} style={{...S.btn(),width:"100%",marginTop:8}}>← חזור</button>
             </div>
-            :<div style={{textAlign:"center"}}><div style={{fontSize:48}}>✅</div><div style={{color:"#3fb950",fontWeight:700}}>נחתם!</div></div>
+            :<div style={{textAlign:"center"}}><div style={{fontSize:48}}>✅</div><div style={{color:"var(--accent-green)",fontWeight:700}}>נחתם!</div></div>
           }
         </div>
       )}
       {step==="done"&&(
         <div style={{textAlign:"center",padding:24}}>
           <div style={{fontSize:60,marginBottom:12}}>✅</div>
-          <h2 style={{color:"#3fb950",marginBottom:8}}>החתימה המרוכזת התקבלה!</h2>
+          <h2 style={{color:"var(--accent-green)",marginBottom:8}}>החתימה המרוכזת התקבלה!</h2>
           <p style={{color:"var(--text-secondary)",fontSize:13,marginBottom:20}}>{targetSoldiers.length} חיילים סומנו כחתומים בשם {repSearch}</p>
           <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
             <button onClick={()=>downloadBulkForm(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("purple"),padding:"10px 20px",fontSize:14}}>⬇️ הורד שובר מרוכז</button>
