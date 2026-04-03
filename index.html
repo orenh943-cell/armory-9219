@@ -2008,6 +2008,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [dailyType,setDailyType]=useState(null);
   const [quickModal,setQuickModal]=useState(false);
   const [bulkModal,setBulkModal]=useState(false);
+  const [bulkSendModal,setBulkSendModal]=useState(false);
   const [mobileMenu,setMobileMenu]=useState(false);
   const [addModal,setAddModal]=useState(false);
 
@@ -2230,7 +2231,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
               <h2 style={{margin:0,fontSize:20,fontWeight:800}}>חתימות</h2>
-              <button onClick={()=>setBulkModal(true)} style={{...S.btn("purple")}}>✍️ החתמה מרוכזת</button>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button onClick={()=>setBulkSendModal(true)} style={{...S.btn("wa")}}>📤 שליחה מרוכזת WA</button>
+                <button onClick={()=>setBulkModal(true)} style={{...S.btn("purple")}}>✍️ החתמה מרוכזת</button>
+              </div>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חיפוש..." style={{...S.input,flex:1,minWidth:160,marginBottom:0}}/>
@@ -2388,6 +2392,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
+      {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
@@ -5631,6 +5636,184 @@ function PermissionsTab({db, setDb}){
 }
 
 // =================== BULK SIGN MODAL (פיצר 2 - דיטור) ===================
+// =================== BULK SEND WA MODAL ===================
+function BulkSendModal({db, soldiers, onClose, sendWhatsApp, sendExitFormWA}){
+  const [mode, setMode] = React.useState("sign"); // sign | exit
+  const [selected, setSelected] = React.useState(new Set());
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [search, setSearch] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const [sentCount, setSentCount] = React.useState(0);
+  const [done, setDone] = React.useState(false);
+  const [noPhone, setNoPhone] = React.useState([]);
+
+  const units = ["הכל",...new Set(soldiers.filter(s=>s.name).map(s=>s.unit))].sort();
+
+  // חיילים רלוונטיים לכל מצב
+  const eligibleSoldiers = React.useMemo(()=>{
+    return soldiers.filter(s=>{
+      if(!s.name || !s.phone) return false;
+      const hasWeapon = Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k));
+      if(mode==="sign") return hasWeapon && !db.signatures?.[s.id];
+      if(mode==="exit"){
+        // חיילים שעוד לא מילאו טופס יציאה
+        const hasFilled = Object.values(db.exitForms||{}).some(f=>f.soldierId===s.id&&f.soldierSig);
+        return hasWeapon && !hasFilled;
+      }
+      return false;
+    });
+  },[soldiers, db, mode]);
+
+  const filtered = eligibleSoldiers.filter(s=>{
+    if(filterUnit!=="הכל" && s.unit!==filterUnit) return false;
+    if(search && !s.name.includes(search) && !s.id.includes(search)) return false;
+    return true;
+  });
+
+  function toggleAll(){
+    if(selected.size===filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map(s=>s.id)));
+  }
+  function toggle(id){
+    const s=new Set(selected);
+    s.has(id)?s.delete(id):s.add(id);
+    setSelected(s);
+  }
+
+  // שינוי מצב — אפס בחירה
+  function changeMode(m){ setMode(m); setSelected(new Set()); setNoPhone([]); }
+
+  async function sendAll(){
+    if(!selected.size){ alert("יש לבחור לפחות חייל אחד"); return; }
+    setSending(true);
+    setSentCount(0);
+    const missing=[];
+    const selectedSoldiers = filtered.filter(s=>selected.has(s.id));
+    for(let i=0;i<selectedSoldiers.length;i++){
+      const s=selectedSoldiers[i];
+      if(!phoneToWA(s.phone)){ missing.push(s.name); continue; }
+      // עיכוב קטן בין שליחות כדי שהדפדפן יפתח כל חלון
+      if(i>0) await new Promise(r=>setTimeout(r,500));
+      if(mode==="sign") sendWhatsApp(s);
+      else sendExitFormWA(s);
+      setSentCount(i+1);
+    }
+    setNoPhone(missing);
+    setSending(false);
+    setDone(true);
+  }
+
+  if(done) return (
+    <Modal title="📤 שליחה מרוכזת" onClose={onClose}>
+      <div style={{textAlign:"center",padding:"16px 0"}}>
+        <div style={{fontSize:48,marginBottom:12}}>✅</div>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>
+          נשלחו {sentCount} הודעות
+        </div>
+        <div style={{color:"var(--text-secondary)",fontSize:13,marginBottom:noPhone.length?12:20}}>
+          {mode==="sign"?"לינקי חתימה על נשק":"לינקי טופס יציאה הביתה"}
+        </div>
+        {noPhone.length>0&&(
+          <div style={{...S.card,background:"rgba(248,81,73,0.1)",borderColor:"var(--accent-red)",marginBottom:16,textAlign:"right"}}>
+            <div style={{fontWeight:700,color:"var(--accent-red)",marginBottom:4}}>⚠️ חיילים ללא טלפון ({noPhone.length}):</div>
+            <div style={{fontSize:12,color:"var(--text-secondary)"}}>{noPhone.join(", ")}</div>
+          </div>
+        )}
+        <button onClick={onClose} style={{...S.btn("blue"),padding:"10px 32px"}}>סגור</button>
+      </div>
+    </Modal>
+  );
+
+  return (
+    <Modal title="📤 שליחה מרוכזת ב-WhatsApp" onClose={onClose} wide>
+      {/* בחירת סוג */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[
+          {id:"sign", label:"✍️ חתימה על נשק", desc:"שלח לינק חתימה לחיילים שעוד לא חתמו"},
+          {id:"exit", label:"🏠 טופס יציאה הביתה", desc:"שלח לינק מילוי טופס יציאה"},
+        ].map(m=>(
+          <button key={m.id} onClick={()=>changeMode(m.id)} style={{
+            flex:1,padding:"10px 8px",borderRadius:8,border:"2px solid",cursor:"pointer",textAlign:"center",
+            borderColor:mode===m.id?"var(--accent-blue)":"var(--border)",
+            background:mode===m.id?"var(--btn-blue-bg)":"transparent",
+          }}>
+            <div style={{fontWeight:700,fontSize:13,color:mode===m.id?"var(--accent-blue)":"var(--text-primary)"}}>{m.label}</div>
+            <div style={{fontSize:11,color:"var(--text-secondary)",marginTop:3}}>{m.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* פילטרים */}
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+        <select value={filterUnit} onChange={e=>{setFilterUnit(e.target.value);setSelected(new Set());}} style={{...S.input,flex:"0 0 auto"}}>
+          {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>)}
+        </select>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="חיפוש שם / מ.א" style={{...S.input,flex:1,minWidth:130}}/>
+      </div>
+
+      {/* רשימה */}
+      <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",marginBottom:12}}>
+        {/* header */}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"var(--bg-elevated)",borderBottom:"1px solid var(--border)"}}>
+          <input type="checkbox"
+            checked={selected.size===filtered.length&&filtered.length>0}
+            onChange={toggleAll} style={{cursor:"pointer",width:16,height:16}}/>
+          <span style={{fontSize:12,fontWeight:700,flex:1}}>
+            בחר הכל — {filtered.length} חיילים {mode==="sign"?"ללא חתימה":"ללא טופס"}
+          </span>
+          <span style={{fontSize:12,color:"var(--accent-blue)",fontWeight:700}}>{selected.size} נבחרו</span>
+        </div>
+
+        {filtered.length===0?(
+          <div style={{padding:24,textAlign:"center",color:"var(--text-muted)",fontSize:13}}>
+            {mode==="sign"?"כל החיילים חתמו ✅":"כל החיילים מילאו טופס ✅"}
+          </div>
+        ):(
+          <div style={{maxHeight:300,overflowY:"auto"}}>
+            {filtered.map(s=>{
+              const hasPh = !!phoneToWA(s.phone);
+              return (
+              <div key={s.id} onClick={()=>hasPh&&toggle(s.id)} style={{
+                display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
+                cursor:hasPh?"pointer":"default",
+                borderBottom:"1px solid var(--border-subtle)",
+                background:selected.has(s.id)?"var(--btn-blue-bg)":"var(--bg-surface)",
+                opacity:hasPh?1:0.5,
+              }}>
+                <input type="checkbox" checked={selected.has(s.id)} disabled={!hasPh}
+                  onChange={()=>toggle(s.id)} onClick={e=>e.stopPropagation()}
+                  style={{cursor:hasPh?"pointer":"not-allowed",width:16,height:16}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{s.name}</div>
+                  <div style={{fontSize:11,color:"var(--text-secondary)"}}>
+                    {s.id} | פלוגה {s.unit} | {Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(k)).join(", ")||"—"}
+                  </div>
+                </div>
+                {hasPh
+                  ? <span style={{fontSize:11,color:"var(--accent-green)"}}>📱 {s.phone}</span>
+                  : <span style={{fontSize:11,color:"var(--accent-red)"}}>⚠️ אין טלפון</span>
+                }
+              </div>
+            );})}
+          </div>
+        )}
+      </div>
+
+      {/* אזהרה על פתיחת חלונות */}
+      {selected.size>1&&(
+        <div style={{fontSize:11,color:"var(--text-muted)",marginBottom:10,padding:"6px 10px",background:"var(--bg-elevated)",borderRadius:6}}>
+          💡 הדפדפן יפתח {selected.size} חלונות WhatsApp בזה אחר זה. אפשר גלישה ב-Pop-ups בדפדפן אם מחסום.
+        </div>
+      )}
+
+      <button onClick={sendAll} disabled={sending||!selected.size}
+        style={{...S.btn("wa"),width:"100%",padding:"12px 0",fontSize:15,opacity:selected.size?1:0.5}}>
+        {sending?`שולח... ${sentCount}/${selected.size}`:`💬 שלח ל-${selected.size} חיילים ב-WhatsApp`}
+      </button>
+    </Modal>
+  );
+}
+
 function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const [repSearch,setRepSearch]=React.useState("");
   const [repId,setRepId]=React.useState("");
