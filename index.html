@@ -7,7 +7,15 @@
   <meta name="theme-color" content="#f0f2f5" media="(prefers-color-scheme: light)">
   <meta name="color-scheme" content="dark light">
 <title>ארמון 9219 מוריה</title>
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script>
+    // Apply saved theme immediately to prevent flash of wrong theme
+    (function(){
+      var t=localStorage.getItem('armory_theme');
+      if(!t) t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';
+      document.documentElement.setAttribute('data-theme',t);
+    })();
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/fflate@0.8.2/umd/index.js"></script>
@@ -1122,7 +1130,7 @@ function Login({onLogin}){
           style={{...S.btn("green"),width:"100%",padding:"var(--space-3) 0",fontSize:"var(--text-lg)",marginTop:"var(--space-1)"}}
         >
           {loading?(
-            <><span style={{display:"inline-block",animation:"spin 1s linear infinite"}}>⟳</span> &nbsp;מתחבר...</>
+            <span style={{display:"inline-flex",alignItems:"center",gap:"var(--space-2)"}}><span style={{display:"inline-block",animation:"spin 1s linear infinite"}}>⟳</span>מתחבר...</span>
           ):"כניסה →"}
         </button>
         <div style={{marginTop:"var(--space-4)",padding:"var(--space-3)",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",lineHeight:1.9,border:"1px solid var(--color-border-muted)"}}>
@@ -1359,14 +1367,7 @@ function DailyModal({db,onClose,type,auth}){
     const win = window.open("","_blank");
     win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
     <title>ספירת מחסן ארמון 9219</title>
-    <script>
-    // Apply theme ASAP to prevent flash
-    (function(){
-      var t=localStorage.getItem('armory_theme');
-      if(!t) t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';
-      document.documentElement.setAttribute('data-theme',t);
-    })();
-  </script>
+    
   <style>
       body{font-family:Arial,sans-serif;direction:rtl;padding:10px;font-size:11px}
       .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a1a2e;padding-bottom:6px;margin-bottom:10px}
