@@ -3128,118 +3128,149 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
 
   function downloadGuarantorReport(){
     const now = new Date().toLocaleDateString("he-IL");
-    const activeReps = repList.filter(r=>!r.isDone);
-    const allDone = activeReps.length === 0;
+    const totalRemaining2 = repList.reduce((s,r)=>s+r.remainingCount, 0);
+    const totalSigned2 = repList.reduce((s,r)=>s+r.signedCount, 0);
 
-    let html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>דוח יתרות ערבויות — ${now}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; font-size: 13px; color: #1a1a1a; }
-  h1 { font-size: 18px; margin-bottom: 4px; }
-  .meta { color: #666; font-size: 11px; margin-bottom: 20px; }
-  .summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-  .stat { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 10px 16px; text-align: center; }
-  .stat .val { font-size: 22px; font-weight: 800; color: #1a1a2e; }
-  .stat .lbl { font-size: 11px; color: #666; }
-  .rep-block { border: 2px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
-  .rep-block.done { border-color: #2ea043; opacity: 0.75; }
-  .rep-header { background: #1a1a2e; color: #fff; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
-  .rep-header.done { background: #1a3628; }
-  .rep-name { font-weight: 800; font-size: 14px; }
-  .rep-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
-  .rep-body { padding: 12px 14px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .section-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
-  .section-title.danger { color: #d73a49; }
-  .section-title.success { color: #2ea043; }
-  .soldier-row { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; background: #fafafa; }
-  .soldier-name { font-weight: 700; font-size: 12px; }
-  .weapon-item { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #eee; }
-  .weapon-name { font-weight: 700; min-width: 120px; }
-  .weapon-serial { font-family: monospace; color: #555; }
-  .weapon-count { background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; padding: 1px 5px; font-weight: 700; }
-  .summary-box { background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
-  .summary-box.danger { background: #fff0f0; border-color: #f85149; }
-  .signed-list { display: flex; flex-wrap: wrap; gap: 5px; }
-  .signed-badge { background: #e6f4ea; border: 1px solid #2ea043; border-radius: 20px; padding: 2px 8px; font-size: 11px; color: #1a7f37; }
-  .progress-bar { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 4px 0; }
-  .progress-fill { height: 100%; border-radius: 4px; }
-  @media print { .no-print { display: none; } }
-</style></head><body>
-<h1>🛡️ דוח יתרות ערבויות מרוכזות</h1>
-<div class="meta">הופק: ${now} | גדוד 9219 מוריה | ${allDone ? "✅ כל הערבויות הושלמו" : `${activeReps.length} ערבויות פעילות`}</div>
+    // Build HTML using string concatenation to avoid nested template literal issues
+    const css = [
+      "* { box-sizing: border-box; margin: 0; padding: 0; }",
+      "body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; font-size: 13px; color: #1a1a1a; }",
+      "h1 { font-size: 18px; margin-bottom: 4px; }",
+      ".meta { color: #666; font-size: 11px; margin-bottom: 20px; }",
+      ".summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }",
+      ".stat { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 10px 16px; text-align: center; }",
+      ".stat .val { font-size: 22px; font-weight: 800; }",
+      ".stat .lbl { font-size: 11px; color: #666; }",
+      ".rep-block { border: 2px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }",
+      ".rep-block.done { border-color: #2ea043; opacity: 0.8; }",
+      ".rep-header { background: #1a1a2e; color: #fff; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }",
+      ".rep-header.done { background: #1a3628; }",
+      ".rep-name { font-weight: 800; font-size: 14px; }",
+      ".rep-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }",
+      ".rep-body { padding: 12px 14px; }",
+      ".grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }",
+      ".section-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }",
+      ".danger { color: #d73a49; }",
+      ".success-color { color: #2ea043; }",
+      ".soldier-row { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; background: #fafafa; }",
+      ".soldier-name { font-weight: 700; font-size: 12px; }",
+      ".weapon-item { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #eee; }",
+      ".weapon-name { font-weight: 700; min-width: 110px; }",
+      ".weapon-serial { font-family: monospace; color: #555; }",
+      ".weapon-count { background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; padding: 1px 5px; font-weight: 700; }",
+      ".summary-box { background: #fff0f0; border: 1px solid #f85149; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }",
+      ".signed-list { display: flex; flex-wrap: wrap; gap: 5px; }",
+      ".signed-badge { background: #e6f4ea; border: 1px solid #2ea043; border-radius: 20px; padding: 2px 8px; font-size: 11px; color: #1a7f37; }",
+      ".progress-bar { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 4px 0; }",
+      ".progress-fill { height: 100%; border-radius: 4px; }",
+      "@media print { .no-print { display: none; } }"
+    ].join("\n");
 
-<div class="summary">
-  <div class="stat"><div class="val">${repList.length}</div><div class="lbl">נציגים</div></div>
-  <div class="stat"><div class="val">${repList.filter(r=>r.isDone).length}</div><div class="lbl">הושלמו</div></div>
-  <div class="stat"><div class="val" style="color:#d73a49">${repList.reduce((s,r)=>s+r.remainingCount,0)}</div><div class="lbl">טרם חתמו</div></div>
-  <div class="stat"><div class="val" style="color:#2ea043">${repList.reduce((s,r)=>s+r.signedCount,0)}</div><div class="lbl">חתמו</div></div>
-</div>
+    function buildRepHtml(rep) {
+      const pct = rep.totalCount > 0 ? Math.round(rep.signedCount / rep.totalCount * 100) : 100;
+      const barColor = pct===100 ? "#2ea043" : pct>=50 ? "#0969da" : "#d73a49";
+      const doneClass = rep.isDone ? " done" : "";
 
-${repList.map(rep=>{
-  const pct = rep.totalCount>0?Math.round(rep.signedCount/rep.totalCount*100):100;
-  const barColor = pct===100?"#2ea043":pct>=50?"#0969da":"#d73a49";
-  return \`
-<div class="rep-block ${rep.isDone?"done":""}">
-  <div class="rep-header ${rep.isDone?"done":""}">
-    <div>
-      <div class="rep-name">${rep.isDone?"✅ ":""}${rep.repName} ${rep.unit?"— פלוגה "+rep.unit:""}</div>
-      <div class="rep-meta">ערב על ${rep.totalCount} חיילים • חתמו ${rep.signedCount}/${rep.totalCount} • ${rep.signedAt||""}</div>
-    </div>
-    <div style="text-align:left;min-width:100px">
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${barColor}"></div></div>
-      <div style="font-size:11px;color:#ccc;text-align:center">${pct}% הושלם</div>
-    </div>
-  </div>
-  <div class="rep-body">
-    <div class="grid">
-      <div>
-        <div class="section-title danger">⏳ טרם חתמו (${rep.remainingCount})</div>
-        ${rep.remainingDetails.map(sol=>\`
-        <div class="soldier-row">
-          <div class="soldier-name">${sol.name} <span style="font-weight:400;color:#666;font-size:11px">פלוגה ${sol.unit}</span></div>
-          ${sol.weapons.map(w=>\`
-          <div class="weapon-item">
-            <span class="weapon-name">${w.isMainWeapon?"🔫":"🎽"} ${w.wepName}</span>
-            ${w.serial?\`<span class="weapon-serial">סידורי: ${w.serial}</span>\`:""}
-            ${w.makat?\`<span style="color:#888;font-size:10px">מק׳: ${w.makat}</span>\`:""}
-          </div>\`).join("")}
-        </div>\`).join("") || "<div style='color:#666;font-size:12px'>כולם חתמו ✅</div>"}
-        ${rep.weaponSummarySorted&&rep.weaponSummarySorted.length>0?\`
-        <div class="summary-box danger" style="margin-top:8px">
-          <div style="font-weight:700;font-size:11px;color:#d73a49;margin-bottom:5px">📊 סיכום ציוד שטרם חזר:</div>
-          ${rep.weaponSummarySorted.map(([wep,data])=>\`
-          <div class="weapon-item">
-            <span class="weapon-name">${data.isMainWeapon?"🔫":"🎽"} ${wep}</span>
-            <span class="weapon-count">${data.serials.length} יח׳</span>
-            <span class="weapon-serial">${data.serials.filter(Boolean).join(" | ")}</span>
-          </div>\`).join("")}
-        </div>\`:""}
-      </div>
-      <div>
-        <div class="section-title success">✅ חתמו (${rep.signedCount})</div>
-        <div class="signed-list">
-          ${rep.signedDetails.map(s=>\`<span class="signed-badge">✓ ${s.name}</span>\`).join("")||"<span style='color:#666;font-size:12px'>אף אחד עדיין לא חתם</span>"}
-        </div>
-      </div>
-    </div>
-  </div>
-</div>\`;
-}).join("")}
+      // Build remaining soldiers HTML
+      let remainingHtml = "";
+      if (rep.remainingDetails.length === 0) {
+        remainingHtml = "<div style='color:#2ea043;font-size:12px'>כולם חתמו ✅</div>";
+      } else {
+        rep.remainingDetails.forEach(function(sol) {
+          let weaponRows = "";
+          sol.weapons.forEach(function(w) {
+            const icon = w.isMainWeapon ? "🔫" : "🎽";
+            const serial = w.serial ? " <span class='weapon-serial'>סידורי: " + w.serial + "</span>" : "";
+            const makat = w.makat ? " <span style='color:#888;font-size:10px'>מק׳: " + w.makat + "</span>" : "";
+            weaponRows += "<div class='weapon-item'><span class='weapon-name'>" + icon + " " + w.wepName + "</span>" + serial + makat + "</div>";
+          });
+          if (!weaponRows) weaponRows = "<div style='color:#999;font-size:11px'>אין ציוד</div>";
+          remainingHtml += "<div class='soldier-row'><div class='soldier-name'>" + sol.name +
+            " <span style='font-weight:400;color:#666;font-size:11px'>פלוגה " + sol.unit + "</span></div>" +
+            weaponRows + "</div>";
+        });
+      }
 
-<button class="no-print" onclick="window.print()" style="margin-top:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px">🖨️ הדפס</button>
-</body></html>`;
+      // Build weapon summary HTML
+      let summaryHtml = "";
+      if (rep.weaponSummarySorted && rep.weaponSummarySorted.length > 0) {
+        let rows = "";
+        rep.weaponSummarySorted.forEach(function(entry) {
+          const wep = entry[0];
+          const data = entry[1];
+          const icon = data.isMainWeapon ? "🔫" : "🎽";
+          const serials = data.serials.filter(Boolean).join(" | ");
+          rows += "<div class='weapon-item'><span class='weapon-name'>" + icon + " " + wep + "</span>" +
+            "<span class='weapon-count'>" + data.serials.length + " יח׳</span>" +
+            "<span class='weapon-serial'>" + serials + "</span></div>";
+        });
+        summaryHtml = "<div class='summary-box'><div style='font-weight:700;font-size:11px;color:#d73a49;margin-bottom:5px'>📊 סיכום ציוד שטרם חזר:</div>" + rows + "</div>";
+      }
 
-    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+      // Build signed list
+      let signedHtml = "";
+      if (rep.signedDetails.length === 0) {
+        signedHtml = "<span style='color:#666;font-size:12px'>אף אחד עדיין לא חתם</span>";
+      } else {
+        rep.signedDetails.forEach(function(s) {
+          signedHtml += "<span class='signed-badge'>✓ " + s.name + "</span>";
+        });
+      }
+
+      return "<div class='rep-block" + doneClass + "'>" +
+        "<div class='rep-header" + doneClass + "'>" +
+          "<div>" +
+            "<div class='rep-name'>" + (rep.isDone ? "✅ " : "") + rep.repName + (rep.unit ? " — פלוגה " + rep.unit : "") + "</div>" +
+            "<div class='rep-meta'>ערב על " + rep.totalCount + " חיילים • חתמו " + rep.signedCount + "/" + rep.totalCount + " • " + (rep.signedAt||"") + "</div>" +
+          "</div>" +
+          "<div style='text-align:left;min-width:100px'>" +
+            "<div class='progress-bar'><div class='progress-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
+            "<div style='font-size:11px;color:#ccc;text-align:center'>" + pct + "% הושלם</div>" +
+          "</div>" +
+        "</div>" +
+        "<div class='rep-body'>" +
+          "<div class='grid2'>" +
+            "<div>" +
+              "<div class='section-title danger'>⏳ טרם חתמו (" + rep.remainingCount + ")</div>" +
+              remainingHtml + summaryHtml +
+            "</div>" +
+            "<div>" +
+              "<div class='section-title success-color'>✅ חתמו (" + rep.signedCount + ")</div>" +
+              "<div class='signed-list'>" + signedHtml + "</div>" +
+            "</div>" +
+          "</div>" +
+        "</div>" +
+      "</div>";
+    }
+
+    let repsHtml = "";
+    repList.forEach(function(rep) { repsHtml += buildRepHtml(rep); });
+
+    const html = "<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'>" +
+      "<title>דוח יתרות ערבויות — " + now + "</title>" +
+      "<style>" + css + "</style></head><body>" +
+      "<h1>🛡️ דוח יתרות ערבויות מרוכזות</h1>" +
+      "<div class='meta'>הופק: " + now + " | גדוד 9219 מוריה</div>" +
+      "<div class='summary'>" +
+        "<div class='stat'><div class='val'>" + repList.length + "</div><div class='lbl'>נציגים</div></div>" +
+        "<div class='stat'><div class='val' style='color:#2ea043'>" + repList.filter(function(r){return r.isDone;}).length + "</div><div class='lbl'>הושלמו</div></div>" +
+        "<div class='stat'><div class='val' style='color:#d73a49'>" + totalRemaining2 + "</div><div class='lbl'>טרם חתמו</div></div>" +
+        "<div class='stat'><div class='val' style='color:#2ea043'>" + totalSigned2 + "</div><div class='lbl'>חתמו</div></div>" +
+      "</div>" +
+      repsHtml +
+      "<button class='no-print' onclick='window.print()' style='margin-top:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>🖨️ הדפס</button>" +
+      "</body></html>";
+
+    const blob = new Blob([html], {type: "text/html;charset=utf-8"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = \`ערבויות_יתרות_\${now.replace(/\//g,"-")}.html\`;
+    a.download = "ערבויות_יתרות_" + now.replace(/\//g, "-") + ".html";
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+
 
   return (
     <div style={{maxWidth:960, margin:"0 auto", padding:"var(--space-4)"}}>
