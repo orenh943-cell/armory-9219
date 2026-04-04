@@ -69,43 +69,33 @@ function fbDelete(path){ return rtdb.ref(path).remove(); }
 }
 /* ===== LIGHT THEME ===== */
 [data-theme="light"] {
-  --bg-base:     #f6f8fa;
-  --bg-surface:  #ffffff;
-  --bg-elevated: #f0f3f6;
-  --bg-input:    #ffffff;
-  --border:      #d0d7de;
-  --border-subtle: #e1e8ef;
-  --text-primary: #1f2328;
-  --text-secondary: #57606a;
-  --text-muted:  #8c959f;
-  --btn-gray-bg: #e1e8ef;
-  --btn-blue-bg: #dbeafe;
-  --btn-green-bg: #dcfce7;
-  --btn-red-bg:  #fee2e2;
-  --btn-orange-bg: #ffedd5;
-  --btn-purple-bg: #f3e8ff;
-  --accent-blue: #0969da;
-  --accent-green: #1a7f37;
-  --accent-red: #d1242f;
-  --accent-orange: #9a6700;
-  --accent-purple: #8250df;
-  --accent-wa: #075e54;
-  --shadow: 0 4px 16px rgba(0,0,0,.08);
-  --shadow-lg: 0 24px 60px rgba(0,0,0,.15);
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 18px;
-  --font-xs: 11px;
-  --font-sm: 12px;
-  --font-md: 14px;
-  --font-lg: 16px;
-  --font-xl: 20px;
-  --tap-target: 44px;
-  --sidebar-width: 200px;
-  --transition: .15s ease;
-  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px;
-  --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+  --bg-base:       #f0f2f5;
+  --bg-surface:    #ffffff;
+  --bg-elevated:   #e8ecf0;
+  --bg-input:      #ffffff;
+  --border:        #b0bac5;
+  --border-subtle: #c8d0da;
+  --text-primary:  #0d1117;
+  --text-secondary:#3d4a56;
+  --text-muted:    #6a7685;
+  --btn-gray-bg:   #dde3ea;
+  --btn-blue-bg:   #b8d4f8;
+  --btn-green-bg:  #b3e6c5;
+  --btn-red-bg:    #fac5c5;
+  --btn-orange-bg: #fcd9a8;
+  --btn-purple-bg: #d8c4f8;
+  --accent-blue:   #0550ae;
+  --accent-green:  #116329;
+  --accent-red:    #a40e26;
+  --accent-orange: #7d4e00;
+  --accent-purple: #6639ba;
+  --accent-wa:     #054c3f;
+  --shadow:        0 4px 16px rgba(0,0,0,.12);
+  --shadow-lg:     0 24px 60px rgba(0,0,0,.2);
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 18px;
+  --font-xs: 11px; --font-sm: 12px; --font-md: 14px; --font-lg: 16px; --font-xl: 20px;
+  --tap-target: 44px; --sidebar-width: 200px; --transition: .15s ease;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
 }
 /* ===== RESET & BASE ===== */
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -181,6 +171,106 @@ button:not(:disabled):hover{filter:brightness(1.1);}
 button:not(:disabled):active{transform:scale(.97);}
 /* ===== CARD HOVER ===== */
 .card-hover:hover{border-color:var(--accent-blue)!important;transition:border-color var(--transition);}
+
+/* Light mode button text fixes */
+[data-theme="light"] .armory-btn-green,
+[data-theme="light"] button[style*="btn-green-bg"] {
+  color: var(--accent-green) !important;
+}
+[data-theme="light"] button {
+  font-weight: 700;
+}
+/* Sidebar active tab stronger contrast */
+[data-theme="light"] nav button[style*="btn-blue-bg"] {
+  background: #b8d4f8;
+  color: var(--accent-blue);
+  font-weight: 800;
+}
+/* Card borders stronger in light mode */
+[data-theme="light"] .card-border {
+  border-color: var(--border);
+}
+
+/* ===== LIGHT MODE GENERAL FIXES ===== */
+[data-theme="light"] {
+  /* Sidebar stronger */
+}
+[data-theme="light"] .desktop-sidebar {
+  box-shadow: -2px 0 12px rgba(0,0,0,.15);
+}
+/* Table headers dark in light mode */
+[data-theme="light"] th {
+  background: #e0e6ed !important;
+  color: #0d1117 !important;
+  border-color: #b0bac5 !important;
+}
+/* Badge text stronger */  
+[data-theme="light"] .badge-text {
+  font-weight: 700;
+}
+/* Input stronger border */
+[data-theme="light"] input, [data-theme="light"] select, [data-theme="light"] textarea {
+  border-color: #8c9bab !important;
+  background: #ffffff !important;
+  color: #0d1117 !important;
+}
+[data-theme="light"] input:focus, [data-theme="light"] select:focus {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 2px rgba(5,80,174,.15);
+}
+/* Card stronger shadow */
+[data-theme="light"] .card {
+  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+}
+
+/* ===== LIGHT MODE BUTTON FIXES ===== */
+[data-theme="light"] button {
+  font-weight: 600;
+}
+/* Green buttons - solid dark green */
+[data-theme="light"] button[style*="btn-green-bg"] {
+  background: #1a7f37 !important;
+  color: #ffffff !important;
+}
+/* Blue buttons - solid dark blue */
+[data-theme="light"] button[style*="btn-blue-bg"] {
+  background: #0550ae !important;
+  color: #ffffff !important;
+}
+/* Red buttons - solid dark red */
+[data-theme="light"] button[style*="btn-red-bg"] {
+  background: #a40e26 !important;
+  color: #ffffff !important;
+}
+/* Orange buttons - solid dark orange */
+[data-theme="light"] button[style*="btn-orange-bg"] {
+  background: #7d4e00 !important;
+  color: #ffffff !important;
+}
+/* Purple buttons - solid dark purple */
+[data-theme="light"] button[style*="btn-purple-bg"] {
+  background: #6639ba !important;
+  color: #ffffff !important;
+}
+/* Gray buttons - medium gray */
+[data-theme="light"] button[style*="btn-gray-bg"] {
+  background: #8c9bab !important;
+  color: #0d1117 !important;
+}
+/* WA buttons stay green */
+[data-theme="light"] button[style*="#128c7e"] {
+  color: #ffffff !important;
+}
+/* Nav sidebar buttons override */
+[data-theme="light"] nav button {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] nav button[style*="btn-blue-bg"] {
+  background: var(--btn-blue-bg) !important;
+  color: var(--accent-blue) !important;
+  font-weight: 800 !important;
+}
 </style>
 </head>
 <body>
@@ -336,7 +426,7 @@ const S={
   label:{color:"var(--text-secondary)",fontSize:"var(--font-sm)",display:"block",marginBottom:4,marginTop:6},
   btn:(c="gray")=>({padding:"9px 18px",borderRadius:"var(--radius-md)",border:"none",cursor:"pointer",fontWeight:600,fontSize:"var(--font-md)",minHeight:"var(--tap-target)",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all var(--transition)",
     background:c==="green"?"var(--btn-green-bg)":c==="red"?"var(--btn-red-bg)":c==="blue"?"var(--btn-blue-bg)":c==="orange"?"var(--btn-orange-bg)":c==="wa"?"#128c7e":c==="purple"?"var(--btn-purple-bg)":"var(--btn-gray-bg)",
-    color:c==="green"?"#fff":c==="red"?"var(--accent-red)":c==="blue"?"var(--accent-blue)":c==="orange"?"var(--accent-orange)":c==="wa"?"var(--accent-wa)":c==="purple"?"var(--accent-purple)":"var(--text-secondary)"}),
+    color:c==="green"?"var(--accent-green)":c==="red"?"var(--accent-red)":c==="blue"?"var(--accent-blue)":c==="orange"?"var(--accent-orange)":c==="wa"?"var(--accent-wa)":c==="purple"?"var(--accent-purple)":"var(--text-secondary)"}),
   th:{color:"var(--text-secondary)",fontSize:"var(--font-sm)",fontWeight:600,textAlign:"right",padding:"8px 12px",borderBottom:"1px solid var(--border-subtle)",whiteSpace:"nowrap",background:"var(--bg-base)"},
   td:{fontSize:"var(--font-sm)",padding:"9px 12px",borderBottom:"1px solid var(--border-subtle)",verticalAlign:"middle"},
 };
@@ -1775,6 +1865,7 @@ const DEFAULT_INSPECTION_FAMILIES = [
 // =================== INSPECTION TAB (בחינות נשק) ===================
 function InspectionTab({db, setDb, soldiers, auth}){
   const [view, setView] = React.useState("dashboard"); // dashboard | inspect
+  const [detailModal, setDetailModal] = React.useState(null); // null | "all" | "inspected" | "pending"
   const [search, setSearch] = React.useState("");
   const [results, setResults] = React.useState([]);
   const [selected, setSelected] = React.useState(new Set());
@@ -2017,14 +2108,17 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
       {/* כרטיסי סיכום */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}}>
         {[
-          {label:"סה\"כ אמצעים",val:totalAll,color:"var(--accent-blue)"},
-          {label:"נבחנו",val:totalInspected,color:"var(--accent-green)"},
-          {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"var(--accent-red)":"var(--accent-green)"},
-          {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"var(--accent-green)":totalPct>=50?"var(--accent-blue)":"var(--accent-orange)"},
+          {label:"סה\"כ אמצעים",val:totalAll,color:"var(--accent-blue)",key:"all"},
+          {label:"נבחנו",val:totalInspected,color:"var(--accent-green)",key:"inspected"},
+          {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"var(--accent-red)":"var(--accent-green)",key:"pending"},
+          {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"var(--accent-green)":totalPct>=50?"var(--accent-blue)":"var(--accent-orange)",key:"pct"},
         ].map(c=>(
-          <div key={c.label} style={{...S.card,textAlign:"center",padding:"16px 8px",marginBottom:0}}>
+          <div key={c.label} onClick={()=>c.key!=="pct"&&setDetailModal(c.key)} style={{...S.card,textAlign:"center",padding:"16px 8px",marginBottom:0,cursor:c.key!=="pct"?"pointer":"default",transition:"border .15s",border:"1px solid var(--border)"}}
+            onMouseEnter={e=>{if(c.key!=="pct")e.currentTarget.style.border="1px solid "+c.color;}}
+            onMouseLeave={e=>e.currentTarget.style.border="1px solid var(--border)"}>
             <div style={{fontSize:32,fontWeight:800,color:c.color,lineHeight:1}}>{c.val}</div>
             <div style={{color:"var(--text-secondary)",fontSize:12,marginTop:6,fontWeight:600}}>{c.label}</div>
+            {c.key!=="pct"&&<div style={{fontSize:10,color:"var(--text-muted)",marginTop:3}}>לחץ לפירוט ▼</div>}
           </div>
         ))}
       </div>
@@ -2113,6 +2207,36 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
             </div>
           ))}
         </div>
+      )}
+{/* מודל פירוט */}
+      {detailModal&&(
+        <Modal title={detailModal==="all"?`📦 כל האמצעים (${totalAll})`:detailModal==="inspected"?`✅ נבחנו (${totalInspected})`:`⏳ טרם נבחנו (${totalAll-totalInspected})`} onClose={()=>setDetailModal(null)} wide>
+          <div style={{maxHeight:420,overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"var(--bg-elevated)"}}>
+                  {["אמצעי","סידורי","חייל","מ.א","פלוגה","סטטוס"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {stats.flatMap(st=>st.soldiers).filter(r=>{
+                  if(detailModal==="inspected") return r.done;
+                  if(detailModal==="pending") return !r.done;
+                  return true;
+                }).map((r,i)=>(
+                  <tr key={r.key} style={{background:i%2===0?"var(--bg-surface)":"var(--bg-elevated)",borderBottom:"1px solid var(--border-subtle)"}}>
+                    <td style={{...S.td,fontWeight:700}}>{r.wepName}</td>
+                    <td style={{...S.td,fontFamily:"monospace",fontSize:12}}>{r.serial&&r.serial!=="—"?r.serial:"—"}</td>
+                    <td style={S.td}>{r.s.name}</td>
+                    <td style={{...S.td,fontFamily:"monospace",fontSize:11,color:"var(--text-muted)"}}>{r.s.id}</td>
+                    <td style={S.td}>{r.s.unit||"—"}</td>
+                    <td style={S.td}>{r.done?<span style={{color:"var(--accent-green)",fontWeight:700}}>✅ נבחן</span>:<span style={{color:"var(--accent-red)",fontWeight:700}}>⏳ ממתין</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
       )}
 {/* מנהל משפחות */}
       {showFamilyMgr&&(
