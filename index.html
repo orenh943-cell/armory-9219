@@ -3063,77 +3063,112 @@ function buildGuarantorReport(repList, totDone, totRem, totSig){
 // =================== GUARANTORS TAB ===================
 function GuarantorsTab({db, setDb, soldiers, auth}){
   const [search, setSearch] = React.useState("");
-  const [expandedRep, setExpandedRep] = React.useState(null);
-  const [statusFilter, setStatusFilter] = React.useState("הכל");
-  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const [expanded, setExpanded] = React.useState(null);
+  const [filter, setFilter] = React.useState("הכל");
+
+  const allSols = React.useMemo(()=>[
+    ...Object.values(db.customSoldiers||{}),
+    ...soldiers
+  ],[db,soldiers]);
 
   const repList = React.useMemo(()=>{
-    const gMap = db.bulkGuarantors||{};
-    return Object.entries(gMap).map(([key,g])=>{
-      const soldierIds=Object.keys(g.soldiers||{});
-      const remainingIds=Object.keys(g.remaining||{});
-      const signedIds=soldierIds.filter(id=>!g.remaining?.[id]);
-      const remainingDetails=remainingIds.map(id=>{
-        const sol=allSols.find(s=>s.id===id);
-        const asgn=db.assignments?.[id]??sol?.assigned??{};
-        const weapons=Object.entries(asgn).filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false).map(([wepName,sr])=>{
-          let serial=null;
-          if(typeof sr==="string"&&sr.trim()&&sr!=="1") serial=sr.trim();
-          else if(typeof sr==="number"&&sr>1) serial=String(sr);
-          const sd=ALL_SERIALS.find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
-          return {wepName,serial:serial||(sd?.serial?String(sd.serial):null),makat:sd?.makat||null,isWep:WEAPON_KEYS.includes(wepName)};
-        });
-        return {id,name:sol?.name||id,unit:sol?.unit||"?",weapons};
+    return Object.entries(db.bulkGuarantors||{}).map(([key,g])=>{
+      const soldierIds = Object.keys(g.soldiers||{});
+      const remainingIds = Object.keys(g.remaining||{});
+      const signedIds = soldierIds.filter(id=>!g.remaining?.[id]);
+
+      const remainingDetails = remainingIds.map(id=>{
+        const sol = allSols.find(s=>s.id===id);
+        const asgn = db.assignments?.[id] ?? sol?.assigned ?? {};
+        const weapons = Object.entries(asgn)
+          .filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false)
+          .map(([wepName,sr])=>{
+            let serial = null;
+            if(typeof sr==="string"&&sr.trim()&&sr!=="1") serial=sr.trim();
+            else if(typeof sr==="number"&&sr>1) serial=String(sr);
+            const sd = ALL_SERIALS.find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
+            return {wepName, serial: serial||(sd?.serial?String(sd.serial):null), makat: sd?.makat||null, isWep: WEAPON_KEYS.includes(wepName)};
+          });
+        return {id, name: sol?.name||id, unit: sol?.unit||"?", weapons};
       });
-      const signedDetails=signedIds.map(id=>{const sol=allSols.find(s=>s.id===id);return {id,name:sol?.name||id};});
-      const wepSum={};
-      remainingDetails.forEach(function(r){r.weapons.forEach(function(w){if(!wepSum[w.wepName])wepSum[w.wepName]={n:0,serials:[],isWep:w.isWep};wepSum[w.wepName].n++;wepSum[w.wepName].serials.push(w.serial);});});
-      const wepSumSorted=Object.entries(wepSum).sort(([,a],[,b])=>(b.isWep?1:0)-(a.isWep?1:0));
-      return {key,repName:g.repName||g.repId,unit:g.unit||"",signedAt:g.signedAt||"",
-        total:soldierIds.length,signed:signedIds.length,remaining:remainingIds.length,
-        remainingDetails,signedDetails,wepSumSorted,sigData:g.sigData,done:remainingIds.length===0};
-    }).sort((a,b)=>a.done===b.done?b.remaining-a.remaining:a.done?1:-1);
+
+      const signedDetails = signedIds.map(id=>{
+        const sol = allSols.find(s=>s.id===id);
+        return {id, name: sol?.name||id};
+      });
+
+      const wepSum = {};
+      remainingDetails.forEach(function(r){
+        r.weapons.forEach(function(w){
+          if(!wepSum[w.wepName]) wepSum[w.wepName]={n:0,serials:[],isWep:w.isWep};
+          wepSum[w.wepName].n++;
+          wepSum[w.wepName].serials.push(w.serial);
+        });
+      });
+      const wepSorted = Object.entries(wepSum).sort(([,a],[,b])=>(b.isWep?1:0)-(a.isWep?1:0));
+
+      return {
+        key, repName: g.repName||g.repId, unit: g.unit||"",
+        signedAt: g.signedAt||"", total: soldierIds.length,
+        signed: signedIds.length, remaining: remainingIds.length,
+        remainingDetails, signedDetails, wepSorted,
+        sigData: g.sigData, done: remainingIds.length===0
+      };
+    }).sort((a,b)=>a.done===b.done ? b.remaining-a.remaining : a.done?1:-1);
   },[db,allSols]);
 
-  const totRem=repList.reduce((s,r)=>s+r.remaining,0);
-  const totSig=repList.reduce((s,r)=>s+r.signed,0);
-  const totDone=repList.filter(r=>r.done).length;
+  const totRem  = repList.reduce((s,r)=>s+r.remaining,0);
+  const totSig  = repList.reduce((s,r)=>s+r.signed,0);
+  const totDone = repList.filter(r=>r.done).length;
 
-  const shown=repList.filter(r=>{
-    if(statusFilter==="פעיל"&&r.done) return false;
-    if(statusFilter==="הושלם"&&!r.done) return false;
-    if(search.trim()&&!r.repName.includes(search)&&!r.unit.includes(search)&&!r.remainingDetails.some(s=>s.name.includes(search))) return false;
+  const shown = repList.filter(r=>{
+    if(filter==="פעיל"  && r.done)  return false;
+    if(filter==="הושלם" && !r.done) return false;
+    if(search.trim() && !r.repName.includes(search) && !r.unit.includes(search) &&
+       !r.remainingDetails.some(s=>s.name.includes(search))) return false;
     return true;
   });
 
-  function delGuarantor(key){
+  function del(key){
     if(!window.confirm("למחוק ערבות זו?")) return;
-    const ng={...(db.bulkGuarantors||{})};
-    delete ng[key];
-    const ndb={...db,bulkGuarantors:ng};
-    saveDB(ndb); setDb(ndb);
+    const ng={...(db.bulkGuarantors||{})}; delete ng[key];
+    const ndb={...db,bulkGuarantors:ng}; saveDB(ndb); setDb(ndb);
   }
 
-  function dlReport(){ buildGuarantorReport(repList, totDone, totRem, totSig); }
-
   return (
-    <div style={{maxWidth:1100,margin:"0 auto",padding:"var(--space-4)"}}>
+    <div style={{maxWidth:1100,margin:"0 auto",padding:16}}>
+
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>🛡️ ערבויות מרוכזות</h2>
-          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:3}}>{repList.length} נציגים • {totRem} טרם חתמו • {totSig} חתמו</div>
+          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:3}}>
+            {repList.length} נציגים • {totRem} טרם חתמו • {totSig} חתמו
+          </div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
           {["הכל","פעיל","הושלם"].map(f=>(
-            <button key={f} onClick={()=>setStatusFilter(f)} style={{...S.btn(statusFilter===f?"blue":"gray"),padding:"4px 10px",fontSize:"var(--text-sm)",minHeight:30}}>{f}</button>
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{...S.btn(filter===f?"blue":"gray"),padding:"4px 10px",fontSize:"var(--text-sm)",minHeight:30}}>
+              {f}
+            </button>
           ))}
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חפש..." style={{...S.input,width:140,marginBottom:0}}/>
-          <button onClick={dlReport} style={{...S.btn("purple"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>📥 דוח</button>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="🔍 חפש..." style={{...S.input,width:140,marginBottom:0}}/>
+          <button onClick={()=>buildGuarantorReport(repList,totDone,totRem,totSig)}
+            style={{...S.btn("purple"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>
+            📥 דוח
+          </button>
         </div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:14}}>
-        {[{l:"נציגים",v:repList.length,c:"var(--color-accent-fg)"},{l:"הושלמו",v:totDone,c:"var(--color-success-fg)"},{l:"בתהליך",v:repList.length-totDone,c:"var(--color-warning-fg)"},{l:"טרם חתמו",v:totRem,c:totRem>0?"var(--color-danger-fg)":"var(--color-success-fg)"},{l:"חתמו",v:totSig,c:"var(--color-success-fg)"}].map(s=>(
+        {[
+          {l:"נציגים",    v:repList.length,         c:"var(--color-accent-fg)"},
+          {l:"הושלמו",    v:totDone,                c:"var(--color-success-fg)"},
+          {l:"בתהליך",    v:repList.length-totDone, c:"var(--color-warning-fg)"},
+          {l:"טרם חתמו", v:totRem, c:totRem>0?"var(--color-danger-fg)":"var(--color-success-fg)"},
+          {l:"חתמו",      v:totSig,                 c:"var(--color-success-fg)"}
+        ].map(s=>(
           <div key={s.l} style={{...S.card,textAlign:"center",padding:"10px 4px",marginBottom:0}}>
             <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
             <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:3,fontWeight:600}}>{s.l}</div>
@@ -3141,95 +3176,154 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
         ))}
       </div>
 
-      {shown.length===0&&(
+      {shown.length===0 && (
         <div style={{...S.card,textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
           <div style={{fontSize:40,marginBottom:8}}>🛡️</div>
-          <div style={{fontWeight:700}}>{search||statusFilter!=="הכל"?"אין תוצאות":"אין ערבויות"}</div>
+          <div style={{fontWeight:700}}>{search||filter!=="הכל"?"אין תוצאות":"אין ערבויות"}</div>
         </div>
       )}
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
         {shown.map(rep=>{
-          const pct=rep.total>0?Math.round(rep.signed/rep.total*100):100;
-          const isExp=expandedRep===rep.key;
-          const bc=rep.done?"var(--color-success-fg)":rep.remaining>0?"var(--color-danger-fg)":"var(--color-border-default)";
+          const pct = rep.total>0 ? Math.round(rep.signed/rep.total*100) : 100;
+          const isExp = expanded===rep.key;
+          const bc = rep.done ? "var(--color-success-fg)" : rep.remaining>0 ? "var(--color-danger-fg)" : "var(--color-border-default)";
           return (
-            <div key={rep.key} style={{background:"var(--color-bg-default)",border:"2px solid "+bc,borderRadius:"var(--radius-lg)",overflow:"hidden"}}>
+            <div key={rep.key}
+              style={{background:"var(--color-bg-default)",border:"2px solid "+bc,borderRadius:"var(--radius-lg)",overflow:"hidden"}}>
               <div style={{padding:"12px 14px",background:rep.done?"var(--color-success-bg)":"var(--color-bg-subtle)",borderBottom:"1px solid var(--color-border-muted)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                   <div>
-                    <div style={{fontSize:"var(--text-3xl)",fontWeight:800,lineHeight:1,color:rep.done?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{rep.done?"✓":rep.remaining}</div>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:1}}>{rep.done?"הושלם":"טרם חתמו"}</div>
+                    <div style={{fontSize:"var(--text-3xl)",fontWeight:800,lineHeight:1,color:rep.done?"var(--color-success-fg)":"var(--color-danger-fg)"}}>
+                      {rep.done ? "✓" : rep.remaining}
+                    </div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:1}}>
+                      {rep.done ? "הושלם" : "טרם חתמו"}
+                    </div>
                   </div>
-                  {rep.sigData&&<img src={rep.sigData} style={{height:36,width:72,objectFit:"contain",borderRadius:4,border:"1px solid var(--color-border-muted)",background:"#fff"}} alt="חתימה"/>}
+                  {rep.sigData && (
+                    <img src={rep.sigData}
+                      style={{height:36,width:72,objectFit:"contain",borderRadius:4,border:"1px solid var(--color-border-muted)",background:"#fff"}}
+                      alt="חתימה"/>
+                  )}
                 </div>
                 <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:3}}>{rep.repName}</div>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
-                  {rep.unit&&<Badge color="blue" small>פלוגה {rep.unit}</Badge>}
+                  {rep.unit && <Badge color="blue" small>פלוגה {rep.unit}</Badge>}
                   <Badge color={rep.done?"green":"orange"} small>{rep.signed}/{rep.total} חתמו</Badge>
-                  {rep.signedAt&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{rep.signedAt}</span>}
+                  {rep.signedAt && <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{rep.signedAt}</span>}
                 </div>
                 <div style={{height:5,background:"var(--color-bg-elevated)",borderRadius:3,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:pct+"%",borderRadius:3,background:pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-danger-fg)",transition:"width .5s"}}/>
+                  <div style={{height:"100%",width:pct+"%",borderRadius:3,transition:"width .5s",
+                    background:pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-danger-fg)"}}/>
                 </div>
               </div>
 
               <div style={{padding:"10px 12px"}}>
-                {rep.remaining>0&&(
+                {rep.remaining>0 && (
                   <div style={{marginBottom:6}}>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,marginBottom:3}}>⏳ {rep.remaining} טרם חתמו:</div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,marginBottom:3}}>
+                      ⏳ {rep.remaining} טרם חתמו:
+                    </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                       {rep.remainingDetails.slice(0,6).map(sol=>(
-                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:20,color:"var(--color-danger-fg)"}}>{sol.name}</span>
+                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
+                          background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",
+                          borderRadius:20,color:"var(--color-danger-fg)"}}>
+                          {sol.name}
+                        </span>
                       ))}
-                      {rep.remainingDetails.length>6&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>+{rep.remainingDetails.length-6}</span>}
+                      {rep.remainingDetails.length>6 && (
+                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+                          +{rep.remainingDetails.length-6}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
-                {rep.wepSumSorted.length>0&&(
+
+                {rep.wepSorted.length>0 && (
                   <div style={{marginBottom:6}}>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700,marginBottom:3}}>📦 ציוד שטרם חזר:</div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700,marginBottom:3}}>
+                      📦 ציוד שטרם חזר:
+                    </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                      {rep.wepSumSorted.map(([wep,d])=>(
-                        <span key={wep} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:700,background:"var(--color-warning-bg)",border:"1px solid var(--color-warning-fg)",borderRadius:20,color:"var(--color-warning-fg)"}}>{d.isWep?"🔫":"🎽"} {wep} ×{d.n}</span>
+                      {rep.wepSorted.map(([wep,d])=>(
+                        <span key={wep} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:700,
+                          background:"var(--color-warning-bg)",border:"1px solid var(--color-warning-fg)",
+                          borderRadius:20,color:"var(--color-warning-fg)"}}>
+                          {d.isWep?"🔫":"🎽"} {wep} ×{d.n}
+                        </span>
                       ))}
                     </div>
                   </div>
                 )}
-                {rep.signed>0&&(
+
+                {rep.signed>0 && (
                   <div style={{marginBottom:6}}>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-success-fg)",fontWeight:700,marginBottom:3}}>✅ {rep.signed} חתמו:</div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-success-fg)",fontWeight:700,marginBottom:3}}>
+                      ✅ {rep.signed} חתמו:
+                    </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                       {rep.signedDetails.slice(0,5).map(sol=>(
-                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:20,color:"var(--color-success-fg)"}}>✓ {sol.name}</span>
+                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
+                          background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",
+                          borderRadius:20,color:"var(--color-success-fg)"}}>
+                          ✓ {sol.name}
+                        </span>
                       ))}
-                      {rep.signedDetails.length>5&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>+{rep.signedDetails.length-5}</span>}
+                      {rep.signedDetails.length>5 && (
+                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+                          +{rep.signedDetails.length-5}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
+
                 <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                  <button onClick={()=>setExpandedRep(isExp?null:rep.key)} style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>{isExp?"▲ פחות":"▼ פירוט"}</button>
-                  {auth.role==="admin"&&<button onClick={()=>delGuarantor(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
+                  <button onClick={()=>setExpanded(isExp?null:rep.key)}
+                    style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>
+                    {isExp ? "▲ פחות" : "▼ פירוט"}
+                  </button>
+                  {auth.role==="admin" && (
+                    <button onClick={()=>del(rep.key)}
+                      style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>
+                      🗑️
+                    </button>
+                  )}
                 </div>
-                {isExp&&(
+
+                {isExp && (
                   <div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
                     {rep.remainingDetails.map(sol=>(
-                      <div key={sol.id} style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
-                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:3,display:"flex",justifyContent:"space-between"}}>
+                      <div key={sol.id}
+                        style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",
+                          borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
+                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:3,
+                          display:"flex",justifyContent:"space-between"}}>
                           <span>{sol.name}</span>
                           <Badge color="orange" small>{sol.unit}</Badge>
                         </div>
-                        {sol.weapons.length>0?(
+                        {sol.weapons.length>0 ? (
                           <div>
                             {sol.weapons.map((w,wi)=>(
                               <div key={wi} style={{display:"flex",gap:5,fontSize:"var(--text-xs)",padding:"1px 0"}}>
-                                <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>{w.isWep?"🔫":"🎽"} {w.wepName}</span>
-                                {w.serial&&<span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>{w.serial}</span>}
-                                {w.makat&&<span style={{color:"var(--color-text-muted)"}}>מק׳ {w.makat}</span>}
+                                <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>
+                                  {w.isWep?"🔫":"🎽"} {w.wepName}
+                                </span>
+                                {w.serial && (
+                                  <span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>
+                                    {w.serial}
+                                  </span>
+                                )}
+                                {w.makat && (
+                                  <span style={{color:"var(--color-text-muted)"}}>מק׳ {w.makat}</span>
+                                )}
                               </div>
                             ))}
                           </div>
-                        ):(
+                        ) : (
                           <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>אין ציוד</span>
                         )}
                       </div>
@@ -3241,11 +3335,11 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
           );
         })}
       </div>
+
     </div>
     </div>
   );
 }
-
 
 // =================== DASHBOARD VIEW ===================
 function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
