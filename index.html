@@ -3017,6 +3017,190 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
   );
 }
 
+// =================== DASHBOARD VIEW ===================
+function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
+  exitFormsCount, guarantyStats, setDashModal, setTab, setAddModal, setQuickModal,
+  setDailyType, setBulkModal}){
+
+  const [activeUnit, setActiveUnit] = React.useState("הכל");
+
+  // Build unit list
+  const units = React.useMemo(()=>{
+    const us = [...new Set(soldiers.map(s=>s.unit).filter(Boolean))].sort();
+    return ["הכל", ...us];
+  }, [soldiers]);
+
+  // Per-unit stats
+  const unitStats = React.useMemo(()=>{
+    const guarantors = db.bulkGuarantors||{};
+    return units.filter(u=>u!=="הכל").map(unit=>{
+      const unitSoldiers = soldiers.filter(s=>s.unit===unit);
+      const unitWithWep = unitSoldiers.filter(s=>Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k)));
+      const unitSigned = unitWithWep.filter(s=>s.signature);
+      const unitGuaranty = unitWithWep.filter(s=>
+        !s.signature && Object.values(guarantors).some(g=>g.remaining&&g.remaining[s.id])
+      );
+      const unitUnsigned = unitWithWep.length - unitSigned.length;
+      const unitForms = (() => {
+        const forms = db.exitForms||{};
+        const ids = new Set(Object.values(forms).filter(f=>f.soldierSig&&unitSoldiers.find(s=>s.id===f.soldierId)).map(f=>f.soldierId));
+        return ids.size;
+      })();
+      return {unit, total:unitSoldiers.length, withWep:unitWithWep.length,
+        signed:unitSigned.length, unsigned:unitUnsigned,
+        guaranty:unitGuaranty.length, forms:unitForms};
+    });
+  }, [soldiers, db]);
+
+  // Filtered soldiers for active unit
+  const filtSoldiers = activeUnit==="הכל" ? soldiers : soldiers.filter(s=>s.unit===activeUnit);
+  const filtWithWep = filtSoldiers.filter(s=>Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k)));
+  const filtSigned = filtWithWep.filter(s=>s.signature).length;
+  const filtUnsigned = filtWithWep.length - filtSigned;
+  const filtGuaranty = filtWithWep.filter(s=>{
+    const guarantors = db.bulkGuarantors||{};
+    return !s.signature && Object.values(guarantors).some(g=>g.remaining&&g.remaining[s.id]);
+  }).length;
+  const filtForms = (() => {
+    const forms = db.exitForms||{};
+    const ids = new Set(Object.values(forms).filter(f=>f.soldierSig&&filtSoldiers.find(s=>s.id===f.soldierId)).map(f=>f.soldierId));
+    return ids.size;
+  })();
+
+  const cards = [
+    {label:"חיילים",val:filtSoldiers.length,color:"var(--color-purple-fg)",k:"all"},
+    {label:"עם נשק",val:filtWithWep.length,color:"var(--color-accent-fg)",k:"withWeapon"},
+    {label:"חתמו",val:filtSigned,color:"var(--color-success-fg)",k:"signed"},
+    {label:"טרם חתמו",val:filtUnsigned,color:filtUnsigned>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"unsigned"},
+    {label:"ערבות",val:filtGuaranty,color:"var(--color-purple-fg)",k:"guaranty"},
+    {label:"טופס יציאה",val:filtForms,color:"var(--color-warning-fg)",k:"exitform"},
+  ];
+
+  return (
+    <div>
+      {/* כותרת + tabs פלוגות */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>לוח בקרה</h2>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {units.map(u=>(
+            <button key={u} onClick={()=>setActiveUnit(u)}
+              style={{
+                ...S.btn(activeUnit===u?"blue":"gray"),
+                padding:"4px 12px",fontSize:"var(--text-sm)",
+                minHeight:32,fontWeight:activeUnit===u?700:500,
+              }}>
+              {u==="הכל"?"🌐 הכל":"פלוגה "+u}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* כרטיסי סיכום */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:16}}>
+        {cards.map(s=>(
+          <div key={s.label} onClick={()=>setDashModal(s.k)}
+            role="button" tabIndex={0}
+            onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&setDashModal(s.k)}
+            style={{...S.card,textAlign:"center",padding:"12px 6px",marginBottom:0,cursor:"pointer",
+              border:"1px solid var(--color-border-muted)",
+              transition:"border-color var(--transition), box-shadow var(--transition), transform var(--duration-fast)"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=s.color;e.currentTarget.style.boxShadow="var(--shadow)";e.currentTarget.style.transform="translateY(-2px)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--color-border-muted)";e.currentTarget.style.boxShadow="";e.currentTarget.style.transform="";}}
+          >
+            <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
+            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)",marginTop:5,fontWeight:600}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* אזהרה טרם חתמו */}
+      {filtUnsigned>0&&(
+        <div style={{...S.card,border:"1px solid rgba(248,81,73,.35)",background:"rgba(248,81,73,.07)",marginBottom:12,padding:"10px 14px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span>⚠️</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,color:"var(--color-danger-fg)",fontSize:"var(--text-base)"}}>
+                {filtUnsigned} חיילים עם נשק טרם חתמו
+                {filtGuaranty>0&&<span style={{color:"var(--color-purple-fg)",fontWeight:600}}> • {filtGuaranty} בערבות</span>}
+              </div>
+              <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>
+                {filtUnsigned-filtGuaranty > 0 ? `${filtUnsigned-filtGuaranty} ללא ערבות — שלח לינק חתימה` : "כולם מכוסים בערבות ✅"}
+              </div>
+            </div>
+            <button onClick={()=>setTab("signatures")} style={{...S.btn("red"),padding:"5px 10px",fontSize:"var(--text-sm)",minHeight:32}}>ניהול</button>
+          </div>
+        </div>
+      )}
+
+      {/* טבלת פלוגות (רק ב-הכל view) */}
+      {activeUnit==="הכל"&&unitStats.length>1&&(
+        <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:12}}>
+          <div style={{padding:"10px 14px",fontWeight:700,fontSize:"var(--text-base)",borderBottom:"1px solid var(--color-border-muted)"}}>
+            📊 סיכום לפי פלוגה
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"var(--color-bg-subtle)"}}>
+                  {["פלוגה","חיילים","עם נשק","חתמו","ערבות","טרם חתמו","טופס יציאה"].map(h=>(
+                    <th key={h} style={{...S.th,fontSize:"var(--text-xs)"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {unitStats.map((u,i)=>(
+                  <tr key={u.unit}
+                    style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)",cursor:"pointer"}}
+                    onClick={()=>setActiveUnit(u.unit)}
+                  >
+                    <td style={{...S.td,fontWeight:700}}>פלוגה {u.unit}</td>
+                    <td style={{...S.td,textAlign:"center"}}>{u.total}</td>
+                    <td style={{...S.td,textAlign:"center",color:"var(--color-accent-fg)",fontWeight:600}}>{u.withWep}</td>
+                    <td style={{...S.td,textAlign:"center",color:"var(--color-success-fg)",fontWeight:700}}>{u.signed}</td>
+                    <td style={{...S.td,textAlign:"center",color:"var(--color-purple-fg)",fontWeight:600}}>{u.guaranty}</td>
+                    <td style={{...S.td,textAlign:"center"}}>
+                      <span style={{color:u.unsigned>0?"var(--color-danger-fg)":"var(--color-success-fg)",fontWeight:700}}>
+                        {u.unsigned}
+                      </span>
+                    </td>
+                    <td style={{...S.td,textAlign:"center",color:"var(--color-warning-fg)"}}>{u.forms}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* פעולות מהירות */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={S.card}>
+          <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}}>פעולות מהירות</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {auth.role!=="viewer"&&<button onClick={()=>setAddModal(true)} style={{...S.btn("green"),textAlign:"right"}}>👤 הוסף חייל</button>}
+            {auth.role!=="viewer"&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),textAlign:"right"}}>➕ משיכה / החזרה</button>}
+            <button onClick={()=>setTab("signatures")} style={{...S.btn("wa"),textAlign:"right"}}>💬 חתימות</button>
+            {auth.role!=="viewer"&&<button onClick={()=>setBulkModal(true)} style={{...S.btn("purple"),textAlign:"right"}}>✍️ ערבות מרוכזת</button>}
+          </div>
+        </div>
+        <div style={S.card}>
+          <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}}>טופס יומי</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <button onClick={()=>setDailyType("open")} style={{...S.btn("green"),textAlign:"right"}}>🌅 פתיחת יום</button>
+            <button onClick={()=>setDailyType("close")} style={{...S.btn("orange"),textAlign:"right"}}>🌙 סגירת יום</button>
+          </div>
+          {guarantyStats.covered>0&&(
+            <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-purple-bg)",borderRadius:"var(--radius-sm)",fontSize:"var(--text-xs)",color:"var(--color-purple-fg)"}}>
+              🛡️ {guarantyStats.covered} חיילים בערבות • {guarantyStats.repCount} נציגים
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [db,setDb]=useState(()=>initDB());
   const [tab,setTab]=useState("dashboard");
@@ -3163,6 +3347,30 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     return ids.size;
   },[db.exitForms]);
 
+  // ערבויות - כמה חיילים מכוסים בערבות מרוכזת
+  const guarantyStats=useMemo(()=>{
+    const guarantors=db.bulkGuarantors||{};
+    const allG=Object.values(guarantors);
+    // כמה חיילים ייצגו (ערבו)
+    const repCount=allG.length;
+    // כמה חיילים מכוסים בערבות (remaining = עדיין לא חתמו בעצמם)
+    const coveredIds=new Set();
+    const completedIds=new Set();
+    allG.forEach(g=>{
+      Object.keys(g.soldiers||{}).forEach(id=>coveredIds.add(id));
+      const rem=g.remaining||{};
+      const total=Object.keys(g.soldiers||{}).length;
+      const stillRemaining=Object.keys(rem).length;
+      if(stillRemaining===0) completedIds.add(g.repId);
+    });
+    // חיילים שיש להם ערבות אבל טרם חתמו בעצמם
+    const pendingSelf=soldiers.filter(s=>{
+      const hasGuaranty=Object.values(guarantors).some(g=>g.remaining&&g.remaining[s.id]);
+      return hasGuaranty && !s.signature;
+    }).length;
+    return {repCount, covered:coveredIds.size, pendingSelf, completed:completedIds.size};
+  },[db.bulkGuarantors, soldiers]);
+
   function sendWhatsApp(soldier){
     const phone=phoneToWA(soldier.phone);
     if(!phone){alert("אין מספר טלפון לחייל זה");return;}
@@ -3263,63 +3471,22 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         </div>
 
         {tab==="dashboard"&&(
-          <div>
-            <h2 style={{marginBottom:18,fontSize:"var(--text-xl)",fontWeight:800}}>לוח בקרה</h2>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:18}}>
-              {[
-                {label:"חיילים",val:soldiers.length,color:"var(--color-purple-fg)",k:"all"},
-                {label:"עם נשק",val:withWeapons,color:"var(--color-accent-fg)",k:"withWeapon"},
-                {label:"חתמו",val:signedCount,color:"var(--color-success-fg)",k:"signed"},
-                {label:"טרם חתמו",val:unsigned,color:unsigned>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"unsigned"},
-                {label:"טופס יציאה",val:exitFormsCount,color:"var(--color-warning-fg)",k:"exitform"}
-              ].map(s=>(
-                <div
-                  key={s.label}
-                  onClick={()=>setDashModal(s.k)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${s.label}: ${s.val}. לחץ לפירוט`}
-                  onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&setDashModal(s.k)}
-                  style={{...S.card,textAlign:"center",padding:"var(--space-4) var(--space-2)",marginBottom:0,cursor:"pointer",border:"1px solid var(--color-border-muted)",transition:"border-color var(--transition), box-shadow var(--transition), transform var(--duration-fast)"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=s.color;e.currentTarget.style.boxShadow="var(--shadow)";e.currentTarget.style.transform="translateY(-2px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--color-border-muted)";e.currentTarget.style.boxShadow="";e.currentTarget.style.transform="";}}
-                >
-                  <div style={{fontSize:"var(--text-3xl)",fontWeight:800,color:s.color,lineHeight:1,letterSpacing:"-0.02em"}}>{s.val}</div>
-                  <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:"var(--space-2)",fontWeight:600}}>{s.label}</div>
-                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:"var(--space-1)"}}>לחץ לפירוט ▼</div>
-                </div>
-              ))}
-            </div>
-            {unsigned>0&&(
-              <div style={{...S.card,border:"1px solid rgba(248,81,73,.4)",background:"rgba(248,81,73,.08)",marginBottom:14}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:"var(--text-xl)"}}>⚠️</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,color:"var(--color-danger-fg)"}}>{unsigned} חיילים עם נשק טרם חתמו</div>
-                    <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>שלח לינק חתימה בוואטסאפ</div>
-                  </div>
-                  <button onClick={()=>setTab("signatures")} style={{...S.btn("red"),fontSize:"var(--text-sm)",padding:"6px 12px"}}>ניהול</button>
-                </div>
-              </div>
-            )}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div style={S.card}>
-                <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:10}}>פעולות מהירות</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {auth.role!=="viewer"&&<button onClick={()=>setAddModal(true)} style={{...S.btn("green"),textAlign:"right"}}>👤 הוסף חייל</button>}
-                  {auth.role!=="viewer"&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),textAlign:"right"}}>➕ משיכה / החזרה</button>}
-                  <button onClick={()=>setTab("signatures")} style={{...S.btn("wa"),textAlign:"right"}}>💬 חתימות</button>
-                </div>
-              </div>
-              <div style={S.card}>
-                <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:10}}>טופס יומי</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  <button onClick={()=>setDailyType("open")} style={{...S.btn("green"),textAlign:"right"}}>🌅 פתיחת יום</button>
-                  <button onClick={()=>setDailyType("close")} style={{...S.btn("orange"),textAlign:"right"}}>🌙 סגירת יום</button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DashboardView
+            soldiers={soldiers}
+            db={db}
+            auth={auth}
+            withWeapons={withWeapons}
+            signedCount={signedCount}
+            unsigned={unsigned}
+            exitFormsCount={exitFormsCount}
+            guarantyStats={guarantyStats}
+            setDashModal={setDashModal}
+            setTab={setTab}
+            setAddModal={setAddModal}
+            setQuickModal={setQuickModal}
+            setDailyType={setDailyType}
+            setBulkModal={setBulkModal}
+          />
         )}
 
         {tab==="soldiers"&&(
@@ -7090,7 +7257,9 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
       remaining:remainingObj,
     };
     const ndb={...db,bulkGuarantors:newGuarantors};
+    saveDB(ndb);
     onSave(ndb);
+    logAction("ערבות_מרוכזת", `${repSearch} ערב על ${targetSoldiers.length} חיילים`, repSearch);
   }
 
   return (
