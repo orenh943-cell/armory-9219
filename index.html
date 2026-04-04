@@ -3017,6 +3017,71 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
     </div>
   );
 }
+function printRepReport(rep){
+  const now = new Date().toLocaleDateString("he-IL");
+  const pct = rep.total>0 ? Math.round(rep.signed/rep.total*100) : 100;
+  const barColor = pct===100?"#2ea043":pct>=50?"#0969da":"#d73a49";
+
+  let remRows = "";
+  rep.remainingDetails.forEach(function(sol){
+    let wRows = "";
+    sol.weapons.forEach(function(w){
+      wRows += "<tr><td>"+(w.isWep?"🔫":"🎽")+" "+w.wepName+"</td><td style='font-family:monospace'>"+(w.serial||"—")+"</td><td style='color:#666'>"+(w.makat||"—")+"</td></tr>";
+    });
+    remRows += "<tr style='background:#fff0f0'><td colspan='3' style='font-weight:700;padding:6px 8px;border-top:2px solid #eee'>"+sol.name+" — פלוגה "+sol.unit+"</td></tr>"+wRows;
+  });
+
+  let sigRows = rep.signedDetails.map(function(s){
+    return "<span style='display:inline-block;background:#e6f4ea;border:1px solid #2ea043;border-radius:20px;padding:2px 10px;margin:2px;font-size:12px'>✓ "+s.name+"</span>";
+  }).join("");
+
+  let wepSummary = "";
+  rep.wepSorted.forEach(function(e){
+    wepSummary += "<span style='display:inline-block;background:#fff3cd;border:1px solid #ffc107;border-radius:20px;padding:2px 10px;margin:2px;font-size:12px'>"+(e[1].isWep?"🔫":"🎽")+" "+e[0]+" ×"+e[1].n+"</span>";
+  });
+
+  const sigImg = rep.sigData ? "<img src='"+rep.sigData+"' style='height:50px;border:1px solid #ccc;border-radius:4px;background:#fff'/>" : "<span style='color:#999'>אין חתימה</span>";
+
+  const html = "<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'>"
+    +"<title>דוח ערבות — "+rep.repName+" — "+now+"</title>"
+    +"<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;direction:rtl;padding:24px;font-size:13px;color:#1a1a1a}"
+    +"h1{font-size:20px;margin-bottom:4px}h2{font-size:14px;font-weight:700;margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid #eee}"
+    +".header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding:12px 16px;background:#f8f8f8;border:1px solid #ddd;border-radius:8px}"
+    +".meta{font-size:11px;color:#666;margin-top:4px}"
+    +".prog{height:8px;background:#e0e0e0;border-radius:4px;margin:6px 0}"
+    +".prog-fill{height:100%;border-radius:4px}"
+    +"table{width:100%;border-collapse:collapse;margin-bottom:8px}"
+    +"th{background:#f0f0f0;padding:6px 8px;text-align:right;font-size:12px;border:1px solid #ddd}"
+    +"td{padding:4px 8px;border:1px solid #eee;font-size:12px}"
+    +".empty{color:#999;font-style:italic;padding:8px}"
+    +"@media print{.noprint{display:none}}"
+    +"</style></head><body>"
+    +"<div class='header'>"
+    +"<div><h1>דוח ערבות מרוכזת</h1><div class='meta'>נציג: <b>"+rep.repName+"</b>"+(rep.unit?" | פלוגה "+rep.unit:"")+" | "+now+"</div>"
+    +"<div class='meta'>ערב על "+rep.total+" חיילים | חתמו "+rep.signed+" | נותרו "+rep.remaining+"</div>"
+    +"<div class='prog'><div class='prog-fill' style='width:"+pct+"%;background:"+barColor+"'></div></div>"
+    +"<div class='meta'>"+pct+"% הושלם"+(rep.signedAt?" | נחתם: "+rep.signedAt:"")+"</div></div>"
+    +"<div>"+sigImg+"<div class='meta' style='margin-top:4px'>חתימת הנציג</div></div>"
+    +"</div>"
+    +(rep.remaining>0
+      ? "<h2 style='color:#d73a49'>⏳ טרם חתמו ("+rep.remaining+")</h2>"
+        +"<table><thead><tr><th>נשק / ציוד</th><th>סידורי</th><th>מק"ט</th></tr></thead><tbody>"
+        +remRows
+        +"</tbody></table>"
+        +(wepSummary ? "<div style='margin:8px 0'><b style='font-size:12px'>סיכום ציוד שטרם חזר: </b>"+wepSummary+"</div>" : "")
+      : "<div style='padding:12px;background:#e6f4ea;border:1px solid #2ea043;border-radius:6px;color:#1a7f37;font-weight:700;margin:12px 0'>✅ כל החיילים חתמו!</div>"
+    )
+    +"<h2 style='color:#2ea043'>✅ חתמו ("+rep.signed+")</h2>"
+    +"<div style='padding:8px 0'>"+(sigRows||"<span class='empty'>אף אחד עדיין לא חתם</span>")+"</div>"
+    +"<div style='margin-top:20px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#999'>גדוד 9219 מוריה | הופק: "+now+"</div>"
+    +"<button class='noprint' onclick='window.print()' style='margin-top:16px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>🖨️ הדפס</button>"
+    +"</body></html>";
+
+  const w = window.open("","_blank","width=800,height=700");
+  w.document.write(html);
+  w.document.close();
+}
+
 function buildGuarantorReport(repList, totDone, totRem, totSig){
   const now=new Date().toLocaleDateString("he-IL");
   let body="";
@@ -3114,6 +3179,30 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     const ndb={...db,bulkGuarantors:ng};saveDB(ndb);setDb(ndb);
   }
 
+  function creditSoldier(repKey, soldierId, soldierName){
+    if(!window.confirm("לזכות את "+soldierName+"? הציוד שלו יוסר מרשימת הנותרים."))return;
+    const g = db.bulkGuarantors?.[repKey];
+    if(!g) return;
+    const newRemaining = {...(g.remaining||{})};
+    delete newRemaining[soldierId];
+    const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:newRemaining}};
+    const ndb = {...db,bulkGuarantors:ng};
+    saveDB(ndb); setDb(ndb);
+    logAction("זיכוי_ערב", soldierName+" זוכה מערבות "+g.repName, auth?.name||"מערכת");
+  }
+
+  function creditAll(repKey){
+    const g = db.bulkGuarantors?.[repKey];
+    if(!g) return;
+    const remaining = Object.keys(g.remaining||{});
+    if(!remaining.length) return;
+    if(!window.confirm("לזכות את כל "+remaining.length+" החיילים הנותרים? הם יוסרו מהרשימה."))return;
+    const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:{}}};
+    const ndb = {...db,bulkGuarantors:ng};
+    saveDB(ndb); setDb(ndb);
+    logAction("זיכוי_ערב_מלא", "כל החיילים זוכו מערבות "+g.repName, auth?.name||"מערכת");
+  }
+
   const summaryCards=[
     {l:"נציגים",v:repList.length,c:"var(--color-accent-fg)"},
     {l:"הושלמו",v:totDone,c:"var(--color-success-fg)"},
@@ -3191,13 +3280,15 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
             </div>}
             <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
               <button onClick={()=>setExpanded(isExp?null:rep.key)} style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>{isExp?"▲ פחות":"▼ פירוט"}</button>
+              <button onClick={()=>printRepReport(rep)} style={{...S.btn("blue"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>🖨️ דוח</button>
+              {rep.remaining>0&&<button onClick={()=>creditAll(rep.key)} style={{...S.btn("green"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>✅ זכה הכל</button>}
               {auth.role==="admin"&&<button onClick={()=>del(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
             </div>
             {isExp&&<div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
               {rep.remainingDetails.map(sol=><div key={sol.id} style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
-                <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:3,display:"flex",justifyContent:"space-between"}}>
-                  <span>{sol.name}</span>
-                  <Badge color="orange" small>{sol.unit}</Badge>
+                <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span>{sol.name} <span style={{fontWeight:400,color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>פלוגה {sol.unit}</span></span>
+                  <button onClick={()=>creditSoldier(rep.key,sol.id,sol.name)} style={{...S.btn("green"),padding:"2px 10px",fontSize:"var(--text-xs)",minHeight:24}}>✅ זכה</button>
                 </div>
                 {sol.weapons.length>0
                   ?<div>{sol.weapons.map((w,wi)=><div key={wi} style={{display:"flex",gap:5,fontSize:"var(--text-xs)",padding:"1px 0"}}>
