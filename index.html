@@ -3016,517 +3016,212 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
     </div>
   );
 }
-
 // =================== GUARANTORS TAB ===================
 function GuarantorsTab({db, setDb, soldiers, auth}){
   const [search, setSearch] = React.useState("");
   const [expandedRep, setExpandedRep] = React.useState(null);
   const [statusFilter, setStatusFilter] = React.useState("הכל");
+  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
 
-  const guarantors = db.bulkGuarantors || {};
-  const allSoldiers = [...Object.values(db.customSoldiers||{}), ...soldiers];
-
-  // Build rich guarantor records
   const repList = React.useMemo(()=>{
-    return Object.entries(guarantors).map(([key, g])=>{
-      const repSoldier = allSoldiers.find(s=>s.id===g.repId);
-      const soldierIds = Object.keys(g.soldiers||{});
-      const remainingIds = Object.keys(g.remaining||{});
-      const signedIds = soldierIds.filter(id=>!g.remaining?.[id]);
-
-      // For each remaining soldier - what weapons do they have?
-      const remainingDetails = remainingIds.map(id=>{
-        const sol = allSoldiers.find(s=>s.id===id);
-        const assigned = (sol?.assigned) || db.assignments?.[id] || {};
-        const weapons = Object.entries(assigned)
-          .filter(([k,v]) => k && v !== undefined && v !== null && v !== 0)
-          .map(([wepName, serialRaw])=>{
-            // Parse serial - can be string, number, boolean, or object
-            let serialNum = null;
-            if(typeof serialRaw === "string" && serialRaw.trim() && serialRaw !== "1") {
-              serialNum = serialRaw.trim();
-            } else if(typeof serialRaw === "number" && serialRaw > 1) {
-              serialNum = String(serialRaw);
-            } else if(typeof serialRaw === "object" && serialRaw?.serial) {
-              serialNum = String(serialRaw.serial);
-            }
-            // Try to find in ALL_SERIALS for makat
-            const serialData = ALL_SERIALS.find(s=>
-              s.name===wepName && (serialNum ? String(s.serial)===serialNum : true)
-            );
-            const isMainWeapon = WEAPON_KEYS.includes(wepName);
-            return {
-              wepName,
-              serial: serialNum || (serialData?.serial ? String(serialData.serial) : null),
-              makat: serialData?.makat || null,
-              isMainWeapon,
-              family: isMainWeapon ? "נשק" : "ציוד אישי"
-            };
-          })
-          .filter(w => w.wepName); // remove empty
-        return {id, name: sol?.name||id, unit: sol?.unit||"?", weapons};
-      });
-
-      const signedDetails = signedIds.map(id=>{
-        const sol = allSoldiers.find(s=>s.id===id);
-        return {id, name: sol?.name||id, unit: sol?.unit||"?"};
-      });
-
-      // Group remaining by weapon family
-      const weaponSummary = {};
-      remainingDetails.forEach(({weapons})=>{
-        weapons.forEach(({wepName, serial, isMainWeapon})=>{
-          if(!weaponSummary[wepName]) weaponSummary[wepName] = {serials:[], isMainWeapon};
-          weaponSummary[wepName].serials.push(serial||null);
+    const gMap = db.bulkGuarantors||{};
+    return Object.entries(gMap).map(([key,g])=>{
+      const soldierIds=Object.keys(g.soldiers||{});
+      const remainingIds=Object.keys(g.remaining||{});
+      const signedIds=soldierIds.filter(id=>!g.remaining?.[id]);
+      const remainingDetails=remainingIds.map(id=>{
+        const sol=allSols.find(s=>s.id===id);
+        const asgn=db.assignments?.[id]??sol?.assigned??{};
+        const weapons=Object.entries(asgn).filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false).map(([wepName,sr])=>{
+          let serial=null;
+          if(typeof sr==="string"&&sr.trim()&&sr!=="1") serial=sr.trim();
+          else if(typeof sr==="number"&&sr>1) serial=String(sr);
+          const sd=ALL_SERIALS.find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
+          return {wepName,serial:serial||(sd?.serial?String(sd.serial):null),makat:sd?.makat||null,isWep:WEAPON_KEYS.includes(wepName)};
         });
+        return {id,name:sol?.name||id,unit:sol?.unit||"?",weapons};
       });
-      // Sort: main weapons first
-      const weaponSummarySorted = Object.entries(weaponSummary)
-        .sort(([,a],[,b]) => (b.isMainWeapon?1:0) - (a.isMainWeapon?1:0));
+      const signedDetails=signedIds.map(id=>{const sol=allSols.find(s=>s.id===id);return {id,name:sol?.name||id};});
+      const wepSum={};
+      remainingDetails.forEach(function(r){r.weapons.forEach(function(w){if(!wepSum[w.wepName])wepSum[w.wepName]={n:0,serials:[],isWep:w.isWep};wepSum[w.wepName].n++;wepSum[w.wepName].serials.push(w.serial);});});
+      const wepSumSorted=Object.entries(wepSum).sort(([,a],[,b])=>(b.isWep?1:0)-(a.isWep?1:0));
+      return {key,repName:g.repName||g.repId,unit:g.unit||"",signedAt:g.signedAt||"",
+        total:soldierIds.length,signed:signedIds.length,remaining:remainingIds.length,
+        remainingDetails,signedDetails,wepSumSorted,sigData:g.sigData,done:remainingIds.length===0};
+    }).sort((a,b)=>a.done===b.done?b.remaining-a.remaining:a.done?1:-1);
+  },[db,allSols]);
 
-      return {
-        key, repId: g.repId, repName: g.repName||g.repId,
-        unit: g.unit||"?", signedAt: g.signedAt,
-        totalCount: soldierIds.length,
-        signedCount: signedIds.length,
-        remainingCount: remainingIds.length,
-        remainingDetails,
-        signedDetails,
-        weaponSummary,
-        weaponSummarySorted,
-        sigData: g.sigData,
-        isDone: remainingIds.length === 0,
-        repSoldier
-      };
-    }).sort((a,b)=>{
-      // Done at bottom, then sort by remaining count descending
-      if(a.isDone !== b.isDone) return a.isDone ? 1 : -1;
-      return b.remainingCount - a.remainingCount;
-    });
-  }, [guarantors, allSoldiers, db.assignments]);
+  const totRem=repList.reduce((s,r)=>s+r.remaining,0);
+  const totSig=repList.reduce((s,r)=>s+r.signed,0);
+  const totDone=repList.filter(r=>r.done).length;
 
-  const filtered = search.trim()
-    ? repList.filter(r=>
-        r.repName.includes(search) ||
-        r.unit.includes(search) ||
-        r.remainingDetails.some(s=>s.name.includes(search))
-      )
-    : repList;
-
-  const displayList = filtered.filter(r=>{
-    if(statusFilter==="פעיל") return !r.isDone;
-    if(statusFilter==="הושלם") return r.isDone;
+  const shown=repList.filter(r=>{
+    if(statusFilter==="פעיל"&&r.done) return false;
+    if(statusFilter==="הושלם"&&!r.done) return false;
+    if(search.trim()&&!r.repName.includes(search)&&!r.unit.includes(search)&&!r.remainingDetails.some(s=>s.name.includes(search))) return false;
     return true;
   });
 
-  const totalRemaining = repList.reduce((s,r)=>s+r.remainingCount, 0);
-  const totalSigned = repList.reduce((s,r)=>s+r.signedCount, 0);
-  const totalReps = repList.length;
-  const doneReps = repList.filter(r=>r.isDone).length;
-
-  function deleteGuarantor(key){
-    if(!window.confirm("למחוק ערבות זו לצמיתות?")) return;
-    const ng = {...(db.bulkGuarantors||{})};
+  function delGuarantor(key){
+    if(!window.confirm("למחוק ערבות זו?")) return;
+    const ng={...(db.bulkGuarantors||{})};
     delete ng[key];
-    const ndb = {...db, bulkGuarantors: ng};
+    const ndb={...db,bulkGuarantors:ng};
     saveDB(ndb); setDb(ndb);
-    logAction("מחיקת_ערבות", `נמחקה ערבות של ${repList.find(r=>r.key===key)?.repName}`, auth?.name||"מערכת");
   }
 
-  function downloadGuarantorReport(){
-    const now = new Date().toLocaleDateString("he-IL");
-    const totalRemaining2 = repList.reduce((s,r)=>s+r.remainingCount, 0);
-    const totalSigned2 = repList.reduce((s,r)=>s+r.signedCount, 0);
-
-    // Build HTML using string concatenation to avoid nested template literal issues
-    const css = [
-      "* { box-sizing: border-box; margin: 0; padding: 0; }",
-      "body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; font-size: 13px; color: #1a1a1a; }",
-      "h1 { font-size: 18px; margin-bottom: 4px; }",
-      ".meta { color: #666; font-size: 11px; margin-bottom: 20px; }",
-      ".summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }",
-      ".stat { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 10px 16px; text-align: center; }",
-      ".stat .val { font-size: 22px; font-weight: 800; }",
-      ".stat .lbl { font-size: 11px; color: #666; }",
-      ".rep-block { border: 2px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }",
-      ".rep-block.done { border-color: #2ea043; opacity: 0.8; }",
-      ".rep-header { background: #1a1a2e; color: #fff; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }",
-      ".rep-header.done { background: #1a3628; }",
-      ".rep-name { font-weight: 800; font-size: 14px; }",
-      ".rep-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }",
-      ".rep-body { padding: 12px 14px; }",
-      ".grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }",
-      ".section-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }",
-      ".danger { color: #d73a49; }",
-      ".success-color { color: #2ea043; }",
-      ".soldier-row { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; background: #fafafa; }",
-      ".soldier-name { font-weight: 700; font-size: 12px; }",
-      ".weapon-item { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 2px 0; border-bottom: 1px dashed #eee; }",
-      ".weapon-name { font-weight: 700; min-width: 110px; }",
-      ".weapon-serial { font-family: monospace; color: #555; }",
-      ".weapon-count { background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; padding: 1px 5px; font-weight: 700; }",
-      ".summary-box { background: #fff0f0; border: 1px solid #f85149; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }",
-      ".signed-list { display: flex; flex-wrap: wrap; gap: 5px; }",
-      ".signed-badge { background: #e6f4ea; border: 1px solid #2ea043; border-radius: 20px; padding: 2px 8px; font-size: 11px; color: #1a7f37; }",
-      ".progress-bar { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 4px 0; }",
-      ".progress-fill { height: 100%; border-radius: 4px; }",
-      "@media print { .no-print { display: none; } }"
-    ].join("\n");
-
-    function buildRepHtml(rep) {
-      const pct = rep.totalCount > 0 ? Math.round(rep.signedCount / rep.totalCount * 100) : 100;
-      const barColor = pct===100 ? "#2ea043" : pct>=50 ? "#0969da" : "#d73a49";
-      const doneClass = rep.isDone ? " done" : "";
-
-      // Build remaining soldiers HTML
-      let remainingHtml = "";
-      if (rep.remainingDetails.length === 0) {
-        remainingHtml = "<div style='color:#2ea043;font-size:12px'>כולם חתמו ✅</div>";
-      } else {
-        rep.remainingDetails.forEach(function(sol) {
-          let weaponRows = "";
-          sol.weapons.forEach(function(w) {
-            const icon = w.isMainWeapon ? "🔫" : "🎽";
-            const serial = w.serial ? " <span class='weapon-serial'>סידורי: " + w.serial + "</span>" : "";
-            const makat = w.makat ? " <span style='color:#888;font-size:10px'>מק׳: " + w.makat + "</span>" : "";
-            weaponRows += "<div class='weapon-item'><span class='weapon-name'>" + icon + " " + w.wepName + "</span>" + serial + makat + "</div>";
-          });
-          if (!weaponRows) weaponRows = "<div style='color:#999;font-size:11px'>אין ציוד</div>";
-          remainingHtml += "<div class='soldier-row'><div class='soldier-name'>" + sol.name +
-            " <span style='font-weight:400;color:#666;font-size:11px'>פלוגה " + sol.unit + "</span></div>" +
-            weaponRows + "</div>";
-        });
-      }
-
-      // Build weapon summary HTML
-      let summaryHtml = "";
-      if (rep.weaponSummarySorted && rep.weaponSummarySorted.length > 0) {
-        let rows = "";
-        rep.weaponSummarySorted.forEach(function(entry) {
-          const wep = entry[0];
-          const data = entry[1];
-          const icon = data.isMainWeapon ? "🔫" : "🎽";
-          const serials = data.serials.filter(Boolean).join(" | ");
-          rows += "<div class='weapon-item'><span class='weapon-name'>" + icon + " " + wep + "</span>" +
-            "<span class='weapon-count'>" + data.serials.length + " יח׳</span>" +
-            "<span class='weapon-serial'>" + serials + "</span></div>";
-        });
-        summaryHtml = "<div class='summary-box'><div style='font-weight:700;font-size:11px;color:#d73a49;margin-bottom:5px'>📊 סיכום ציוד שטרם חזר:</div>" + rows + "</div>";
-      }
-
-      // Build signed list
-      let signedHtml = "";
-      if (rep.signedDetails.length === 0) {
-        signedHtml = "<span style='color:#666;font-size:12px'>אף אחד עדיין לא חתם</span>";
-      } else {
-        rep.signedDetails.forEach(function(s) {
-          signedHtml += "<span class='signed-badge'>✓ " + s.name + "</span>";
-        });
-      }
-
-      return "<div class='rep-block" + doneClass + "'>" +
-        "<div class='rep-header" + doneClass + "'>" +
-          "<div>" +
-            "<div class='rep-name'>" + (rep.isDone ? "✅ " : "") + rep.repName + (rep.unit ? " — פלוגה " + rep.unit : "") + "</div>" +
-            "<div class='rep-meta'>ערב על " + rep.totalCount + " חיילים • חתמו " + rep.signedCount + "/" + rep.totalCount + " • " + (rep.signedAt||"") + "</div>" +
-          "</div>" +
-          "<div style='text-align:left;min-width:100px'>" +
-            "<div class='progress-bar'><div class='progress-fill' style='width:" + pct + "%;background:" + barColor + "'></div></div>" +
-            "<div style='font-size:11px;color:#ccc;text-align:center'>" + pct + "% הושלם</div>" +
-          "</div>" +
-        "</div>" +
-        "<div class='rep-body'>" +
-          "<div class='grid2'>" +
-            "<div>" +
-              "<div class='section-title danger'>⏳ טרם חתמו (" + rep.remainingCount + ")</div>" +
-              remainingHtml + summaryHtml +
-            "</div>" +
-            "<div>" +
-              "<div class='section-title success-color'>✅ חתמו (" + rep.signedCount + ")</div>" +
-              "<div class='signed-list'>" + signedHtml + "</div>" +
-            "</div>" +
-          "</div>" +
-        "</div>" +
-      "</div>";
-    }
-
-    let repsHtml = "";
-    repList.forEach(function(rep) { repsHtml += buildRepHtml(rep); });
-
-    const html = "<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'>" +
-      "<title>דוח יתרות ערבויות — " + now + "</title>" +
-      "<style>" + css + "</style></head><body>" +
-      "<h1>🛡️ דוח יתרות ערבויות מרוכזות</h1>" +
-      "<div class='meta'>הופק: " + now + " | גדוד 9219 מוריה</div>" +
-      "<div class='summary'>" +
-        "<div class='stat'><div class='val'>" + repList.length + "</div><div class='lbl'>נציגים</div></div>" +
-        "<div class='stat'><div class='val' style='color:#2ea043'>" + repList.filter(function(r){return r.isDone;}).length + "</div><div class='lbl'>הושלמו</div></div>" +
-        "<div class='stat'><div class='val' style='color:#d73a49'>" + totalRemaining2 + "</div><div class='lbl'>טרם חתמו</div></div>" +
-        "<div class='stat'><div class='val' style='color:#2ea043'>" + totalSigned2 + "</div><div class='lbl'>חתמו</div></div>" +
-      "</div>" +
-      repsHtml +
-      "<button class='no-print' onclick='window.print()' style='margin-top:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>🖨️ הדפס</button>" +
-      "</body></html>";
-
-    const blob = new Blob([html], {type: "text/html;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ערבויות_יתרות_" + now.replace(/\//g, "-") + ".html";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  function dlReport(){
+    const now=new Date().toLocaleDateString("he-IL");
+    let body="";
+    repList.forEach(function(rep){
+      const pct=rep.total>0?Math.round(rep.signed/rep.total*100):100;
+      const bc=pct===100?"#2ea043":pct>=50?"#0969da":"#d73a49";
+      let rHtml="";
+      rep.remainingDetails.forEach(function(sol){
+        let wHtml="";
+        sol.weapons.forEach(function(w){wHtml+="<div style='font-size:11px'>"+(w.isWep?"🔫":"🎽")+" <b>"+w.wepName+"</b>"+(w.serial?" "+w.serial:"")+"</div>";});
+        rHtml+="<div style='margin-bottom:3px;padding:4px;background:#fafafa;border:1px solid #ddd;border-radius:4px'><b>"+sol.name+"</b> "+sol.unit+wHtml+"</div>";
+      });
+      let sHtml="";
+      rep.wepSumSorted.forEach(function(e){sHtml+="<span style='margin-left:5px;font-size:11px'>"+(e[1].isWep?"🔫":"🎽")+" "+e[0]+" x"+e[1].n+"</span>";});
+      let sigHtml=rep.signedDetails.map(function(s){return "<span style='background:#e6f4ea;border:1px solid #2ea043;border-radius:10px;padding:1px 6px;font-size:11px;margin:2px'>"+s.name+"</span>";}).join("");
+      body+="<div style='border:2px solid "+(rep.done?"#2ea043":"#d73a49")+";border-radius:8px;margin-bottom:12px;overflow:hidden'>"
+        +"<div style='background:"+(rep.done?"#1a3628":"#1a1a2e")+";color:#fff;padding:10px 14px;display:flex;justify-content:space-between'>"
+        +"<div><div style='font-weight:800;font-size:14px'>"+(rep.done?"✅ ":"")+rep.repName+(rep.unit?" פלוגה "+rep.unit:"")+"</div>"
+        +"<div style='font-size:11px;color:#8b949e'>"+rep.total+" חיילים | "+rep.signed+"/"+rep.total+" חתמו | "+rep.signedAt+"</div></div>"
+        +"<div style='text-align:center;min-width:70px'><div style='height:5px;background:#333;border-radius:3px'><div style='height:100%;width:"+pct+"%;background:"+bc+";border-radius:3px'></div></div><div style='font-size:10px;color:#ccc;margin-top:2px'>"+pct+"%</div></div></div>"
+        +"<div style='padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px'>"
+        +"<div><b style='font-size:11px;color:#d73a49'>טרם חתמו ("+rep.remaining+")</b><br/>"+(rHtml||"<span style='color:#2ea043;font-size:12px'>כולם חתמו</span>")
+        +(sHtml?"<div style='margin-top:4px;padding:4px;background:#fff0f0;border:1px solid #f85149;border-radius:4px;font-size:11px'><b>ציוד:</b>"+sHtml+"</div>":"")+"</div>"
+        +"<div><b style='font-size:11px;color:#2ea043'>חתמו ("+rep.signed+")</b><br/>"+(sigHtml||"<span style='font-size:11px;color:#666'>אף אחד</span>")+"</div>"
+        +"</div></div>";
+    });
+    const html="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'><title>דוח ערבויות "+now+"</title>"
+      +"<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial;direction:rtl;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}.m{color:#666;font-size:11px;margin-bottom:12px}.s{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.st{background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:6px 12px;text-align:center}.v{font-size:18px;font-weight:800}.l{font-size:10px;color:#666}@media print{.np{display:none}}</style>"
+      +"</head><body><h1>דוח יתרות ערבויות</h1><div class='m'>"+now+" | גדוד 9219 מוריה</div>"
+      +"<div class='s'><div class='st'><div class='v'>"+repList.length+"</div><div class='l'>נציגים</div></div>"
+      +"<div class='st'><div class='v' style='color:#2ea043'>"+totDone+"</div><div class='l'>הושלמו</div></div>"
+      +"<div class='st'><div class='v' style='color:#d73a49'>"+totRem+"</div><div class='l'>טרם חתמו</div></div>"
+      +"<div class='st'><div class='v' style='color:#2ea043'>"+totSig+"</div><div class='l'>חתמו</div></div></div>"
+      +body
+      +"<button class='np' onclick='window.print()' style='margin-top:12px;padding:8px 20px;font-size:13px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>הדפס</button>"
+      +"</body></html>";
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download="ערבויות_"+now.replace(/\//g,"-")+".html";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
-
 
   return (
-    <div style={{maxWidth:1100, margin:"0 auto", padding:"var(--space-4)"}}>
-
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"var(--space-4)",flexWrap:"wrap",gap:8}}>
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"var(--space-4)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>🛡️ ערבויות מרוכזות</h2>
-          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:4}}>
-            {totalReps} נציגים • {totalRemaining} טרם חתמו • {totalSigned} חתמו
-          </div>
+          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:3}}>{repList.length} נציגים • {totRem} טרם חתמו • {totSig} חתמו</div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:4}}>
-            {["הכל","פעיל","הושלם"].map(f=>(
-              <button key={f} onClick={()=>setStatusFilter(f)}
-                style={{...S.btn(statusFilter===f?"blue":"gray"),padding:"4px 12px",fontSize:"var(--text-sm)",minHeight:30,fontWeight:statusFilter===f?700:500}}>
-                {f}
-              </button>
-            ))}
-          </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)}
-            placeholder="🔍 חפש..."
-            style={{...S.input,width:160,marginBottom:0}}/>
-          <button onClick={downloadGuarantorReport}
-            style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}}>
-            📥 דוח יתרות
-          </button>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          {["הכל","פעיל","הושלם"].map(f=>(
+            <button key={f} onClick={()=>setStatusFilter(f)} style={{...S.btn(statusFilter===f?"blue":"gray"),padding:"4px 10px",fontSize:"var(--text-sm)",minHeight:30}}>{f}</button>
+          ))}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חפש..." style={{...S.input,width:140,marginBottom:0}}/>
+          <button onClick={dlReport} style={{...S.btn("purple"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>📥 דוח</button>
         </div>
       </div>
 
-      {/* Summary bar */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8,marginBottom:"var(--space-4)"}}>
-        {[
-          {label:"נציגים",val:totalReps,color:"var(--color-accent-fg)"},
-          {label:"הושלמו",val:doneReps,color:"var(--color-success-fg)"},
-          {label:"בתהליך",val:totalReps-doneReps,color:"var(--color-warning-fg)"},
-          {label:"טרם חתמו",val:totalRemaining,color:totalRemaining>0?"var(--color-danger-fg)":"var(--color-success-fg)"},
-          {label:"חתמו",val:totalSigned,color:"var(--color-success-fg)"},
-        ].map(s=>(
-          <div key={s.label} style={{...S.card,textAlign:"center",padding:"10px 6px",marginBottom:0}}>
-            <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4,fontWeight:600}}>{s.label}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:14}}>
+        {[{l:"נציגים",v:repList.length,c:"var(--color-accent-fg)"},{l:"הושלמו",v:totDone,c:"var(--color-success-fg)"},{l:"בתהליך",v:repList.length-totDone,c:"var(--color-warning-fg)"},{l:"טרם חתמו",v:totRem,c:totRem>0?"var(--color-danger-fg)":"var(--color-success-fg)"},{l:"חתמו",v:totSig,c:"var(--color-success-fg)"}].map(s=>(
+          <div key={s.l} style={{...S.card,textAlign:"center",padding:"10px 4px",marginBottom:0}}>
+            <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:3,fontWeight:600}}>{s.l}</div>
           </div>
         ))}
       </div>
 
-      {/* Empty state */}
-      {displayList.length===0&&(
+      {shown.length===0&&(
         <div style={{...S.card,textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
           <div style={{fontSize:40,marginBottom:8}}>🛡️</div>
-          <div style={{fontWeight:700}}>{search||statusFilter!=="הכל"?"אין תוצאות":"אין ערבויות מרוכזות"}</div>
+          <div style={{fontWeight:700}}>{search||statusFilter!=="הכל"?"אין תוצאות":"אין ערבויות"}</div>
         </div>
       )}
 
-      {/* Cards grid - like the inventory view */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-        {displayList.map(rep=>{
-          const pct = rep.totalCount>0 ? Math.round(rep.signedCount/rep.totalCount*100) : 100;
-          const isExp = expandedRep===rep.key;
-
-          // Color scheme: done=green border, else red if has remaining
-          const borderColor = rep.isDone
-            ? "var(--color-success-fg)"
-            : rep.remainingCount>0 ? "var(--color-danger-fg)" : "var(--color-border-default)";
-          const headerBg = rep.isDone
-            ? "var(--color-success-bg)"
-            : "var(--color-bg-subtle)";
-
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+        {shown.map(rep=>{
+          const pct=rep.total>0?Math.round(rep.signed/rep.total*100):100;
+          const isExp=expandedRep===rep.key;
+          const bc=rep.done?"var(--color-success-fg)":rep.remaining>0?"var(--color-danger-fg)":"var(--color-border-default)";
           return (
-            <div key={rep.key} style={{
-              background:"var(--color-bg-default)",
-              border:"2px solid "+borderColor,
-              borderRadius:"var(--radius-lg)",
-              overflow:"hidden",
-              transition:"box-shadow var(--transition)",
-            }}
-              onMouseEnter={e=>e.currentTarget.style.boxShadow="var(--shadow)"}
-              onMouseLeave={e=>e.currentTarget.style.boxShadow=""}
-            >
-              {/* Card header - big numbers */}
-              <div style={{padding:"14px 16px 10px",background:headerBg,borderBottom:"1px solid var(--color-border-muted)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+            <div key={rep.key} style={{background:"var(--color-bg-default)",border:"2px solid "+bc,borderRadius:"var(--radius-lg)",overflow:"hidden"}}>
+              <div style={{padding:"12px 14px",background:rep.done?"var(--color-success-bg)":"var(--color-bg-subtle)",borderBottom:"1px solid var(--color-border-muted)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                   <div>
-                    {/* Big remaining number */}
-                    <div style={{fontSize:"var(--text-3xl)",fontWeight:800,lineHeight:1,
-                      color:rep.isDone?"var(--color-success-fg)":"var(--color-danger-fg)"}}>
-                      {rep.isDone ? "✓" : rep.remainingCount}
-                    </div>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>
-                      {rep.isDone?"הושלם":"טרם חתמו"}
-                    </div>
+                    <div style={{fontSize:"var(--text-3xl)",fontWeight:800,lineHeight:1,color:rep.done?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{rep.done?"✓":rep.remaining}</div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:1}}>{rep.done?"הושלם":"טרם חתמו"}</div>
                   </div>
-
-                  {/* Signature thumbnail */}
-                  <div style={{textAlign:"left"}}>
-                    {rep.sigData ? (
-                      <img src={rep.sigData} style={{height:40,width:80,objectFit:"contain",
-                        borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)",
-                        background:"#fff"}} alt="חתימה"/>
-                    ) : (
-                      <div style={{width:80,height:40,background:"var(--color-bg-subtle)",
-                        borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)",
-                        display:"flex",alignItems:"center",justifyContent:"center",
-                        fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
-                        ✍️ חתימה
-                      </div>
-                    )}
-                  </div>
+                  {rep.sigData&&<img src={rep.sigData} style={{height:36,width:72,objectFit:"contain",borderRadius:4,border:"1px solid var(--color-border-muted)",background:"#fff"}} alt="חתימה"/>}
                 </div>
-
-                {/* Rep name */}
-                <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:2}}>
-                  {rep.repName}
-                </div>
+                <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:3}}>{rep.repName}</div>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
                   {rep.unit&&<Badge color="blue" small>פלוגה {rep.unit}</Badge>}
-                  <Badge color={rep.isDone?"green":"orange"} small>
-                    {rep.signedCount}/{rep.totalCount} חתמו
-                  </Badge>
+                  <Badge color={rep.done?"green":"orange"} small>{rep.signed}/{rep.total} חתמו</Badge>
                   {rep.signedAt&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{rep.signedAt}</span>}
                 </div>
-
-                {/* Progress bar */}
-                <div style={{height:6,background:"var(--color-bg-elevated)",borderRadius:3,overflow:"hidden"}}>
-                  <div style={{
-                    height:"100%",width:pct+"%",borderRadius:3,
-                    background:pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-danger-fg)",
-                    transition:"width 0.5s"
-                  }}/>
-                </div>
-                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:3,textAlign:"center"}}>
-                  {pct}% הושלם
+                <div style={{height:5,background:"var(--color-bg-elevated)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:pct+"%",borderRadius:3,background:pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-danger-fg)",transition:"width .5s"}}/>
                 </div>
               </div>
 
-              {/* Weapon summary section */}
-              <div style={{padding:"10px 14px"}}>
-                {/* Remaining count chips */}
-                {rep.remainingCount>0&&(
-                  <div style={{marginBottom:8}}>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,marginBottom:4}}>
-                      ⏳ {rep.remainingCount} חיילים טרם חתמו:
-                    </div>
+              <div style={{padding:"10px 12px"}}>
+                {rep.remaining>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,marginBottom:3}}>⏳ {rep.remaining} טרם חתמו:</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                      {rep.remainingDetails.slice(0,5).map(sol=>(
-                        <span key={sol.id} style={{
-                          padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
-                          background:"var(--color-danger-bg)",
-                          border:"1px solid var(--color-danger-fg)",
-                          borderRadius:"var(--radius-2xl)",
-                          color:"var(--color-danger-fg)"
-                        }}>{sol.name}</span>
+                      {rep.remainingDetails.slice(0,6).map(sol=>(
+                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:20,color:"var(--color-danger-fg)"}}>{sol.name}</span>
                       ))}
-                      {rep.remainingDetails.length>5&&(
-                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",padding:"2px 4px"}}>
-                          +{rep.remainingDetails.length-5} עוד
-                        </span>
-                      )}
+                      {rep.remainingDetails.length>6&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>+{rep.remainingDetails.length-6}</span>}
                     </div>
                   </div>
                 )}
-
-                {/* Weapon families outstanding */}
-                {rep.weaponSummarySorted&&rep.weaponSummarySorted.length>0&&(
-                  <div style={{marginBottom:8}}>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700,marginBottom:4}}>
-                      📦 ציוד שטרם חזר:
-                    </div>
+                {rep.wepSumSorted.length>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700,marginBottom:3}}>📦 ציוד שטרם חזר:</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                      {rep.weaponSummarySorted.map(([wep,data])=>(
-                        <span key={wep} style={{
-                          padding:"2px 8px",fontSize:"var(--text-xs)",fontWeight:700,
-                          background:"var(--color-warning-bg)",
-                          border:"1px solid var(--color-warning-fg)",
-                          borderRadius:"var(--radius-2xl)",
-                          color:"var(--color-warning-fg)"
-                        }}>
-                          {data.isMainWeapon?"🔫":"🎽"} {wep} ×{data.serials.length}
-                        </span>
+                      {rep.wepSumSorted.map(([wep,d])=>(
+                        <span key={wep} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:700,background:"var(--color-warning-bg)",border:"1px solid var(--color-warning-fg)",borderRadius:20,color:"var(--color-warning-fg)"}}>{d.isWep?"🔫":"🎽"} {wep} ×{d.n}</span>
                       ))}
                     </div>
                   </div>
                 )}
-
-                {/* Signed chips */}
-                {rep.signedCount>0&&(
-                  <div>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-success-fg)",fontWeight:700,marginBottom:4}}>
-                      ✅ {rep.signedCount} חתמו:
-                    </div>
+                {rep.signed>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-success-fg)",fontWeight:700,marginBottom:3}}>✅ {rep.signed} חתמו:</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                      {rep.signedDetails.slice(0,4).map(sol=>(
-                        <span key={sol.id} style={{
-                          padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
-                          background:"var(--color-success-bg)",
-                          border:"1px solid var(--color-success-fg)",
-                          borderRadius:"var(--radius-2xl)",
-                          color:"var(--color-success-fg)"
-                        }}>✓ {sol.name}</span>
+                      {rep.signedDetails.slice(0,5).map(sol=>(
+                        <span key={sol.id} style={{padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:20,color:"var(--color-success-fg)"}}>✓ {sol.name}</span>
                       ))}
-                      {rep.signedDetails.length>4&&(
-                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",padding:"2px 4px"}}>
-                          +{rep.signedDetails.length-4} עוד
-                        </span>
-                      )}
+                      {rep.signedDetails.length>5&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>+{rep.signedDetails.length-5}</span>}
                     </div>
                   </div>
                 )}
-
-                {/* Expand/collapse for full detail */}
-                <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <button onClick={()=>setExpandedRep(isExp?null:rep.key)}
-                    style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>
-                    {isExp?"▲ פחות":"▼ פירוט מלא"}
-                  </button>
-                  {auth.role==="admin"&&(
-                    <button onClick={()=>deleteGuarantor(rep.key)}
-                      style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>
-                      🗑️
-                    </button>
-                  )}
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                  <button onClick={()=>setExpandedRep(isExp?null:rep.key)} style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>{isExp?"▲ פחות":"▼ פירוט"}</button>
+                  {auth.role==="admin"&&<button onClick={()=>delGuarantor(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
                 </div>
-
-                {/* Full detail - expanded */}
                 {isExp&&(
-                  <div style={{marginTop:10,borderTop:"1px solid var(--color-border-muted)",paddingTop:10}}>
+                  <div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
                     {rep.remainingDetails.map(sol=>(
-                      <div key={sol.id} style={{marginBottom:8,padding:"8px 10px",
-                        background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",
-                        border:"1px solid var(--color-border-muted)"}}>
-                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4,
-                          display:"flex",justifyContent:"space-between"}}>
+                      <div key={sol.id} style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
+                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:3,display:"flex",justifyContent:"space-between"}}>
                           <span>{sol.name}</span>
-                          <Badge color="orange" small>פלוגה {sol.unit}</Badge>
+                          <Badge color="orange" small>{sol.unit}</Badge>
                         </div>
                         {sol.weapons.length>0?(
-                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                          <div>
                             {sol.weapons.map((w,wi)=>(
-                              <div key={wi} style={{display:"flex",alignItems:"center",gap:6,
-                                fontSize:"var(--text-xs)",padding:"2px 6px",
-                                background:"var(--color-bg-default)",
-                                borderRadius:"var(--radius-sm)"}}>
-                                <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>
-                                  {w.isMainWeapon?"🔫":"🎽"} {w.wepName}
-                                </span>
-                                {w.serial&&<span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>
-                                  {w.serial}
-                                </span>}
+                              <div key={wi} style={{display:"flex",gap:5,fontSize:"var(--text-xs)",padding:"1px 0"}}>
+                                <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>{w.isWep?"🔫":"🎽"} {w.wepName}</span>
+                                {w.serial&&<span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>{w.serial}</span>}
                                 {w.makat&&<span style={{color:"var(--color-text-muted)"}}>מק׳ {w.makat}</span>}
                               </div>
                             ))}
@@ -3547,7 +3242,6 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
   </div>
   );
 }
-
 
 
 // =================== DASHBOARD VIEW ===================
@@ -8156,7 +7850,5 @@ function App(){
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
-</body>
-</html>cript>
 </body>
 </html>
