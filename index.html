@@ -3136,6 +3136,176 @@ function buildGuarantorReport(repList, totDone, totRem, totSig){
 }
 
 
+// =================== RESET TAB ===================
+const RESET_PASSWORD = "9219reset";
+
+function ResetTab({db, setDb, auth}){
+  const [phase, setPhase] = React.useState("menu"); // menu | confirm | backup | restore
+  const [pass, setPass] = React.useState("");
+  const [passErr, setPassErr] = React.useState("");
+  const [backupData, setBackupData] = React.useState(null);
+  const [restoreInput, setRestoreInput] = React.useState("");
+  const [restoreErr, setRestoreErr] = React.useState("");
+  const [done, setDone] = React.useState("");
+
+  function verifyPass(cb){
+    if(pass === RESET_PASSWORD){ setPassErr(""); cb(); }
+    else { setPassErr("סיסמה שגויה"); }
+  }
+
+  function doReset(){
+    verifyPass(()=>{
+      // Save backup before reset
+      const backup = JSON.stringify(db, null, 2);
+      setBackupData(backup);
+
+      // Keep only makats/names from armoryMaster & ALL_SERIALS structure
+      // Reset: assignments, signatures, bulkGuarantors, exitForms, actLog
+      // Keep: customSoldiers, armoryMaster, unitItems, cabinets, weaponLocations, userPerms, dynamicUsers, inspectionFamilies
+      const ndb = {
+        ...db,
+        assignments: {},
+        signatures: {},
+        bulkGuarantors: {},
+        exitForms: {},
+        actLog: {},
+        brokenItems: [],
+        inspections: {},
+        loginLog: {},
+        unitItems: {},
+        armoryMaster: {},
+        weaponLocations: {},
+        cabinets: {},
+      };
+      saveDB(ndb);
+      setDb(ndb);
+      setPhase("backup");
+      logAction("איפוס_מלאי", "איפוס מלאי מלא בוצע ע"י "+auth.name, auth.name);
+    });
+  }
+
+  function downloadBackup(){
+    if(!backupData) return;
+    const blob = new Blob([backupData], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const d = new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
+    a.download = "backup_armory_" + d + ".json";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function doRestore(){
+    try {
+      const parsed = JSON.parse(restoreInput);
+      if(!parsed || typeof parsed !== "object") throw new Error("invalid");
+      verifyPass(()=>{
+        saveDB(parsed);
+        setDb(parsed);
+        setRestoreErr("");
+        setDone("✅ השחזור הושלם בהצלחה!");
+        logAction("שחזור_מלאי", "שחזור מלאי בוצע ע"י "+auth.name, auth.name);
+        setPhase("menu");
+        setTimeout(()=>setDone(""), 4000);
+      });
+    } catch(e) {
+      setRestoreErr("קובץ לא תקין — ודא שזהו קובץ גיבוי JSON תקין");
+    }
+  }
+
+  return <div style={{maxWidth:600, margin:"0 auto", padding:24}}>
+    <h2 style={{fontSize:"var(--text-xl)",fontWeight:800,marginBottom:6,color:"var(--color-danger-fg)"}}>⚠️ איפוס מלאי</h2>
+    <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:20}}>
+      כלי ניהול — גישה למנהל מערכת בלבד
+    </div>
+
+    {done&&<div style={{padding:"12px 16px",background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:"var(--radius-md)",marginBottom:16,fontWeight:700,color:"var(--color-success-fg)"}}>{done}</div>}
+
+    {phase==="menu"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+      <div style={{...S.card,border:"1px solid var(--color-danger-fg)",background:"var(--color-danger-bg)"}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-danger-fg)",marginBottom:8}}>🔄 איפוס מלאי מלא</div>
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:12}}>
+          מאפס: שיוכי נשק, חתימות, ערבויות, טפסי יציאה, לוג, <b>מלאי + כמויות + סידוריים + ארונות</b><br/>
+          <b>שומר:</b> רשימת חיילים, שמות מק"טים סטטיים, הרשאות
+        </div>
+        <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
+      </div>
+
+      <div style={{...S.card}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:8}}>♻️ שחזור מגיבוי</div>
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:12}}>
+          שחזור מקובץ JSON שנוצר בעת האיפוס
+        </div>
+        <button onClick={()=>setPhase("restore")} style={{...S.btn("orange"),width:"100%"}}>📂 שחזר מגיבוי</button>
+      </div>
+
+    </div>}
+
+    {phase==="confirm"&&<div style={{...S.card,border:"1px solid var(--color-danger-fg)"}}>
+      <div style={{fontWeight:800,fontSize:"var(--text-xl)",color:"var(--color-danger-fg)",marginBottom:12,textAlign:"center"}}>⚠️ אישור איפוס</div>
+      <div style={{background:"rgba(248,81,73,.1)",padding:12,borderRadius:"var(--radius-md)",marginBottom:16,fontSize:"var(--text-sm)"}}>
+        <div style={{fontWeight:700,marginBottom:6}}>הפעולה הבאה תמחק לצמיתות:</div>
+        <div>❌ כל שיוכי הנשק לחיילים</div>
+        <div>❌ כל החתימות</div>
+        <div>❌ כל הערבויות המרוכזות</div>
+        <div>❌ כל טפסי היציאה הביתה</div>
+        <div>❌ לוג הפעולות</div>
+        <div>❌ מלאי — כמויות וסידוריים</div>
+        <div>❌ מלאי ארמון + מיקומי נשק + ארונות</div>
+        <div style={{marginTop:8,color:"var(--color-success-fg)",fontWeight:700}}>✅ שומר: רשימת חיילים, שמות מק"טים סטטיים, הרשאות</div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...S.label}}>סיסמת איפוס:</label>
+        <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+          placeholder="הזן סיסמה לאישור"
+          style={{...S.input}}/>
+        {passErr&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginTop:4}}>{passErr}</div>}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={doReset} style={{...S.btn("red"),flex:1}}>✅ אשר איפוס</button>
+        <button onClick={()=>{setPhase("menu");setPass("");setPassErr("");}} style={{...S.btn("gray"),flex:1}}>ביטול</button>
+      </div>
+    </div>}
+
+    {phase==="backup"&&<div style={{...S.card,border:"1px solid var(--color-success-fg)"}}>
+      <div style={{textAlign:"center",fontSize:50,marginBottom:12}}>✅</div>
+      <div style={{textAlign:"center",fontWeight:800,fontSize:"var(--text-xl)",color:"var(--color-success-fg)",marginBottom:8}}>האיפוס הושלם!</div>
+      <div style={{textAlign:"center",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:20}}>
+        הגיבוי נוצר אוטומטית — מומלץ להוריד ולשמור אותו
+      </div>
+      <div style={{display:"flex",gap:8,flexDirection:"column"}}>
+        <button onClick={downloadBackup} style={{...S.btn("purple"),width:"100%",fontSize:"var(--text-base)"}}>⬇️ הורד גיבוי JSON</button>
+        <button onClick={()=>setPhase("menu")} style={{...S.btn("green"),width:"100%"}}>סגור</button>
+      </div>
+    </div>}
+
+    {phase==="restore"&&<div style={{...S.card}}>
+      <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:12}}>♻️ שחזור מגיבוי</div>
+      <div style={{marginBottom:12}}>
+        <label style={{...S.label}}>הדבק כאן את תוכן קובץ הגיבוי (JSON):</label>
+        <textarea value={restoreInput} onChange={e=>setRestoreInput(e.target.value)}
+          placeholder='{"assignments":{}, ...}'
+          style={{...S.input,height:120,fontFamily:"monospace",fontSize:"var(--text-xs)",resize:"vertical"}}/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...S.label}}>סיסמת איפוס לאישור:</label>
+        <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+          placeholder="הזן סיסמה"
+          style={{...S.input}}/>
+        {passErr&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginTop:4}}>{passErr}</div>}
+        {restoreErr&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginTop:4}}>{restoreErr}</div>}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={doRestore} style={{...S.btn("orange"),flex:1}}>♻️ שחזר</button>
+        <button onClick={()=>{setPhase("menu");setPass("");setPassErr("");setRestoreInput("");setRestoreErr("");}} style={{...S.btn("gray"),flex:1}}>ביטול</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+
 // =================== GUARANTORS TAB ===================
 function GuarantorsTab({db,setDb,soldiers,auth}){
   const [search,setSearch]=React.useState("");
@@ -3714,6 +3884,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
     ...(perms.canViewActLog||auth.role==="admin"?[{id:"actlog",label:"לוג תנועות",icon:"📋"}]:[]),
     ...(perms.canViewSignatures!==false?[{id:"guarantors",label:"ערבויות",icon:"🛡️"}]:[]),
+    ...(auth.role==="admin"?[{id:"reset",label:"איפוס",icon:"⚠️"}]:[]),
   ];
 
   function Sidebar(){
@@ -3995,6 +4166,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="guarantors"&&(
           <GuarantorsTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
+        {tab==="reset"&&auth.role==="admin"&&(
+          <ResetTab db={db} setDb={setDb} auth={auth}/>
+        )}
         {tab==="exitform"&&(
           <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
@@ -4259,6 +4433,95 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
+function sendBulkFormWA(repName, repId, unit, soldiers, sigData, db){
+  // Same HTML as download, but opens as a page the user can share/save
+  const dateStr = todayStr();
+  const unitLabel = unit==="הכל" ? "כל הגדוד" : "פלוגה "+unit;
+
+  // Build the same HTML as downloadBulkForm
+  const weaponSums = {};
+  soldiers.forEach(function(sol){
+    const asgn = db.assignments?.[sol.id] ?? sol.assigned ?? {};
+    Object.entries(asgn).forEach(function([k,v]){
+      if(!weaponSums[k]) weaponSums[k] = 0;
+      weaponSums[k]++;
+    });
+  });
+
+  let tableRows = "";
+  Object.entries(weaponSums).forEach(function([name, qty]){
+    tableRows += "<tr><td style='padding:6px 10px;border:1px solid #ccc'>" + name + "</td>"
+      + "<td style='padding:6px 10px;border:1px solid #ccc;text-align:center'>" + qty + "</td></tr>";
+  });
+
+  let soldierList = "";
+  soldiers.forEach(function(sol, i){
+    soldierList += "<tr><td style='padding:5px 8px;border:1px solid #eee'>" + (i+1) + "</td>"
+      + "<td style='padding:5px 8px;border:1px solid #eee'>" + sol.name + "</td>"
+      + "<td style='padding:5px 8px;border:1px solid #eee'>" + sol.id + "</td>"
+      + "<td style='padding:5px 8px;border:1px solid #eee'>" + (sol.unit||"") + "</td></tr>";
+  });
+
+  const sigImg = sigData ? "<img src='" + sigData + "' style='height:60px;border:1px solid #ccc;border-radius:4px;background:#fff'/>" : "<span style='color:#999'>אין חתימה</span>";
+
+  const html = "<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'>"
+    + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    + "<title>ערבות מרוכזת - " + repName + " - " + dateStr + "</title>"
+    + "<style>"
+    + "*{box-sizing:border-box;margin:0;padding:0}"
+    + "body{font-family:Arial,sans-serif;direction:rtl;padding:16px;font-size:13px;max-width:600px;margin:0 auto}"
+    + ".header{background:#1a1a2e;color:#fff;padding:14px 16px;border-radius:8px;margin-bottom:14px}"
+    + ".header h2{font-size:16px;margin-bottom:4px}"
+    + ".header .sub{font-size:12px;color:#aaa}"
+    + ".card{border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:10px}"
+    + ".card h3{font-size:13px;font-weight:700;margin-bottom:8px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:5px}"
+    + "table{width:100%;border-collapse:collapse;margin-top:4px}"
+    + "th{background:#f0f0f0;padding:6px 8px;text-align:right;font-size:12px;border:1px solid #ddd}"
+    + "td{padding:5px 8px;font-size:12px;border:1px solid #eee}"
+    + ".sig-area{text-align:center;padding:10px}"
+    + ".save-btn{display:block;width:100%;padding:14px;background:#1a7f37;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:14px}"
+    + "@media print{.save-btn{display:none}}"
+    + "</style></head><body>"
+    + "<div class='header'>"
+    + "<h2>ערבות מרוכזת — גדוד 9219 מוריה</h2>"
+    + "<div class='sub'>" + unitLabel + " | " + dateStr + "</div>"
+    + "</div>"
+    + "<div class='card'>"
+    + "<h3>פרטי הנציג / הערב</h3>"
+    + "<table><tr><th>שם</th><th>מ.א.</th></tr>"
+    + "<tr><td>" + repName + "</td><td>" + repId + "</td></tr></table>"
+    + "</div>"
+    + "<div class='card'>"
+    + "<h3>חתימת הנציג</h3>"
+    + "<div class='sig-area'>" + sigImg + "</div>"
+    + "</div>"
+    + (tableRows ? "<div class='card'><h3>סיכום ציוד</h3><table><tr><th>אמצעי</th><th>כמות</th></tr>" + tableRows + "</table></div>" : "")
+    + "<div class='card'>"
+    + "<h3>רשימת חיילים (" + soldiers.length + ")</h3>"
+    + "<table><tr><th>#</th><th>שם</th><th>מ.א.</th><th>פלוגה</th></tr>" + soldierList + "</table>"
+    + "</div>"
+    + "<button class='save-btn' onclick='window.print()'>💾 שמור / הדפס</button>"
+    + "<div style='text-align:center;color:#999;font-size:11px;margin-top:10px'>"
+    + "לשמירה בטלפון: לחץ שמור ← PDF ← שמור לקבצים</div>"
+    + "</body></html>";
+
+  const w = window.open("","_blank","width=650,height=800");
+  if(w){
+    w.document.write(html);
+    w.document.close();
+  } else {
+    // Fallback: download as file
+    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ערבות_" + repName + "_" + dateStr.replace(/\//g,"-") + ".html";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+}
+
+
 
 
 
@@ -7636,9 +7899,13 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
           <div style={{fontSize:60,marginBottom:12}}>✅</div>
           <h2 style={{color:"var(--color-success-fg)",marginBottom:8}}>החתימה המרוכזת התקבלה!</h2>
           <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:20}}>{targetSoldiers.length} חיילים סומנו כחתומים בשם {repSearch}</p>
-          <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-            <button onClick={()=>downloadBulkForm(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("purple"),padding:"10px 20px",fontSize:"var(--text-base)"}}>⬇️ הורד שובר מרוכז</button>
+          <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap",marginBottom:12}}>
+            <button onClick={()=>downloadBulkForm(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("purple"),padding:"10px 20px",fontSize:"var(--text-base)"}}>⬇️ הורד שובר</button>
+            <button onClick={()=>sendBulkFormWA(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("wa"),padding:"10px 20px",fontSize:"var(--text-base)"}}> 💬 שלח בוואטסאפ</button>
             <button onClick={onClose} style={{...S.btn("green"),padding:"10px 20px",fontSize:"var(--text-base)"}}>סגור</button>
+          </div>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>
+            הנציג יכול לשמור את השובר למכשיר שלו דרך הוואטסאפ
           </div>
         </div>
       )}
