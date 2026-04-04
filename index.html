@@ -3021,6 +3021,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
 function GuarantorsTab({db, setDb, soldiers, auth}){
   const [search, setSearch] = React.useState("");
   const [expandedRep, setExpandedRep] = React.useState(null);
+  const [statusFilter, setStatusFilter] = React.useState("הכל");
 
   const guarantors = db.bulkGuarantors || {};
   const allSoldiers = [...Object.values(db.customSoldiers||{}), ...soldiers];
@@ -3111,6 +3112,12 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
         r.remainingDetails.some(s=>s.name.includes(search))
       )
     : repList;
+
+  const displayList = filtered.filter(r=>{
+    if(statusFilter==="פעיל") return !r.isDone;
+    if(statusFilter==="הושלם") return r.isDone;
+    return true;
+  });
 
   const totalRemaining = repList.reduce((s,r)=>s+r.remainingCount, 0);
   const totalSigned = repList.reduce((s,r)=>s+r.signedCount, 0);
@@ -3273,19 +3280,28 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
 
 
   return (
-    <div style={{maxWidth:960, margin:"0 auto", padding:"var(--space-4)"}}>
+    <div style={{maxWidth:1100, margin:"0 auto", padding:"var(--space-4)"}}>
+
       {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"var(--space-4)",flexWrap:"wrap",gap:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"var(--space-4)",flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>🛡️ ערבויות מרוכזות</h2>
           <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:4}}>
-            מי ערב על מי, ומה נשאר לחתום
+            {totalReps} נציגים • {totalRemaining} טרם חתמו • {totalSigned} חתמו
           </div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:4}}>
+            {["הכל","פעיל","הושלם"].map(f=>(
+              <button key={f} onClick={()=>setStatusFilter(f)}
+                style={{...S.btn(statusFilter===f?"blue":"gray"),padding:"4px 12px",fontSize:"var(--text-sm)",minHeight:30,fontWeight:statusFilter===f?700:500}}>
+                {f}
+              </button>
+            ))}
+          </div>
           <input value={search} onChange={e=>setSearch(e.target.value)}
-            placeholder="🔍 חפש נציג / חייל..."
-            style={{...S.input,width:200,marginBottom:0}}/>
+            placeholder="🔍 חפש..."
+            style={{...S.input,width:160,marginBottom:0}}/>
           <button onClick={downloadGuarantorReport}
             style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}}>
             📥 דוח יתרות
@@ -3293,218 +3309,245 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:8,marginBottom:"var(--space-4)"}}>
+      {/* Summary bar */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8,marginBottom:"var(--space-4)"}}>
         {[
-          {label:"נציגים",val:totalReps,color:"var(--color-accent-fg)",sub:"ערבו"},
-          {label:"סיימו",val:doneReps,color:"var(--color-success-fg)",sub:"כולם חתמו"},
-          {label:"בתהליך",val:totalReps-doneReps,color:"var(--color-warning-fg)",sub:"ממתין"},
-          {label:"טרם חתמו",val:totalRemaining,color:(totalRemaining>0?"var(--color-danger-fg)":"var(--color-success-fg)"),sub:"חיילים"},
-          {label:"חתמו",val:totalSigned,color:"var(--color-success-fg)",sub:"מתוך ערבות"},
+          {label:"נציגים",val:totalReps,color:"var(--color-accent-fg)"},
+          {label:"הושלמו",val:doneReps,color:"var(--color-success-fg)"},
+          {label:"בתהליך",val:totalReps-doneReps,color:"var(--color-warning-fg)"},
+          {label:"טרם חתמו",val:totalRemaining,color:totalRemaining>0?"var(--color-danger-fg)":"var(--color-success-fg)"},
+          {label:"חתמו",val:totalSigned,color:"var(--color-success-fg)"},
         ].map(s=>(
-          <div key={s.label} style={{...S.card,textAlign:"center",padding:"12px 8px",marginBottom:0}}>
+          <div key={s.label} style={{...S.card,textAlign:"center",padding:"10px 6px",marginBottom:0}}>
             <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
-            <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginTop:4}}>{s.label}</div>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>{s.sub}</div>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4,fontWeight:600}}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Empty state */}
-      {filtered.length===0&&(
+      {displayList.length===0&&(
         <div style={{...S.card,textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
           <div style={{fontSize:40,marginBottom:8}}>🛡️</div>
-          <div style={{fontWeight:700,marginBottom:4}}>
-            {search?"אין תוצאות לחיפוש":"אין ערבויות מרוכזות"}
-          </div>
-          <div style={{fontSize:"var(--text-sm)"}}>
-            {!search&&"לחץ ✍️ ערבות מרוכזת בלוח הבקרה כדי להוסיף"}
-          </div>
+          <div style={{fontWeight:700}}>{search||statusFilter!=="הכל"?"אין תוצאות":"אין ערבויות מרוכזות"}</div>
         </div>
       )}
 
-      {/* Guarantor cards */}
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {filtered.map(rep=>{
-          const isExpanded = expandedRep === rep.key;
-          const pct = rep.totalCount > 0 ? Math.round(rep.signedCount/rep.totalCount*100) : 100;
+      {/* Cards grid - like the inventory view */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+        {displayList.map(rep=>{
+          const pct = rep.totalCount>0 ? Math.round(rep.signedCount/rep.totalCount*100) : 100;
+          const isExp = expandedRep===rep.key;
+
+          // Color scheme: done=green border, else red if has remaining
+          const borderColor = rep.isDone
+            ? "var(--color-success-fg)"
+            : rep.remainingCount>0 ? "var(--color-danger-fg)" : "var(--color-border-default)";
+          const headerBg = rep.isDone
+            ? "var(--color-success-bg)"
+            : "var(--color-bg-subtle)";
 
           return (
-            <div key={rep.key} style={{...S.card,padding:0,overflow:"hidden",
-              border:`1px solid ${rep.isDone?"var(--color-success-fg)":"var(--color-border-default)"}`,
-              opacity:rep.isDone?0.8:1
-            }}>
-              {/* Rep header row */}
-              <div
-                onClick={()=>setExpandedRep(isExpanded?null:rep.key)}
-                style={{padding:"12px 16px",cursor:"pointer",display:"flex",alignItems:"center",
-                  gap:10,flexWrap:"wrap",
-                  background:rep.isDone?"var(--color-success-bg)":"var(--color-bg-default)"}}
-              >
-                {/* Signature thumbnail */}
-                {rep.sigData&&(
-                  <img src={rep.sigData} style={{height:36,width:72,objectFit:"contain",
-                    borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)",
-                    background:"var(--color-bg-default)"}} alt="חתימה"/>
-                )}
-                <div style={{flex:1,minWidth:120}}>
-                  <div style={{fontWeight:800,fontSize:"var(--text-base)",display:"flex",alignItems:"center",gap:6}}>
-                    {rep.isDone&&<span>✅</span>}
-                    {rep.repName}
-                    <Badge color={rep.isDone?"green":"orange"} small>
-                      {rep.isDone?"הושלם":`${rep.remainingCount} נותר`}
-                    </Badge>
-                    {rep.unit&&<Badge color="blue" small>פלוגה {rep.unit}</Badge>}
+            <div key={rep.key} style={{
+              background:"var(--color-bg-default)",
+              border:"2px solid "+borderColor,
+              borderRadius:"var(--radius-lg)",
+              overflow:"hidden",
+              transition:"box-shadow var(--transition)",
+            }}
+              onMouseEnter={e=>e.currentTarget.style.boxShadow="var(--shadow)"}
+              onMouseLeave={e=>e.currentTarget.style.boxShadow=""}
+            >
+              {/* Card header - big numbers */}
+              <div style={{padding:"14px 16px 10px",background:headerBg,borderBottom:"1px solid var(--color-border-muted)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div>
+                    {/* Big remaining number */}
+                    <div style={{fontSize:"var(--text-3xl)",fontWeight:800,lineHeight:1,
+                      color:rep.isDone?"var(--color-success-fg)":"var(--color-danger-fg)"}}>
+                      {rep.isDone ? "✓" : rep.remainingCount}
+                    </div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>
+                      {rep.isDone?"הושלם":"טרם חתמו"}
+                    </div>
                   </div>
-                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>
-                    ערב על {rep.totalCount} חיילים • חתמו {rep.signedCount}/{rep.totalCount} • {rep.signedAt}
+
+                  {/* Signature thumbnail */}
+                  <div style={{textAlign:"left"}}>
+                    {rep.sigData ? (
+                      <img src={rep.sigData} style={{height:40,width:80,objectFit:"contain",
+                        borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)",
+                        background:"#fff"}} alt="חתימה"/>
+                    ) : (
+                      <div style={{width:80,height:40,background:"var(--color-bg-subtle)",
+                        borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)",
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+                        ✍️ חתימה
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                {/* Rep name */}
+                <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:2}}>
+                  {rep.repName}
+                </div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+                  {rep.unit&&<Badge color="blue" small>פלוגה {rep.unit}</Badge>}
+                  <Badge color={rep.isDone?"green":"orange"} small>
+                    {rep.signedCount}/{rep.totalCount} חתמו
+                  </Badge>
+                  {rep.signedAt&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{rep.signedAt}</span>}
                 </div>
 
                 {/* Progress bar */}
-                <div style={{minWidth:120,flex:"0 0 120px"}}>
-                  <div style={{height:6,background:"var(--color-bg-subtle)",borderRadius:3,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:pct+"%",
-                      background:pct===100?"var(--color-success-fg)":"var(--color-accent-fg)",
-                      transition:"width 0.5s",borderRadius:3}}/>
-                  </div>
-                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2,textAlign:"center"}}>
-                    {pct}% הושלם
-                  </div>
+                <div style={{height:6,background:"var(--color-bg-elevated)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{
+                    height:"100%",width:pct+"%",borderRadius:3,
+                    background:pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-danger-fg)",
+                    transition:"width 0.5s"
+                  }}/>
                 </div>
-
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  {auth.role==="admin"&&(
-                    <button onClick={e=>{e.stopPropagation();deleteGuarantor(rep.key);}}
-                      style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:28}}>
-                      🗑️
-                    </button>
-                  )}
-                  <span style={{color:"var(--color-text-muted)",fontSize:16}}>
-                    {isExpanded?"▲":"▼"}
-                  </span>
+                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:3,textAlign:"center"}}>
+                  {pct}% הושלם
                 </div>
               </div>
 
-              {/* Expanded detail */}
-              {isExpanded&&(
-                <div style={{borderTop:"1px solid var(--color-border-muted)",padding:"12px 16px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-
-                    {/* Column 1: Remaining soldiers + weapons */}
-                    <div>
-                      <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8,color:"var(--color-danger-fg)"}}>
-                        ⏳ טרם חתמו ({rep.remainingCount})
-                      </div>
-                      {rep.remainingDetails.length===0?(
-                        <div style={{color:"var(--color-success-fg)",fontSize:"var(--text-sm)",fontWeight:600}}>
-                          ✅ כולם חתמו!
-                        </div>
-                      ):(
-                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                          {rep.remainingDetails.map(sol=>(
-                            <div key={sol.id} style={{padding:"8px 10px",
-                              background:"var(--color-bg-subtle)",
-                              borderRadius:"var(--radius-md)",
-                              border:"1px solid var(--color-border-muted)"}}>
-                              <div style={{fontWeight:700,fontSize:"var(--text-sm)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                                <span>{sol.name}</span>
-                                <Badge color="orange" small>פלוגה {sol.unit}</Badge>
-                              </div>
-                              {sol.weapons.length>0?(
-                                <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:3}}>
-                                  {sol.weapons.map((w,wi)=>(
-                                    <div key={wi} style={{display:"flex",alignItems:"center",gap:6,fontSize:"var(--text-xs)",
-                                      padding:"3px 8px",background:"var(--color-bg-default)",
-                                      borderRadius:"var(--radius-sm)",border:"1px solid var(--color-border-muted)"}}>
-                                      <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>🔫 {w.wepName}</span>
-                                      {w.serial&&<span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>סידורי: {w.serial}</span>}
-                                      {w.makat&&<span style={{color:"var(--color-text-muted)"}}>מק׳: {w.makat}</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              ):(
-                                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:3}}>
-                                  אין נשק משויך
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Weapon summary */}
-                      {rep.weaponSummarySorted&&rep.weaponSummarySorted.length>0&&(
-                        <div style={{marginTop:10,padding:"8px 10px",background:"var(--color-danger-bg)",
-                          borderRadius:"var(--radius-md)",border:"1px solid var(--color-danger-fg)"}}>
-                          <div style={{fontWeight:700,fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <span>📊 ציוד שטרם חזר ({rep.remainingCount} חיילים):</span>
-                          </div>
-                          {rep.weaponSummarySorted.map(([wep, data])=>(
-                            <div key={wep} style={{
-                              display:"flex",alignItems:"center",gap:6,
-                              fontSize:"var(--text-xs)",marginBottom:4,
-                              padding:"3px 0",
-                              borderBottom:"1px solid var(--color-border-muted)"
-                            }}>
-                              <span style={{
-                                fontWeight:800,
-                                color:data.isMainWeapon?"var(--color-danger-fg)":"var(--color-warning-fg)",
-                                minWidth:100
-                              }}>
-                                {data.isMainWeapon?"🔫":"🎽"} {wep}
-                              </span>
-                              <span style={{
-                                background:"var(--color-bg-default)",
-                                border:"1px solid var(--color-border-muted)",
-                                borderRadius:"var(--radius-sm)",
-                                padding:"1px 6px",
-                                fontWeight:700,
-                                color:"var(--color-text-primary)"
-                              }}>
-                                {data.serials.length} יח׳
-                              </span>
-                              <span style={{fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:10,flex:1}}>
-                                {data.serials.filter(Boolean).join(" | ")}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+              {/* Weapon summary section */}
+              <div style={{padding:"10px 14px"}}>
+                {/* Remaining count chips */}
+                {rep.remainingCount>0&&(
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,marginBottom:4}}>
+                      ⏳ {rep.remainingCount} חיילים טרם חתמו:
                     </div>
-
-                    {/* Column 2: Already signed */}
-                    <div>
-                      <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8,color:"var(--color-success-fg)"}}>
-                        ✅ חתמו ({rep.signedCount})
-                      </div>
-                      {rep.signedDetails.length===0?(
-                        <div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)"}}>אף אחד עדיין לא חתם</div>
-                      ):(
-                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                          {rep.signedDetails.map(sol=>(
-                            <div key={sol.id} style={{padding:"4px 10px",
-                              background:"var(--color-success-bg)",
-                              borderRadius:"var(--radius-2xl)",
-                              border:"1px solid var(--color-success-fg)",
-                              fontSize:"var(--text-xs)",fontWeight:600,
-                              color:"var(--color-success-fg)"}}>
-                              ✓ {sol.name}
-                            </div>
-                          ))}
-                        </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                      {rep.remainingDetails.slice(0,5).map(sol=>(
+                        <span key={sol.id} style={{
+                          padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
+                          background:"var(--color-danger-bg)",
+                          border:"1px solid var(--color-danger-fg)",
+                          borderRadius:"var(--radius-2xl)",
+                          color:"var(--color-danger-fg)"
+                        }}>{sol.name}</span>
+                      ))}
+                      {rep.remainingDetails.length>5&&(
+                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",padding:"2px 4px"}}>
+                          +{rep.remainingDetails.length-5} עוד
+                        </span>
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* Weapon families outstanding */}
+                {rep.weaponSummarySorted&&rep.weaponSummarySorted.length>0&&(
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700,marginBottom:4}}>
+                      📦 ציוד שטרם חזר:
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                      {rep.weaponSummarySorted.map(([wep,data])=>(
+                        <span key={wep} style={{
+                          padding:"2px 8px",fontSize:"var(--text-xs)",fontWeight:700,
+                          background:"var(--color-warning-bg)",
+                          border:"1px solid var(--color-warning-fg)",
+                          borderRadius:"var(--radius-2xl)",
+                          color:"var(--color-warning-fg)"
+                        }}>
+                          {data.isMainWeapon?"🔫":"🎽"} {wep} ×{data.serials.length}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Signed chips */}
+                {rep.signedCount>0&&(
+                  <div>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-success-fg)",fontWeight:700,marginBottom:4}}>
+                      ✅ {rep.signedCount} חתמו:
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                      {rep.signedDetails.slice(0,4).map(sol=>(
+                        <span key={sol.id} style={{
+                          padding:"2px 7px",fontSize:"var(--text-xs)",fontWeight:600,
+                          background:"var(--color-success-bg)",
+                          border:"1px solid var(--color-success-fg)",
+                          borderRadius:"var(--radius-2xl)",
+                          color:"var(--color-success-fg)"
+                        }}>✓ {sol.name}</span>
+                      ))}
+                      {rep.signedDetails.length>4&&(
+                        <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",padding:"2px 4px"}}>
+                          +{rep.signedDetails.length-4} עוד
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expand/collapse for full detail */}
+                <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <button onClick={()=>setExpandedRep(isExp?null:rep.key)}
+                    style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>
+                    {isExp?"▲ פחות":"▼ פירוט מלא"}
+                  </button>
+                  {auth.role==="admin"&&(
+                    <button onClick={()=>deleteGuarantor(rep.key)}
+                      style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>
+                      🗑️
+                    </button>
+                  )}
                 </div>
-              )}
+
+                {/* Full detail - expanded */}
+                {isExp&&(
+                  <div style={{marginTop:10,borderTop:"1px solid var(--color-border-muted)",paddingTop:10}}>
+                    {rep.remainingDetails.map(sol=>(
+                      <div key={sol.id} style={{marginBottom:8,padding:"8px 10px",
+                        background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",
+                        border:"1px solid var(--color-border-muted)"}}>
+                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4,
+                          display:"flex",justifyContent:"space-between"}}>
+                          <span>{sol.name}</span>
+                          <Badge color="orange" small>פלוגה {sol.unit}</Badge>
+                        </div>
+                        {sol.weapons.length>0?(
+                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            {sol.weapons.map((w,wi)=>(
+                              <div key={wi} style={{display:"flex",alignItems:"center",gap:6,
+                                fontSize:"var(--text-xs)",padding:"2px 6px",
+                                background:"var(--color-bg-default)",
+                                borderRadius:"var(--radius-sm)"}}>
+                                <span style={{fontWeight:700,color:"var(--color-accent-fg)"}}>
+                                  {w.isMainWeapon?"🔫":"🎽"} {w.wepName}
+                                </span>
+                                {w.serial&&<span style={{fontFamily:"monospace",color:"var(--color-text-secondary)"}}>
+                                  {w.serial}
+                                </span>}
+                                {w.makat&&<span style={{color:"var(--color-text-muted)"}}>מק׳ {w.makat}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ):(
+                          <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>אין ציוד</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
     </div>
+  </div>
   );
 }
+
 
 
 // =================== DASHBOARD VIEW ===================
