@@ -3180,7 +3180,7 @@ function ResetTab({db, setDb, auth}){
       saveDB(ndb);
       setDb(ndb);
       setPhase("backup");
-      logAction("איפוס_מלאי", "איפוס מלאי מלא בוצע ע"י "+auth.name, auth.name);
+      logAction('איפוס_מלאי', 'איפוס מלאי מלא בוצע ע"י '+auth.name, auth.name);
     });
   }
 
@@ -3205,7 +3205,7 @@ function ResetTab({db, setDb, auth}){
         setDb(parsed);
         setRestoreErr("");
         setDone("✅ השחזור הושלם בהצלחה!");
-        logAction("שחזור_מלאי", "שחזור מלאי בוצע ע"י "+auth.name, auth.name);
+        logAction('שחזור_מלאי', 'שחזור מלאי בוצע ע"י '+auth.name, auth.name);
         setPhase("menu");
         setTimeout(()=>setDone(""), 4000);
       });
