@@ -3016,6 +3016,50 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
     </div>
   );
 }
+function buildGuarantorReport(repList, totDone, totRem, totSig){
+  const now=new Date().toLocaleDateString("he-IL");
+  let body="";
+  repList.forEach(function(rep){
+    const pct=rep.total>0?Math.round(rep.signed/rep.total*100):100;
+    const bc=pct===100?"#2ea043":pct>=50?"#0969da":"#d73a49";
+    let rHtml="";
+    rep.remainingDetails.forEach(function(sol){
+      let wHtml="";
+      sol.weapons.forEach(function(w){wHtml+="<div style='font-size:11px'>"+(w.isWep?"🔫":"🎽")+" <b>"+w.wepName+"</b>"+(w.serial?" "+w.serial:"")+"</div>";});
+      rHtml+="<div style='margin-bottom:3px;padding:4px;background:#fafafa;border:1px solid #ddd;border-radius:4px'><b>"+sol.name+"</b> "+sol.unit+wHtml+"</div>";
+    });
+    let sHtml="";
+    rep.wepSumSorted.forEach(function(e){sHtml+="<span style='margin-left:5px;font-size:11px'>"+(e[1].isWep?"🔫":"🎽")+" "+e[0]+" x"+e[1].n+"</span>";});
+    let sigHtml=rep.signedDetails.map(function(s){return "<span style='background:#e6f4ea;border:1px solid #2ea043;border-radius:10px;padding:1px 6px;font-size:11px;margin:2px'>"+s.name+"</span>";}).join("");
+    body+="<div style='border:2px solid "+(rep.done?"#2ea043":"#d73a49")+";border-radius:8px;margin-bottom:12px;overflow:hidden'>"
+      +"<div style='background:"+(rep.done?"#1a3628":"#1a1a2e")+";color:#fff;padding:10px 14px;display:flex;justify-content:space-between'>"
+      +"<div><div style='font-weight:800;font-size:14px'>"+(rep.done?"✅ ":"")+rep.repName+(rep.unit?" פלוגה "+rep.unit:"")+"</div>"
+      +"<div style='font-size:11px;color:#8b949e'>"+rep.total+" חיילים | "+rep.signed+"/"+rep.total+" חתמו | "+rep.signedAt+"</div></div>"
+      +"<div style='text-align:center;min-width:70px'><div style='height:5px;background:#333;border-radius:3px'><div style='height:100%;width:"+pct+"%;background:"+bc+";border-radius:3px'></div></div><div style='font-size:10px;color:#ccc;margin-top:2px'>"+pct+"%</div></div></div>"
+      +"<div style='padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px'>"
+      +"<div><b style='font-size:11px;color:#d73a49'>טרם חתמו ("+rep.remaining+")</b><br/>"+(rHtml||"<span style='color:#2ea043;font-size:12px'>כולם חתמו</span>")
+      +(sHtml?"<div style='margin-top:4px;padding:4px;background:#fff0f0;border:1px solid #f85149;border-radius:4px;font-size:11px'><b>ציוד:</b>"+sHtml+"</div>":"")+"</div>"
+      +"<div><b style='font-size:11px;color:#2ea043'>חתמו ("+rep.signed+")</b><br/>"+(sigHtml||"<span style='font-size:11px;color:#666'>אף אחד</span>")+"</div>"
+      +"</div></div>";
+  });
+  const html="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'><title>דוח ערבויות "+now+"</title>"
+    +"<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial;direction:rtl;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}.m{color:#666;font-size:11px;margin-bottom:12px}.s{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.st{background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:6px 12px;text-align:center}.v{font-size:18px;font-weight:800}.l{font-size:10px;color:#666}@media print{.np{display:none}}</style>"
+    +"</head><body><h1>דוח יתרות ערבויות</h1><div class='m'>"+now+" | גדוד 9219 מוריה</div>"
+    +"<div class='s'><div class='st'><div class='v'>"+repList.length+"</div><div class='l'>נציגים</div></div>"
+    +"<div class='st'><div class='v' style='color:#2ea043'>"+totDone+"</div><div class='l'>הושלמו</div></div>"
+    +"<div class='st'><div class='v' style='color:#d73a49'>"+totRem+"</div><div class='l'>טרם חתמו</div></div>"
+    +"<div class='st'><div class='v' style='color:#2ea043'>"+totSig+"</div><div class='l'>חתמו</div></div></div>"
+    +body
+    +"<button class='np' onclick='window.print()' style='margin-top:12px;padding:8px 20px;font-size:13px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>הדפס</button>"
+    +"</body></html>";
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="ערבויות_"+now.replace(/\//g,"-")+".html";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+
 // =================== GUARANTORS TAB ===================
 function GuarantorsTab({db, setDb, soldiers, auth}){
   const [search, setSearch] = React.useState("");
@@ -3070,48 +3114,7 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
     saveDB(ndb); setDb(ndb);
   }
 
-  function dlReport(){
-    const now=new Date().toLocaleDateString("he-IL");
-    let body="";
-    repList.forEach(function(rep){
-      const pct=rep.total>0?Math.round(rep.signed/rep.total*100):100;
-      const bc=pct===100?"#2ea043":pct>=50?"#0969da":"#d73a49";
-      let rHtml="";
-      rep.remainingDetails.forEach(function(sol){
-        let wHtml="";
-        sol.weapons.forEach(function(w){wHtml+="<div style='font-size:11px'>"+(w.isWep?"🔫":"🎽")+" <b>"+w.wepName+"</b>"+(w.serial?" "+w.serial:"")+"</div>";});
-        rHtml+="<div style='margin-bottom:3px;padding:4px;background:#fafafa;border:1px solid #ddd;border-radius:4px'><b>"+sol.name+"</b> "+sol.unit+wHtml+"</div>";
-      });
-      let sHtml="";
-      rep.wepSumSorted.forEach(function(e){sHtml+="<span style='margin-left:5px;font-size:11px'>"+(e[1].isWep?"🔫":"🎽")+" "+e[0]+" x"+e[1].n+"</span>";});
-      let sigHtml=rep.signedDetails.map(function(s){return "<span style='background:#e6f4ea;border:1px solid #2ea043;border-radius:10px;padding:1px 6px;font-size:11px;margin:2px'>"+s.name+"</span>";}).join("");
-      body+="<div style='border:2px solid "+(rep.done?"#2ea043":"#d73a49")+";border-radius:8px;margin-bottom:12px;overflow:hidden'>"
-        +"<div style='background:"+(rep.done?"#1a3628":"#1a1a2e")+";color:#fff;padding:10px 14px;display:flex;justify-content:space-between'>"
-        +"<div><div style='font-weight:800;font-size:14px'>"+(rep.done?"✅ ":"")+rep.repName+(rep.unit?" פלוגה "+rep.unit:"")+"</div>"
-        +"<div style='font-size:11px;color:#8b949e'>"+rep.total+" חיילים | "+rep.signed+"/"+rep.total+" חתמו | "+rep.signedAt+"</div></div>"
-        +"<div style='text-align:center;min-width:70px'><div style='height:5px;background:#333;border-radius:3px'><div style='height:100%;width:"+pct+"%;background:"+bc+";border-radius:3px'></div></div><div style='font-size:10px;color:#ccc;margin-top:2px'>"+pct+"%</div></div></div>"
-        +"<div style='padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px'>"
-        +"<div><b style='font-size:11px;color:#d73a49'>טרם חתמו ("+rep.remaining+")</b><br/>"+(rHtml||"<span style='color:#2ea043;font-size:12px'>כולם חתמו</span>")
-        +(sHtml?"<div style='margin-top:4px;padding:4px;background:#fff0f0;border:1px solid #f85149;border-radius:4px;font-size:11px'><b>ציוד:</b>"+sHtml+"</div>":"")+"</div>"
-        +"<div><b style='font-size:11px;color:#2ea043'>חתמו ("+rep.signed+")</b><br/>"+(sigHtml||"<span style='font-size:11px;color:#666'>אף אחד</span>")+"</div>"
-        +"</div></div>";
-    });
-    const html="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'><title>דוח ערבויות "+now+"</title>"
-      +"<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial;direction:rtl;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}.m{color:#666;font-size:11px;margin-bottom:12px}.s{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.st{background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:6px 12px;text-align:center}.v{font-size:18px;font-weight:800}.l{font-size:10px;color:#666}@media print{.np{display:none}}</style>"
-      +"</head><body><h1>דוח יתרות ערבויות</h1><div class='m'>"+now+" | גדוד 9219 מוריה</div>"
-      +"<div class='s'><div class='st'><div class='v'>"+repList.length+"</div><div class='l'>נציגים</div></div>"
-      +"<div class='st'><div class='v' style='color:#2ea043'>"+totDone+"</div><div class='l'>הושלמו</div></div>"
-      +"<div class='st'><div class='v' style='color:#d73a49'>"+totRem+"</div><div class='l'>טרם חתמו</div></div>"
-      +"<div class='st'><div class='v' style='color:#2ea043'>"+totSig+"</div><div class='l'>חתמו</div></div></div>"
-      +body
-      +"<button class='np' onclick='window.print()' style='margin-top:12px;padding:8px 20px;font-size:13px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px'>הדפס</button>"
-      +"</body></html>";
-    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url; a.download="ערבויות_"+now.replace(/\//g,"-")+".html";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  }
+  function dlReport(){ buildGuarantorReport(repList, totDone, totRem, totSig); }
 
   return (
     <div style={{maxWidth:1100,margin:"0 auto",padding:"var(--space-4)"}}>
@@ -3239,7 +3242,7 @@ function GuarantorsTab({db, setDb, soldiers, auth}){
         })}
       </div>
     </div>
-  </div>
+    </div>
   );
 }
 
