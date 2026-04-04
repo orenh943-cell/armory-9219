@@ -535,7 +535,8 @@ const DAILY_ITEMS = [{"name":"M4","total":340},{"name":"קלע סער","total":6
 
 const USERS = {
   "אורן": {role:"admin", pass:"7680832", name:"אורן חלפון", soldierId:"7680832"},
-  "מתן": {role:"manager", pass:"7492961", name:"מתן ניסים דיין", soldierId:"7492961"},
+  "מתן": {role:"admin", pass:"7492961", name:"מתן ניסים דיין", soldierId:"7492961"},
+  "יעקב": {role:"admin", pass:"8278560", name:"יעקב שרון", soldierId:"8278560"},
 
   "צפייה_א": {role:"viewer", pass:"1111", name:"צפייה פלוגה א", soldierId:"", viewUnit:"א"},
   "צפייה_ב": {role:"viewer", pass:"2222", name:"צפייה פלוגה ב", soldierId:"", viewUnit:"ב"},
@@ -4505,20 +4506,29 @@ function sendBulkFormWA(repName, repId, unit, soldiers, sigData, db){
     + "לשמירה בטלפון: לחץ שמור ← PDF ← שמור לקבצים</div>"
     + "</body></html>";
 
-  const w = window.open("","_blank","width=650,height=800");
-  if(w){
-    w.document.write(html);
-    w.document.close();
-  } else {
-    // Fallback: download as file
-    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ערבות_" + repName + "_" + dateStr.replace(/\//g,"-") + ".html";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+  // Try Web Share API first (works on mobile - shares to ANY app including WA)
+  const blob = new Blob([html], {type:"text/html;charset=utf-8"});
+  const fileName = "ערבות_" + repName + "_" + dateStr.replace(/\//g,"-") + ".html";
+  
+  if(navigator.share && navigator.canShare){
+    const file = new File([blob], fileName, {type:"text/html"});
+    if(navigator.canShare({files:[file]})){
+      navigator.share({
+        title: "ערבות מרוכזת - " + repName,
+        text: "שובר ערבות מרוכזת - " + repName + " - " + dateStr,
+        files: [file]
+      }).catch(()=>{});
+      return;
+    }
   }
+  // Fallback: download the file
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  alert("הקובץ הורד — שלח אותו בוואטסאפ לנציג " + repName);
 }
 
 
@@ -5347,6 +5357,11 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [addIsNew, setAddIsNew] = React.useState(false);
   const [newItemCustomName, setNewItemCustomName] = React.useState("");
   const [newItemMakat, setNewItemMakat] = React.useState("");
+  const [showAddNew, setShowAddNew] = React.useState(false);
+  const [newSerial, setNewSerial] = React.useState("");
+  const [newQty, setNewQty] = React.useState("1");
+  const [newName, setNewName] = React.useState("");
+  const [newMakat, setNewMakat] = React.useState("");
 
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
   const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
@@ -5442,7 +5457,10 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <span style={{color:"var(--color-success-fg)"}}> {totalFree} פנוי</span>
           </div>
         </div>
-        <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowAddNew(true)} style={{...S.btn("blue"),padding:"7px 14px",fontSize:"var(--text-base)"}}>➕ הוסף פריט</button>
+          <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
+        </div>
       </div>
 
       {/* Summary stat cards */}
@@ -5737,6 +5755,117 @@ function MyStockTab({db, setDb, soldiers, auth}){
         </div>
       )}
     </div>
+
+      {/* Modal הוספת פריט חדש */}
+      {showAddNew&&(
+        <Modal title="➕ הוספת פריט חדש למלאי ארמון" onClose={()=>{setShowAddNew(false);setNewName("");setNewMakat("");setNewSerial("");setNewQty("1");}}>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={S.label}>שם פריט *</label>
+                <input value={newName} onChange={e=>setNewName(e.target.value)}
+                  placeholder='לדוגמה: נגב 5.56'
+                  style={{...S.input,marginBottom:0}}/>
+              </div>
+              <div>
+                <label style={S.label}>מק"ט</label>
+                <input value={newMakat} onChange={e=>setNewMakat(e.target.value)}
+                  placeholder="100012066"
+                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={S.label}>מספר סידורי (אם יש)</label>
+                <input value={newSerial} onChange={e=>setNewSerial(e.target.value)}
+                  placeholder="לדוגמה: 923456"
+                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
+              </div>
+              <div>
+                <label style={S.label}>כמות להוסיף</label>
+                <input value={newQty} onChange={e=>setNewQty(e.target.value.replace(/\D/g,""))}
+                  placeholder="1"
+                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
+              </div>
+            </div>
+
+            {newName.trim()&&(
+              <div style={{padding:"8px 12px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>
+                <div>📦 <b>{newName.trim()}</b>{newMakat&&` (מק"ט: ${newMakat})`}</div>
+                <div>כמות: {parseInt(newQty)||1} יחידות{newSerial&&` | סידורי: ${newSerial}`}</div>
+                <div style={{color:"var(--color-text-muted)",marginTop:2}}>יתווסף לכל הטבלאות: מלאי ארמון, רשימת סידוריים, טבלאות שיוך</div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={()=>{
+                const name = newName.trim();
+                if(!name){ alert("נא להזין שם פריט"); return; }
+                const qty = parseInt(newQty)||1;
+                const makat = newMakat.trim();
+                const serial = newSerial.trim();
+
+                // 1. Update armoryMaster
+                const master2 = {...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER)};
+                if(!master2[name]){
+                  master2[name] = {total:0, makat: makat ? (parseInt(makat)||makat) : null, byUnit:{}, unassigned:0};
+                }
+                master2[name] = {
+                  ...master2[name],
+                  total: (master2[name].total||0) + qty,
+                  unassigned: (master2[name].unassigned||0) + qty,
+                  makat: makat ? (parseInt(makat)||makat) : master2[name].makat
+                };
+
+                // 2. Update NAME_TO_MAKAT if new
+                if(makat && !NAME_TO_MAKAT[name]){
+                  NAME_TO_MAKAT[name] = parseInt(makat)||makat;
+                }
+
+                // 3. Update EQ_COLS if new
+                if(!EQ_COLS.includes(name)) EQ_COLS.push(name);
+
+                // 4. Add to ALL_SERIALS if serial provided
+                if(serial){
+                  const exists = ALL_SERIALS.some(s=>String(s.serial)===serial && s.name===name);
+                  if(!exists){
+                    ALL_SERIALS.push({name, serial: parseInt(serial)||serial, unit:"פנוי", assignedToSoldier:false, broken:false, makat: parseInt(makat)||makat||null});
+                  }
+                }
+
+                // 5. Add to unitItems (one entry per unit quantity or one with serial)
+                const newUnitItems = {...db.unitItems};
+                for(let i=0; i<qty; i++){
+                  const key = "inv_new_"+Date.now()+"_"+i;
+                  newUnitItems[key] = {
+                    n: name,
+                    s: qty===1 ? serial||null : null,
+                    u: "פנוי",
+                    t: "unit",
+                    addedAt: new Date().toLocaleDateString("he-IL"),
+                    ...(makat ? {makat: parseInt(makat)||makat} : {})
+                  };
+                }
+
+                const ndb = {...db, armoryMaster: master2, unitItems: newUnitItems};
+                saveDB(ndb); setDb(ndb);
+                logAction("הוספת_פריט", `נוסף ${qty} × ${name}${serial?" סידורי:"+serial:""}${makat?" מק"ט:"+makat:""}`, auth?.name||"מערכת");
+                setShowAddNew(false);
+                setNewName(""); setNewMakat(""); setNewSerial(""); setNewQty("1");
+              }} style={{...S.btn("blue"),flex:1}}>
+                ✅ הוסף למלאי
+              </button>
+              <button onClick={()=>{setShowAddNew(false);setNewName("");setNewMakat("");setNewSerial("");setNewQty("1");}}
+                style={{...S.btn("gray"),flex:1}}>
+                ביטול
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
   );
 }
 
