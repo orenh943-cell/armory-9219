@@ -7495,52 +7495,18 @@ function downloadSignaturesZip(db, signedSoldiers, filterUnit, filterSquad){
   const enc = s => fflate.strToU8(s);
   const safeName = s => (s||"לא_ידוע").replace(/[\/\\:*?"<>|]/g,"_");
 
+  // מאגד testCerts
+  window._testCertsForZip = db.testCerts||{};
   signedSoldiers.forEach(s=>{
     const sig = db.signatures?.[s.id];
     if(!sig) return;
-    const assigned = s.assigned||{};
-    const weps = Object.entries(assigned);
+    const assigned = db.assignments?.[s.id]||s.assigned||{};
     const unit  = safeName(s.unit||"ללא_פלוגה");
     const squad = safeName(s.squad||"ללא_מחלקה");
     const name  = safeName(s.name);
-    const date  = (sig.signedAt||"").replace(/[\/:]/g,"-").replace(/ /g,"_");
+    const date  = (sig.signedAt||"").replace(/[\/: ]/g,"-");
 
-    const rows = weps.map(([k,v])=>`
-      <tr>
-        <td style="padding:5px 8px;border:1px solid #ccc;font-weight:${WEAPON_KEYS.includes(k)?"bold":"normal"}">${k}</td>
-        <td style="padding:5px 8px;border:1px solid #ccc;font-family:monospace">${v&&v!==1?v:"—"}</td>
-      </tr>`).join("");
-
-    const sigHtml = sig.sigData ? `<div style="margin-top:12px"><div style="font-size:11px;color:#666;margin-bottom:4px">חתימה:</div><img src="${sig.sigData}" style="height:50px;border:1px solid #ccc"/></div>` : "";
-    const testHtml = sig.testImg ? `<div style="margin-top:8px"><div style="font-size:11px;color:#666;margin-bottom:4px">תמונת מבחן:</div><img src="${sig.testImg}" style="height:50px;border-radius:4px"/></div>` : "";
-
-    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>חתימה — ${s.name}</title>
-<style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;color:#000;font-size:12px}
-h2{font-size:14px;border-bottom:2px solid #000;padding-bottom:5px;margin-bottom:10px}
-.info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
-.box{border:1px solid #ccc;padding:5px 8px;border-radius:3px}
-.lbl{font-size:10px;color:#666}
-.val{font-weight:bold;font-size:13px}
-table{width:100%;border-collapse:collapse;margin:8px 0}
-th{background:#e8edf5;padding:5px 8px;border:1px solid #ccc;text-align:right;font-size:11px}
-@media print{button{display:none}}</style></head><body>
-<h2>טופס החתמה — גדוד 9219</h2>
-<div class="info">
-  <div class="box"><div class="lbl">שם</div><div class="val">${s.name}</div></div>
-  <div class="box"><div class="lbl">מספר אישי</div><div class="val">${s.id}</div></div>
-  <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
-  <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
-  <div class="box" style="grid-column:1/-1"><div class="lbl">תאריך חתימה</div><div class="val">${sig.signedAt||"—"}</div></div>
-</div>
-<table>
-  <thead><tr><th>אמצעי</th><th>מספר סידורי</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-${sigHtml}${testHtml}
-<button onclick="window.print()" style="margin-top:14px;padding:8px 20px;cursor:pointer;font-size:13px">🖨️ הדפס</button>
-</body></html>`;
-
+    const html = buildSignatureFormHtml(s, sig, assigned)
     const path = `פלוגה_${unit}/${squad}/${name}_${s.id}_${date}.html`;
     files[path] = enc(html);
   });
