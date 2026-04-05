@@ -5351,6 +5351,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [showWeaponsOnly, setShowWeaponsOnly] = React.useState(false);
   const [editItem, setEditItem] = React.useState(null);
   const [editQty, setEditQty] = React.useState("");
+  const [editName, setEditName] = React.useState("");
   const [addSerial, setAddSerial] = React.useState("");
   const [addItemName, setAddItemName] = React.useState("");
   const [removeSearch, setRemoveSearch] = React.useState("");
@@ -5526,7 +5527,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 </div>
               )}
               {auth.role==="admin"&&(
-                <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
+                <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
               )}
             </div>
@@ -5688,6 +5689,42 @@ function MyStockTab({db, setDb, soldiers, auth}){
               </div>
             </div>
 
+            {/* עריכת שם פריט */}
+            <div style={{marginBottom:12,padding:"10px 12px",background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}}>
+              <div style={{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-accent-fg)",marginBottom:8}}>✏️ עריכת שם פריט</div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input value={editName} onChange={e=>setEditName(e.target.value)}
+                  placeholder="שם הפריט"
+                  style={{...S.input,flex:1,marginBottom:0}}/>
+                <button onClick={()=>{
+                  const newName = editName.trim();
+                  if(!newName || newName===editItem) return;
+                  if(window.confirm("לשנות שם מ-""+editItem+"" ל-""+newName+""?")){
+                    const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+                    const oldData = master2[editItem];
+                    delete master2[editItem];
+                    master2[newName] = {...oldData};
+                    // Update NAME_TO_MAKAT
+                    if(NAME_TO_MAKAT[editItem]){ NAME_TO_MAKAT[newName]=NAME_TO_MAKAT[editItem]; delete NAME_TO_MAKAT[editItem]; }
+                    // Update EQ_COLS
+                    const idx2=EQ_COLS.indexOf(editItem);
+                    if(idx2>=0) EQ_COLS[idx2]=newName;
+                    // Update unitItems
+                    const newUI={...db.unitItems};
+                    Object.entries(newUI).forEach(([k,v])=>{ if(v.n===editItem) newUI[k]={...v,n:newName}; });
+                    // Update ALL_SERIALS
+                    ALL_SERIALS.forEach(s=>{ if(s.name===editItem) s.name=newName; });
+                    const ndb={...db,armoryMaster:master2,unitItems:newUI};
+                    saveDB(ndb); setDb(ndb);
+                    setEditItem(newName); setEditName(newName);
+                    logAction("עריכת_שם", editItem+" → "+newName, auth?.name||"מערכת");
+                  }
+                }} style={{...S.btn("blue"),padding:"6px 14px",fontSize:"var(--text-sm)",minHeight:38,whiteSpace:"nowrap"}}>
+                  שמור שם
+                </button>
+              </div>
+            </div>
+
             {/* עדכון כמות ידני */}
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>עדכון ידני:</span>
@@ -5700,9 +5737,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
                 master2[editItem]={...master2[editItem],total:newTotal};
                 const ndb={...db,armoryMaster:master2};
-                saveDB(ndb); setDb(ndb); setEditItem(null); setEditQty("");
+                saveDB(ndb); setDb(ndb); setEditItem(null); setEditQty(""); setEditName("");
               }} style={{...S.btn("orange"),padding:"6px 14px",fontSize:"var(--text-sm)",minHeight:38}}>שמור כמות</button>
-              <button onClick={()=>{setEditItem(null);setEditQty("");}}
+              <button onClick={()=>{setEditItem(null);setEditQty("");setEditName("");}}
                 style={{...S.btn(),padding:"6px 10px",fontSize:"var(--text-sm)",minHeight:38}}>סגור</button>
             </div>
           </div>
