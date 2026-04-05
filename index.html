@@ -1933,12 +1933,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   const ph=soldier.phone;
                   if(!ts.valid&&ph) return <button onClick={()=>{
                     const phone=phoneToWA(ph);
-                    const msg="שלום "+soldier.name+",
-נדרש לעבור בוחן נשק לפני החתימה.
-בצע את הבוחן בקישור:
-https://martbase.digital.idf.il
-לאחר המעבר, צלם את האישור ושלח חתימה דרך:
-https://orenh943-cell.github.io/armory-9219?sign="+soldier.id;
+                    const msg="שלום "+soldier.name+",\nנדרש לעבור בוחן נשק לפני החתימה.\nבצע את הבוחן:\nhttps://martbase.digital.idf.il\nלאחר המעבר, צלם את האישור ושלח חתימה דרך:\nhttps://orenh943-cell.github.io/armory-9219?sign="+soldier.id;
                     window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
                   }} style={{...S.btn("orange"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📋 שלח לבוחן</button>;
                   return null;
