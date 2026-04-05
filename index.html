@@ -1351,7 +1351,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                           <div style={{...S.btn("blue"),width:"100%",padding:"14px 0",fontSize:15,textAlign:"center",borderRadius:"var(--radius-md)"}}>
                             📸 העלה צילום אישור בוחן
                           </div>
-                          <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{
+                          <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
                             const f=e.target.files[0]; if(!f) return;
                             const r=new FileReader(); r.onload=ev=>setUploadedCert(ev.target.result); r.readAsDataURL(f);
                           }}/>
