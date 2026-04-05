@@ -1065,10 +1065,11 @@ function Login({onLogin}){
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
   const [dynUsers,setDynUsers]=useState(loadDB()?.dynamicUsers||{});
+  const [userPasswords,setUserPasswords]=useState(loadDB()?.userPasswords||{});
   const [loading,setLoading]=useState(true);
-  // טען משתמשים דינמיים מ-Firebase
+  // טען משתמשים וסיסמאות מ-Firebase
   useEffect(()=>{
-    const off = fbOn("db/dynamicUsers",(users)=>{
+    const off1 = fbOn("db/dynamicUsers",(users)=>{
       if(users){
         setDynUsers(users);
         try{
@@ -1078,17 +1079,25 @@ function Login({onLogin}){
       }
       setLoading(false);
     });
+    const off2 = fbOn("db/userPasswords",(passwords)=>{
+      if(passwords){
+        setUserPasswords(passwords);
+        try{
+          const local=loadDB()||{};
+          localStorage.setItem("armory_9219_v4",JSON.stringify({...local,userPasswords:passwords}));
+        }catch(e){}
+      }
+    });
     setTimeout(()=>setLoading(false),6000); // timeout
-    return ()=>off();
+    return ()=>{off1();off2();};
   },[]);
   function go(){
     const uTrim=user.trim();
     const pTrim=pass.trim();
     if(!uTrim||!pTrim){setErr("נא למלא שם ומספר אישי");return;}
     const u=USERS[uTrim]||dynUsers[uTrim];
-    // Check password: custom override first, then default
-    const savedPasswords = loadDB()?.userPasswords||{};
-    const effectivePass = savedPasswords[uTrim] || u?.pass;
+    // Check password: Firebase override first, then default
+    const effectivePass = userPasswords[uTrim] || u?.pass;
     if(u && (pTrim===effectivePass || pTrim===String(effectivePass))){
       onLogin({
         role:u.role,
@@ -3815,6 +3824,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off6 = fbOn("db/userPerms", (perms)=>{
       setDb(prev=>({...prev, userPerms: perms||{}}));
     });
+    const offPwd = fbOn("db/userPasswords", (passwords)=>{
+      setDb(prev=>({...prev, userPasswords: passwords||{}}));
+    });
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
     });
@@ -3854,7 +3866,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(data) setDb(prev=>({...prev, inspectionFamilies: data}));
       setDb(prev=>({...prev, inspections: data||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); off15(); };
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); off15(); offPwd(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
