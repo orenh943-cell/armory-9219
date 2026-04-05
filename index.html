@@ -3389,6 +3389,232 @@ function buildGuarantorReport(repList, totDone, totRem, totSig){
 }
 
 
+// =================== EXTERNAL SIGN TAB ===================
+function ExternalSignTab({db, setDb, auth}){
+  const [records, setRecords] = React.useState([]);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editId, setEditId] = React.useState(null);
+
+  // טופס הוספה/עריכה
+  const [personName, setPersonName] = React.useState("");
+  const [personId, setPersonId] = React.useState("");
+  const [destination, setDestination] = React.useState("");
+  const [items, setItems] = React.useState([{name:"",serial:"",qty:1}]);
+  const [note, setNote] = React.useState("");
+  const [signImg, setSignImg] = React.useState(null);
+  const [showPad, setShowPad] = React.useState(false);
+  const [filterStatus, setFilterStatus] = React.useState("הכל"); // הכל | פתוח | סגור
+
+  // האזן ל-Firebase
+  React.useEffect(()=>{
+    const off = fbOn("db/externalSigns", (data)=>{
+      setRecords(Object.entries(data||{}).sort(([,a],[,b])=>b.createdAt>a.createdAt?1:-1));
+    });
+    return ()=>off();
+  },[]);
+
+  function addItem(){ setItems(p=>[...p,{name:"",serial:"",qty:1}]); }
+  function removeItem(i){ setItems(p=>p.filter((_,j)=>j!==i)); }
+  function setItemField(i,field,val){ setItems(p=>p.map((it,j)=>j===i?{...it,[field]:val}:it)); }
+
+  function resetForm(){
+    setPersonName(""); setPersonId(""); setDestination(""); setNote("");
+    setItems([{name:"",serial:"",qty:1}]); setSignImg(null); setEditId(null); setShowForm(false);
+  }
+
+  function save(){
+    if(!personName.trim()){ alert("יש להזין שם"); return; }
+    if(!destination.trim()){ alert("יש להזין יעד/מיקום"); return; }
+    if(!items.some(it=>it.name.trim())){ alert("יש להוסיף לפחות פריט אחד"); return; }
+    const id = editId || "ext_"+Date.now();
+    const entry = {
+      id, personName:personName.trim(), personId:personId.trim(),
+      destination:destination.trim(), note:note.trim(),
+      items:items.filter(it=>it.name.trim()),
+      signImg, status:"פתוח",
+      createdAt:new Date().toLocaleString("he-IL"),
+      createdBy:auth.name
+    };
+    if(editId){
+      const old = records.find(([k])=>k===editId)?.[1];
+      if(old) entry.status = old.status;
+    }
+    fbSet("db/externalSigns/"+id, entry).catch(()=>{});
+    resetForm();
+    logAction("החתמה_חיצונית", personName+" ← "+destination, auth.name);
+  }
+
+  function closeRecord(id){
+    const rec = records.find(([k])=>k===id)?.[1];
+    if(!rec) return;
+    const updated = {...rec, status:"סגור", closedAt:new Date().toLocaleString("he-IL"), closedBy:auth.name};
+    fbSet("db/externalSigns/"+id, updated).catch(()=>{});
+  }
+
+  function deleteRecord(id){
+    if(!window.confirm("למחוק רשומה זו?")) return;
+    fbDelete("db/externalSigns/"+id).catch(()=>{});
+  }
+
+  const filtered = records.filter(([,r])=>filterStatus==="הכל"||r.status===filterStatus);
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+      <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>🏢 החתמה חיצונית</h2>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {["הכל","פתוח","סגור"].map(s=>(
+          <button key={s} onClick={()=>setFilterStatus(s)}
+            style={{...S.btn(filterStatus===s?"blue":"gray"),padding:"4px 14px",fontSize:"var(--text-sm)",minHeight:32}}>
+            {s}
+          </button>
+        ))}
+        <button onClick={()=>{resetForm();setShowForm(true)}}
+          style={{...S.btn("green"),padding:"6px 16px"}}>
+          ➕ החתמה חדשה
+        </button>
+      </div>
+    </div>
+
+    {showForm&&(
+      <div style={{...S.card,border:"1px solid var(--color-accent-fg)",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:14,color:"var(--color-accent-fg)"}}>
+          {editId?"✏️ עריכת רשומה":"➕ החתמה חיצונית חדשה"}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={S.label}>שם האדם *</label>
+            <input value={personName} onChange={e=>setPersonName(e.target.value)}
+              placeholder="שם מלא" style={{...S.input,marginBottom:0}}/>
+          </div>
+          <div>
+            <label style={S.label}>מ.א / ת.ז</label>
+            <input value={personId} onChange={e=>setPersonId(e.target.value)}
+              placeholder="מספר אישי" style={{...S.input,marginBottom:0}}/>
+          </div>
+          <div style={{gridColumn:"1/-1"}}>
+            <label style={S.label}>יעד / מיקום *</label>
+            <input value={destination} onChange={e=>setDestination(e.target.value)}
+              placeholder="לדוג׳: סדנא, חטיבה, אימון..." style={{...S.input,marginBottom:0}}/>
+          </div>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <label style={{...S.label,margin:0}}>פריטים *</label>
+            <button onClick={addItem} style={{...S.btn("blue"),padding:"2px 10px",fontSize:"var(--text-xs)",minHeight:28}}>+ הוסף שורה</button>
+          </div>
+          {items.map((it,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 2fr 1fr auto",gap:6,marginBottom:6}}>
+              <select value={it.name} onChange={e=>setItemField(i,"name",e.target.value)}
+                style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}>
+                <option value="">-- בחר פריט --</option>
+                {EQ_COLS.map(eq=><option key={eq} value={eq}>{eq}</option>)}
+              </select>
+              <input value={it.serial} onChange={e=>setItemField(i,"serial",e.target.value)}
+                placeholder="מספר סידורי" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}/>
+              <input type="number" value={it.qty} onChange={e=>setItemField(i,"qty",Number(e.target.value)||1)}
+                min={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}/>
+              <button onClick={()=>removeItem(i)}
+                style={{...S.btn("red"),padding:"4px 8px",minHeight:36,fontSize:"var(--text-xs)"}}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{marginBottom:10}}>
+          <label style={S.label}>הערות</label>
+          <input value={note} onChange={e=>setNote(e.target.value)}
+            placeholder="הערות נוספות (אופציונלי)" style={{...S.input,marginBottom:0}}/>
+        </div>
+
+        <div style={{marginBottom:12}}>
+          <label style={S.label}>חתימה</label>
+          {signImg
+            ? <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <img src={signImg} style={{height:48,border:"1px solid var(--color-border-default)",borderRadius:4}}/>
+                <button onClick={()=>setSignImg(null)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>מחק</button>
+              </div>
+            : <button onClick={()=>setShowPad(true)} style={{...S.btn("blue"),width:"100%"}}>✍️ חתום</button>
+          }
+        </div>
+
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={save} style={{...S.btn("green"),flex:1,padding:"10px 0",fontWeight:700}}>💾 שמור</button>
+          <button onClick={resetForm} style={{...S.btn("gray"),flex:1,padding:"10px 0"}}>ביטול</button>
+        </div>
+        {showPad&&<Modal title="✍️ חתימה" onClose={()=>setShowPad(false)}>
+          <SignaturePad onSave={sig=>{setSignImg(sig);setShowPad(false);}}/>
+        </Modal>}
+      </div>
+    )}
+
+    {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
+      <div style={{fontSize:40,marginBottom:8}}>🏢</div>
+      <div>אין רשומות {filterStatus!=="הכל"?"בסטטוס "+filterStatus:""}</div>
+    </div>}
+
+    <div style={{overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)"}}>
+        <thead>
+          <tr style={{background:"var(--color-bg-subtle)"}}>
+            {["שם","מ.א","יעד","פריטים","תאריך","חתימה","סטטוס",""].map(h=>(
+              <th key={h} style={{padding:"8px 10px",textAlign:"right",fontWeight:700,
+                borderBottom:"2px solid var(--color-border-default)",whiteSpace:"nowrap"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(([id,r])=>(
+            <tr key={id} style={{borderBottom:"1px solid var(--color-border-muted)"}}>
+              <td style={{padding:"8px 10px",fontWeight:700}}>{r.personName}</td>
+              <td style={{padding:"8px 10px",fontFamily:"monospace",color:"var(--color-text-secondary)"}}>{r.personId||"—"}</td>
+              <td style={{padding:"8px 10px",color:"var(--color-warning-fg)",fontWeight:600}}>{r.destination}</td>
+              <td style={{padding:"8px 10px",maxWidth:200}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                  {(r.items||[]).map((it,i)=>(
+                    <span key={i} style={{background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",
+                      borderRadius:3,padding:"1px 6px",fontSize:10,whiteSpace:"nowrap"}}>
+                      {it.name}{it.serial?" #"+it.serial:""}{it.qty>1?" ×"+it.qty:""}
+                    </span>
+                  ))}
+                </div>
+              </td>
+              <td style={{padding:"8px 10px",whiteSpace:"nowrap",color:"var(--color-text-muted)"}}>{r.createdAt}</td>
+              <td style={{padding:"8px 10px"}}>
+                {r.signImg?<img src={r.signImg} style={{height:32,borderRadius:3,border:"1px solid var(--color-border-default)"}}/>:"—"}
+              </td>
+              <td style={{padding:"8px 10px"}}>
+                <span style={{
+                  background:r.status==="סגור"?"var(--color-success-bg)":"var(--color-warning-bg)",
+                  color:r.status==="סגור"?"var(--color-success-fg)":"var(--color-warning-fg)",
+                  border:"1px solid "+(r.status==="סגור"?"var(--color-success-fg)":"var(--color-warning-fg)"),
+                  borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>
+                  {r.status||"פתוח"}
+                </span>
+              </td>
+              <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
+                <div style={{display:"flex",gap:4}}>
+                  {r.status!=="סגור"&&<button onClick={()=>closeRecord(id)}
+                    style={{...S.btn("green"),padding:"3px 8px",fontSize:10,minHeight:28}}>✅ סגור</button>}
+                  <button onClick={()=>{
+                    const rec = r;
+                    setPersonName(rec.personName); setPersonId(rec.personId||"");
+                    setDestination(rec.destination); setNote(rec.note||"");
+                    setItems(rec.items||[{name:"",serial:"",qty:1}]);
+                    setSignImg(rec.signImg||null); setEditId(id); setShowForm(true);
+                    window.scrollTo(0,0);
+                  }} style={{...S.btn("blue"),padding:"3px 8px",fontSize:10,minHeight:28}}>✏️</button>
+                  <button onClick={()=>deleteRecord(id)}
+                    style={{...S.btn("red"),padding:"3px 8px",fontSize:10,minHeight:28}}>🗑️</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
 // =================== RESET TAB ===================
 const RESET_PASSWORD = "9219reset";
 
@@ -4041,9 +4267,16 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off9 = fbOn("db/armoryMaster", (master)=>{
       if(master && Object.keys(master).length>0){
-        setDb(prev=>({...prev, armoryMaster: master}));
+        // Check if data is valid (M4 should have total>0)
+        const m4 = master["M4"];
+        if(!m4 || !m4.total || m4.total===0){
+          // Re-seed from code
+          fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
+          setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
+        } else {
+          setDb(prev=>({...prev, armoryMaster: master}));
+        }
       } else {
-        // First time — seed with ARMORY_MASTER
         fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
         setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
       }
@@ -4175,6 +4408,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewActLog||auth.role==="admin"?[{id:"actlog",label:"לוג תנועות",icon:"📋"}]:[]),
     ...(perms.canViewSignatures!==false?[{id:"guarantors",label:"ערבויות",icon:"🛡️"}]:[]),
     ...(auth.role==="admin"?[{id:"reset",label:"איפוס",icon:"⚠️"}]:[]),
+    ...(auth.role==="admin"?[{id:"external",label:"החתמה חיצונית",icon:"🏢"}]:[]),
   ];
 
   function Sidebar(){
@@ -4477,6 +4711,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         )}
         {tab==="reset"&&auth.role==="admin"&&(
           <ResetTab db={db} setDb={setDb} auth={auth}/>
+        )}
+        {tab==="external"&&auth.role==="admin"&&(
+          <ExternalSignTab db={db} setDb={setDb} auth={auth}/>
         )}
         {tab==="exitform"&&(
           <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
