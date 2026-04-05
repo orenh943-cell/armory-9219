@@ -338,6 +338,9 @@ input:focus, select:focus, textarea:focus {
 /* ============================================================
    BUTTONS
    ============================================================ */
+/* Desktop-only elements - hidden on mobile */
+.desktop-only { display: flex; }
+
 /* Bottom nav - hidden on desktop, shown on mobile */
 .bottom-nav {
   display: none;
@@ -446,6 +449,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .main-content { margin-right: 0 !important; padding: 8px 8px 70px 8px !important; }
   .mobile-header { display: flex !important; }
   .bottom-nav { display: flex !important; }
+  .desktop-only { display: none !important; }
   .grid-2 { grid-template-columns: 1fr !important; }
   .grid-stats { grid-template-columns: repeat(2,1fr) !important; }
   /* Tables scroll */
@@ -4065,7 +4069,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           )}
         </nav>
 
-        <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:12,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+        <div className="desktop-only" style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:12,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
           <span>🔄 רענון אחרון: {lastRefresh.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
           <button onClick={()=>setLastRefresh(new Date())} style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"2px 8px",color:"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-xs)"}}>רענן עכשיו</button>
         </div>
