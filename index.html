@@ -7854,7 +7854,7 @@ function PermissionsTab({db, setDb}){
                 </div>
               )}
             </div>
-            {(isAdmin&&(
+            {(true&&(
               <div>
                 {/* תפקיד + תבנית מהירה */}
                 <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -7904,7 +7904,7 @@ function PermissionsTab({db, setDb}){
                   </div>
                 ))}
               </div>
-            )}
+            ))}
             {isAdmin&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",textAlign:"center"}}>מנהל ראשי — הרשאות מלאות תמיד</div>}
           </div>
         );
