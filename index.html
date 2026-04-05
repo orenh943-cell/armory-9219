@@ -629,6 +629,33 @@ function getMakat(name){return NAME_TO_MAKAT[name]||null;}
 function nameWithMakat(name){const m=getMakat(name);return m?`${name} (${m})`:name;}
 
 const WEAPON_KEYS = ["M4","M16","קלע סער","מאג","נגב 5.56","נגב 7.62","מטולון M320","מקלר",'מק"כ 0.5',"HTR 338","מקלרון","M-24 חדש"];
+
+// נשקים הדורשים אישור בוחן
+const TEST_REQUIRED_WEAPONS = ["M4","M16","קלע סער"];
+const TEST_VALIDITY_DAYS = 183; // חצי שנה
+
+function getTestStatus(db, soldierId){
+  const sig = db.signatures?.[soldierId];
+  const testData = db.testCerts?.[soldierId];
+  if(!testData) return {valid:false, expired:false, date:null, expiry:null};
+  const uploadDate = new Date(testData.date);
+  const expiry = new Date(uploadDate);
+  expiry.setDate(expiry.getDate() + TEST_VALIDITY_DAYS);
+  const now = new Date();
+  const valid = now <= expiry;
+  return {
+    valid,
+    expired: !valid,
+    date: uploadDate.toLocaleDateString("he-IL"),
+    expiry: expiry.toLocaleDateString("he-IL"),
+    img: testData.img
+  };
+}
+
+function soldierNeedsTest(soldier, db){
+  const assigned = db.assignments?.[soldier.id] ?? soldier.assigned ?? {};
+  return Object.keys(assigned).some(k => TEST_REQUIRED_WEAPONS.includes(k));
+}
 const {useState,useMemo,useRef,useEffect} = React;
 
 function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});}
@@ -675,7 +702,7 @@ function cleanSigs(sigs){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -684,6 +711,7 @@ function saveDB(db){
   fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPerms", safe.userPerms).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPasswords", safe.userPasswords).catch(e=>console.warn("FB err:",e));
+  fbSet("db/testCerts", safe.testCerts).catch(e=>console.warn("FB err:",e));
   fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
   fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
@@ -694,7 +722,7 @@ function saveDB(db){
 function initDB(){
   const local = loadDB();
   if(local) return local;
-  return {assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{}};
+  return {assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{}};
 }
 
 function logAction(type, details, actorName){
@@ -1202,10 +1230,13 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     });
     return ()=>{ off1(); };
   },[]);
+  const testStatus = getTestStatus(db, auth.soldierId);
+  const needsTest = soldierNeedsTest(soldierData||{id:auth.soldierId,assigned:assigned}, db);
   const [step,setStep]=useState(sig?"done":"review");
   const [sigImg,setSigImg]=useState(sig?.sigData||null);
   const [testImg,setTestImg]=useState(sig?.testImg||null);
   const [showTestUpload,setShowTestUpload]=useState(false);
+  const [uploadedCert,setUploadedCert]=useState(null); // תמונת אישור בוחן חדש
   if(!soldier){
     // חייל מותאם אישית — צור אובייקט זמני
     const customSoldier = Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
@@ -1217,7 +1248,6 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   const accessories=items.filter(([k])=>!WEAPON_KEYS.includes(k));
   function doSign(sigData){
     const signedAt=todayStr()+" "+nowStr();
-    // הסר מרשימת ערב מרוכז אם קיים
     const newGuarantors={...(db.bulkGuarantors||{})};
     Object.keys(newGuarantors).forEach(k=>{
       const g=newGuarantors[k];
@@ -1226,9 +1256,16 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         newGuarantors[k]={...g, remaining:newRem};
       }
     });
+    // שמור אישור בוחן אם הועלה
+    const newTestCerts = {...(db.testCerts||{})};
+    if(uploadedCert){
+      newTestCerts[auth.soldierId] = {img:uploadedCert, date:new Date().toISOString(), signedAt};
+      fbSet("db/testCerts/"+auth.soldierId, newTestCerts[auth.soldierId]).catch(()=>{});
+    }
     const newDb={...db,
       signatures:{...db.signatures,[auth.soldierId]:{sigData,signedAt,...(testImg?{testImg}:{})}},
-      bulkGuarantors:newGuarantors
+      bulkGuarantors:newGuarantors,
+      testCerts:newTestCerts
     };
     saveDB(newDb);setDb(newDb);setSigImg(sigData);setStep("done");
     logAction("חתימה", `${soldierData.name} (${auth.soldierId}) חתם על נשק`, soldierData.name);
@@ -1269,9 +1306,64 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                 </tbody>
               </table>
             }
-            {items.length>0&&<button onClick={()=>setStep("sign")} style={{...S.btn("green"),width:"100%",padding:"13px 0",fontSize:15}}>✍️ עבור לחתימה</button>}
+            {items.length>0&&<div style={{marginTop:8}}>
+              {needsTest&&!testStatus.valid&&<div style={{background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:10}}>
+                <div style={{fontWeight:700,color:"var(--color-danger-fg)",marginBottom:4}}>⚠️ נדרש אישור בוחן נשק</div>
+                <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>לפני חתימה על {TEST_REQUIRED_WEAPONS.filter(w=>items.some(([k])=>k===w)).join(", ")} נדרש אישור בוחן תקף</div>
+              </div>}
+              {needsTest&&testStatus.valid&&<div style={{background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:10}}>
+                <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:2}}>✅ אישור בוחן תקף</div>
+                <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>תאריך: {testStatus.date} | תוקף עד: {testStatus.expiry}</div>
+              </div>}
+              <button onClick={()=>setStep(needsTest?"test":"sign")} style={{...S.btn("green"),width:"100%",padding:"13px 0",fontSize:15}}>✍️ המשך לחתימה</button>
+            </div>}
           </div>
         )}
+        {step==="test"&&(
+          <div>
+            <div style={{...S.card,border:"1px solid var(--color-accent-fg)",marginBottom:12}}>
+              <div style={{color:"var(--color-accent-fg)",fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}}>
+                📋 אישור בוחן נשק
+              </div>
+              {testStatus.valid
+                ? <div style={{marginBottom:12}}>
+                    <div style={{background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:10}}>
+                      <div style={{fontWeight:700,color:"var(--color-success-fg)"}}>✅ יש לך אישור תקף</div>
+                      <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>תוקף עד: {testStatus.expiry}</div>
+                    </div>
+                    {testStatus.img&&<img src={testStatus.img} style={{width:"100%",borderRadius:8,border:"1px solid var(--color-border-muted)",marginBottom:10}} alt="אישור בוחן"/>}
+                    <button onClick={()=>setStep("sign")} style={{...S.btn("green"),width:"100%",padding:"12px 0",fontSize:15}}>✍️ המשך לחתימה</button>
+                  </div>
+                : <div>
+                    <div style={{background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:12}}>
+                      <div style={{fontWeight:700,color:"var(--color-danger-fg)",marginBottom:4}}>⚠️ נדרש אישור בוחן</div>
+                      <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>העלה צילום מסך של אישור הבוחן מהאפליקציה הצבאית</div>
+                    </div>
+                    {uploadedCert
+                      ? <div style={{marginBottom:12}}>
+                          <img src={uploadedCert} style={{width:"100%",borderRadius:8,border:"2px solid var(--color-success-fg)",marginBottom:8}} alt="אישור שהועלה"/>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>setUploadedCert(null)} style={{...S.btn("red"),flex:1}}>🗑️ הסר</button>
+                            <button onClick={()=>setStep("sign")} style={{...S.btn("green"),flex:2,padding:"10px 0",fontSize:15,fontWeight:800}}>✅ אשר והמשך</button>
+                          </div>
+                        </div>
+                      : <label style={{display:"block",cursor:"pointer"}}>
+                          <div style={{...S.btn("blue"),width:"100%",padding:"14px 0",fontSize:15,textAlign:"center",borderRadius:"var(--radius-md)"}}>
+                            📸 העלה צילום אישור בוחן
+                          </div>
+                          <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{
+                            const f=e.target.files[0]; if(!f) return;
+                            const r=new FileReader(); r.onload=ev=>setUploadedCert(ev.target.result); r.readAsDataURL(f);
+                          }}/>
+                        </label>
+                    }
+                  </div>
+              }
+            </div>
+            <button onClick={()=>setStep("review")} style={{...S.btn(),width:"100%"}}>← חזור</button>
+          </div>
+        )}
+
         {step==="sign"&&(
           <div>
             <div style={{...S.card,border:"1px solid var(--color-warning-fg)",marginBottom:12}}>
@@ -1836,11 +1928,39 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               </div>
               <div style={{display:"flex",gap:6}}>
                 {weps.length>0&&!sig&&<button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
+                {soldierNeedsTest(soldier,db)&&(()=>{
+                  const ts=getTestStatus(db,soldier.id);
+                  const ph=soldier.phone;
+                  if(!ts.valid&&ph) return <button onClick={()=>{
+                    const phone=phoneToWA(ph);
+                    const msg="שלום "+soldier.name+",
+נדרש לעבור בוחן נשק לפני החתימה.
+בצע את הבוחן בקישור:
+https://martbase.digital.idf.il
+לאחר המעבר, צלם את האישור ושלח חתימה דרך:
+https://orenh943-cell.github.io/armory-9219?sign="+soldier.id;
+                    window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+                  }} style={{...S.btn("orange"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📋 שלח לבוחן</button>;
+                  return null;
+                })()}
                 <button onClick={()=>setShowDoc(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📄 טופס</button>
                 {sig&&<button onClick={clearSig} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
               </div>
             </div>
             {sig&&<img src={sig.sigData} style={{height:38,marginTop:10,borderRadius:4,border:"1px solid var(--color-border-default)"}} alt="חתימה"/>}
+            {(()=>{
+              const ts=getTestStatus(db,soldier.id);
+              const needs=soldierNeedsTest(soldier,db);
+              if(!needs) return null;
+              if(ts.valid) return <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{color:"var(--color-success-fg)",fontWeight:700}}>✅ בוחן נשק תקף</span>
+                <span style={{color:"var(--color-text-secondary)"}}>עד: {ts.expiry}</span>
+                {ts.img&&<img src={ts.img} style={{height:28,borderRadius:4,cursor:"pointer"}} onClick={()=>window.open(ts.img,"_blank")} alt="אישור בוחן"/>}
+              </div>;
+              return <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700}}>
+                ⚠️ {ts.expired?"אישור בוחן פג תוקף":"אין אישור בוחן"}
+              </div>;
+            })()}
             {/* מיקום נשק */}
             {(()=>{
               const loc = db.weaponLocations?.[soldier.id];
@@ -3692,6 +3812,10 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
     return ids.size;
   })();
 
+  // חישוב בוחן נשק
+  const filtNeedTest = filtWithWep.filter(s=>TEST_REQUIRED_WEAPONS.some(w=>Object.keys(s.assigned||{}).includes(w)));
+  const filtNoTest = filtNeedTest.filter(s=>{const ts=getTestStatus(db,s.id||s.soldierId);return !ts.valid;}).length;
+
   const cards = [
     {label:"חיילים",val:filtSoldiers.length,color:"var(--color-purple-fg)",k:"all"},
     {label:"עם נשק",val:filtWithWep.length,color:"var(--color-accent-fg)",k:"withWeapon"},
@@ -3699,6 +3823,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
     {label:"טרם חתמו",val:filtUnsigned,color:filtUnsigned>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"unsigned"},
     {label:"ערבות",val:filtGuaranty,color:"var(--color-purple-fg)",k:"guaranty"},
     {label:"טופס יציאה",val:filtForms,color:"var(--color-warning-fg)",k:"exitform"},
+    {label:"ללא בוחן",val:filtNoTest,color:filtNoTest>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"notest"},
   ];
 
   return (
@@ -3737,6 +3862,16 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
           </div>
         ))}
       </div>
+
+      {/* אזהרה ללא בוחן */}
+      {filtNoTest>0&&(
+        <div style={{...S.card,border:"1px solid rgba(230,179,65,.35)",background:"rgba(230,179,65,.07)",marginBottom:10,padding:"10px 14px"}}>
+          <div style={{fontWeight:700,color:"var(--color-warning-fg)",marginBottom:4}}>⚠️ {filtNoTest} חיילים ללא אישור בוחן תקף</div>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>
+            נדרש אישור בוחן לפני חתימה על M4 / M16 / קלע סער
+          </div>
+        </div>
+      )}
 
       {/* אזהרה טרם חתמו */}
       {filtUnsigned>0&&(
@@ -3894,6 +4029,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const offPwd = fbOn("db/userPasswords", (passwords)=>{
       setDb(prev=>({...prev, userPasswords: passwords||{}}));
     });
+    const offTest = fbOn("db/testCerts", (certs)=>{
+      setDb(prev=>({...prev, testCerts: certs||{}}));
+    });
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
     });
@@ -3933,7 +4071,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(data) setDb(prev=>({...prev, inspectionFamilies: data}));
       setDb(prev=>({...prev, inspections: data||{}}));
     });
-    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); off15(); offPwd(); };
+    return ()=>{ off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); off10(); off11(); off11b(); off12(); off13(); off14(); off15(); offPwd(); offTest(); };
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
@@ -4195,6 +4333,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                       {sig&&<div style={{color:"var(--color-success-fg)",fontSize:"var(--text-xs)",marginTop:2}}>✅ חתם ב-{sig.signedAt}</div>}
                     </div>
                     {sig&&<img src={sig.sigData} style={{height:30,borderRadius:4,border:"1px solid var(--color-border-default)"}} alt="חתימה"/>}
+                    {(()=>{
+                      const ts=getTestStatus(db,s.id);
+                      const needs=soldierNeedsTest(s,db);
+                      if(!needs) return null;
+                      if(ts.valid) return <Badge color="green" small>✅ בוחן עד {ts.expiry}</Badge>;
+                      if(ts.expired) return <Badge color="red" small>⚠️ בוחן פג</Badge>;
+                      return <Badge color="orange" small>⚠️ אין בוחן</Badge>;
+                    })()}
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
                       {!sig&&s.guarantee&&<Badge color="purple" small>🛡️ ערב: {s.guarantee.repName}</Badge>}
                       {!sig&&<button onClick={()=>sendWhatsApp(s)} style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
