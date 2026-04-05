@@ -5754,8 +5754,6 @@ function MyStockTab({db, setDb, soldiers, auth}){
           <div>אין נתונים לפי הסינון</div>
         </div>
       )}
-    </div>
-
       {/* Modal הוספת פריט חדש */}
       {showAddNew&&(
         <Modal title="➕ הוספת פריט חדש למלאי ארמון" onClose={()=>{setShowAddNew(false);setNewName("");setNewMakat("");setNewSerial("");setNewQty("1");}}>
@@ -5865,7 +5863,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
           </div>
         </Modal>
       )}
-
+    </div>
   );
 }
 
