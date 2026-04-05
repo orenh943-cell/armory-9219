@@ -674,13 +674,6 @@ function cleanSigs(sigs){
   return out;
 }
 
-function todayStr(){
-  return new Date().toLocaleDateString("he-IL");
-}
-function nowStr(){
-  return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
-}
-
 function saveDB(db){
   const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
