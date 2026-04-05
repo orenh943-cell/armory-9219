@@ -695,8 +695,8 @@ function cleanSigs(sigs){
   if(!sigs) return {};
   const out={};
   Object.entries(sigs).forEach(([id,v])=>{
-    if(v && typeof v==="object" && v.sig) out[id]=v;
-    else if(typeof v==="string" && v.length>10) out[id]={sig:v,ts:Date.now()};
+    if(v && typeof v==="object" && (v.sig||v.sigData)) out[id]=v;
+    else if(typeof v==="string" && v.length>10) out[id]={sigData:v,ts:Date.now()};
   });
   return out;
 }
@@ -1378,7 +1378,27 @@ function SoldierSignView({auth,onLogout,db,setDb}){
           <div>
             <div style={{...S.card,border:"1px solid var(--color-warning-fg)",marginBottom:12}}>
               <div style={{color:"var(--color-warning-fg)",fontWeight:700,marginBottom:8}}>✍️ חתימה על {items.length} אמצעים</div>
-              <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:14}}>בחתימתך אתה מאשר קבלת האמצעים המפורטים</p>
+              <table style={{width:"100%",borderCollapse:"collapse",marginBottom:12,fontSize:"var(--text-sm)"}}>
+                <thead><tr style={{background:"var(--color-bg-canvas)"}}>
+                  <th style={{...S.th,textAlign:"right"}}>אמצעי</th>
+                  <th style={{...S.th,textAlign:"right"}}>סידורי</th>
+                </tr></thead>
+                <tbody>
+                  {weapons.map(([name,val])=>(
+                    <tr key={name}>
+                      <td style={{...S.td,fontWeight:700,color:"var(--color-danger-fg)"}}>{name}</td>
+                      <td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)"}}>{val&&val!==1?String(val):"—"}</td>
+                    </tr>
+                  ))}
+                  {accessories.map(([name,val])=>(
+                    <tr key={name}>
+                      <td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}</td>
+                      <td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)"}}>{val&&val!==1?String(val):"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:14,padding:"8px 10px",background:"var(--color-bg-canvas)",borderRadius:"var(--radius-sm)"}}>בחתימתך אתה מאשר קבלת האמצעים המפורטים לעיל</p>
               <SignaturePad onSave={doSign}/>
             </div>
             <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
