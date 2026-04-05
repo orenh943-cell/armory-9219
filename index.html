@@ -1244,11 +1244,13 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     return ()=>off2();
   },[]);
 
-  if(!soldier){
-    const customSoldier = Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
-    if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:
-  }
-  const soldierData = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId) || {id:auth.soldierId,name:auth.name,unit:"—",phone:"—"};
+  const customSoldier = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
+  if(!customSoldier) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,padding:24}}>
+    <div style={{fontSize:40}}>⚠️</div>
+    <div style={{fontWeight:700,fontSize:16,color:"var(--color-warning-fg)"}}>החייל לא נמצא במערכת</div>
+    <div style={{color:"var(--color-text-secondary)",fontSize:14}}>פנה לנשקאי לעדכון פרטים</div>
+  </div>;
+  const soldierData = customSoldier;
   const testStatus = getTestStatus(db, auth.soldierId);
   const needsTest = soldierNeedsTest(soldierData, db);
   const items=Object.entries(assigned);
