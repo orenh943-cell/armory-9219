@@ -338,6 +338,24 @@ input:focus, select:focus, textarea:focus {
 /* ============================================================
    BUTTONS
    ============================================================ */
+/* Bottom nav - hidden on desktop, shown on mobile */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  height: 60px;
+  background: var(--color-bg-default);
+  border-top: 1px solid var(--color-border-muted);
+  z-index: 100;
+  padding: 0 4px;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2px 12px rgba(0,0,0,.15);
+  justify-content: space-around;
+  align-items: center;
+}
+
 button {
   min-height: var(--tap-target);
   font-family: inherit;
@@ -425,8 +443,9 @@ button:disabled { opacity: .5; cursor: not-allowed; }
    ============================================================ */
 @media (max-width: 768px) {
   .desktop-sidebar { display: none !important; }
-  .main-content { margin-right: 0 !important; padding: 8px !important; }
+  .main-content { margin-right: 0 !important; padding: 8px 8px 70px 8px !important; }
   .mobile-header { display: flex !important; }
+  .bottom-nav { display: flex !important; }
   .grid-2 { grid-template-columns: 1fr !important; }
   .grid-stats { grid-template-columns: repeat(2,1fr) !important; }
   /* Tables scroll */
@@ -444,6 +463,57 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .grid-stats { grid-template-columns: repeat(2,1fr) !important; }
   [style*="minmax(130px"] { grid-template-columns: repeat(2,1fr) !important; }
   [style*="minmax(120px"] { grid-template-columns: repeat(2,1fr) !important; }
+  /* Stack grids on very small screens */
+  [style*="grid-template-columns:"1fr 1fr""],
+  [style*="gridTemplateColumns:"1fr 1fr""] { grid-template-columns: 1fr !important; }
+}
+
+/* ============================================================
+   COMPREHENSIVE MOBILE LAYOUT FIXES
+   ============================================================ */
+
+/* Bottom tab bar for mobile navigation */
+@media (max-width: 768px) {
+
+  /* Cards take full width */
+  [style*="minmax(280px"] { grid-template-columns: 1fr !important; }
+  [style*="minmax(260px"] { grid-template-columns: 1fr !important; }
+  [style*="minmax(300px"] { grid-template-columns: 1fr !important; }
+
+  /* Button rows wrap on mobile */
+  [style*="display:"flex""] { flex-wrap: wrap; }
+
+  /* Inputs fill width */
+  input[type="text"], input[type="number"], input[type="tel"],
+  input[type="password"], select, textarea {
+    width: 100% !important;
+    min-height: 44px !important;
+  }
+
+  /* Stats grid - 3 columns max */
+  [style*="repeat(auto-fit,minmax(110px"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Modals - bottom sheet style */
+  .modal-overlay {
+    align-items: flex-end !important;
+  }
+  .modal-box {
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 90vh !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  /* Table - horizontal scroll */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Reduce padding on mobile */
+  [style*="padding:24"] { padding: 16px !important; }
+  [style*="padding:20"] { padding: 14px !important; }
 }
 @media (min-width: 1024px) {
   :root { --text-base: 14px; }
@@ -1031,7 +1101,10 @@ function Login({onLogin}){
     const pTrim=pass.trim();
     if(!uTrim||!pTrim){setErr("נא למלא שם ומספר אישי");return;}
     const u=USERS[uTrim]||dynUsers[uTrim];
-    if(u && (pTrim===u.pass || pTrim===String(u.pass))){
+    // Check password: custom override first, then default
+    const savedPasswords = loadDB()?.userPasswords||{};
+    const effectivePass = savedPasswords[uTrim] || u?.pass;
+    if(u && (pTrim===effectivePass || pTrim===String(effectivePass))){
       onLogin({
         role:u.role,
         name:u.name,
@@ -3938,6 +4011,34 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             {theme==="dark"?"☀️":"🌙"}
           </button>
         </div>
+        {/* Bottom navigation bar - mobile only */}
+        <nav className="bottom-nav" role="navigation" aria-label="ניווט תחתון">
+          {[
+            {id:"dashboard", icon:"🛡️", label:"בקרה"},
+            {id:"signatures", icon:"✍️", label:"חתימות"},
+            {id:"guarantors", icon:"🤝", label:"ערבויות"},
+            {id:"mystock", icon:"📦", label:"מלאי"},
+            {id:"__menu__", icon:"☰", label:"תפריט"},
+          ].map(t => t.id==="__menu__"
+            ? <button key="menu" onClick={()=>setMobileMenu(true)}
+                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,
+                  flex:1,background:"none",border:"none",padding:"4px 0",
+                  color:"var(--color-text-secondary)",fontSize:10,minHeight:"auto",cursor:"pointer"}}>
+                <span style={{fontSize:22}}>☰</span>
+                <span>תפריט</span>
+              </button>
+            : <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,
+                  flex:1,background:"none",border:"none",padding:"4px 0",minHeight:"auto",cursor:"pointer",
+                  color: tab===t.id ? "var(--color-accent-fg)" : "var(--color-text-secondary)",
+                  fontSize:10, fontWeight: tab===t.id ? 700 : 400,
+                  borderTop: tab===t.id ? "2px solid var(--color-accent-fg)" : "2px solid transparent"}}>
+                <span style={{fontSize:22}}>{t.icon}</span>
+                <span>{t.label}</span>
+              </button>
+          )}
+        </nav>
+
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:12,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
           <span>🔄 רענון אחרון: {lastRefresh.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
           <button onClick={()=>setLastRefresh(new Date())} style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"2px 8px",color:"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-xs)"}}>רענן עכשיו</button>
@@ -7551,6 +7652,8 @@ function PermissionsTab({db, setDb}){
   const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",soldierId:""});
   const [err, setErr] = useState("");
   const [searchUser, setSearchUser] = useState("");
+  const [editPassUser, setEditPassUser] = useState(null);
+  const [editPassVal, setEditPassVal] = useState("");
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [soldiers] = useState(()=>[...Object.values(loadDB()?.customSoldiers||{}),...RAW_SOLDIERS]);
 
@@ -7704,11 +7807,28 @@ function PermissionsTab({db, setDb}){
                 <div style={{fontWeight:700,fontSize:"var(--text-base)"}}>{u.name}</div>
                 <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>{ROLE_LABELS[baseRole]||baseRole}{u.roleTitle&&<span style={{marginRight:6,color:"var(--color-accent-fg)",fontWeight:700}}>· {u.roleTitle}</span>}{u.rank&&<span style={{marginRight:6,color:"var(--color-warning-fg)",fontSize:10}}>{u.rank}</span>} • {username} {isDynamic&&<span style={{color:"var(--color-success-fg)",fontSize:10}}>● דינמי</span>}</div>
               </div>
-              {isDynamic&&(
-                <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>מחק</button>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||u.soldierId||"");}}
+                  style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
+                {isDynamic&&(
+                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
+                )}
+              </div>
+              {editPassUser===username&&(
+                <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
+                  <input value={editPassVal} onChange={e=>setEditPassVal(e.target.value)}
+                    placeholder="סיסמה חדשה"
+                    style={{...S.input,flex:1,marginBottom:0}}/>
+                  <button onClick={()=>{
+                    const ndb={...db,userPasswords:{...(db.userPasswords||{}),[username]:editPassVal.trim()}};
+                    saveDB(ndb); setDb(ndb); setEditPassUser(null); setEditPassVal("");
+                  }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
+                  <button onClick={()=>{setEditPassUser(null);setEditPassVal("");}}
+                    style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
+                </div>
               )}
             </div>
-            {!isAdmin&&(
+            {(isAdmin&&(
               <div>
                 {/* תפקיד + תבנית מהירה */}
                 <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -7956,9 +8076,12 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const [sigData,setSigData]=React.useState(null);
   const [showPad,setShowPad]=React.useState(false);
   const [step,setStep]=React.useState("select"); // select, sign, done
+  const [manualMode,setManualMode]=React.useState(false);
+  const [selectedIds,setSelectedIds]=React.useState({});
+  const [soldierSearch,setSoldierSearch]=React.useState("");
 
   const units=["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
-  const targetSoldiers=React.useMemo(()=>{
+  const autoSoldiers=React.useMemo(()=>{
     let l=soldiers.filter(s=>{
       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
       return weps.length>0 && !db.signatures?.[s.id];
@@ -7966,6 +8089,11 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
     if(selectedUnit!=="הכל") l=l.filter(s=>s.unit===selectedUnit);
     return l;
   },[soldiers,db.signatures,selectedUnit]);
+
+  const targetSoldiers=React.useMemo(()=>{
+    if(manualMode) return soldiers.filter(s=>selectedIds[s.id]);
+    return autoSoldiers;
+  },[manualMode,selectedIds,autoSoldiers,soldiers]);
 
   function onRepSearch(v){
     setRepSearch(v);setRepId("");setRepPhone("");
@@ -8002,10 +8130,71 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
             🪖 פיצר זה מאפשר לאדם אחד (כגון אביאל דיטור) לחתום על כל ציוד הפלוגה בחתימה אחת
           </div>
 
-          <label style={S.label}>בחר פלוגה להחתים</label>
-          <select value={selectedUnit} onChange={e=>setSelectedUnit(e.target.value)} style={{...S.input}}>
-            {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>)}
-          </select>
+          {/* מצב בחירה */}
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <button onClick={()=>{setManualMode(false);setSelectedIds({});}}
+              style={{...S.btn(manualMode?"":"blue"),flex:1,padding:"8px 0",fontSize:"var(--text-sm)"}}>
+              🏢 לפי פלוגה (אוטומטי)
+            </button>
+            <button onClick={()=>setManualMode(true)}
+              style={{...S.btn(manualMode?"blue":""),flex:1,padding:"8px 0",fontSize:"var(--text-sm)"}}>
+              ☑️ בחירה ידנית
+            </button>
+          </div>
+
+          {!manualMode&&(
+            <div>
+              <label style={S.label}>בחר פלוגה להחתים</label>
+              <select value={selectedUnit} onChange={e=>setSelectedUnit(e.target.value)} style={{...S.input}}>
+                {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>)}
+              </select>
+            </div>
+          )}
+
+          {manualMode&&(
+            <div style={{marginBottom:12}}>
+              <label style={S.label}>חפש וסמן חיילים ({Object.keys(selectedIds).length} נבחרו)</label>
+              <input value={soldierSearch} onChange={e=>setSoldierSearch(e.target.value)}
+                placeholder="🔍 חפש לפי שם או מ.א..."
+                style={{...S.input,marginBottom:8}}/>
+              <div style={{maxHeight:220,overflowY:"auto",border:"1px solid var(--color-border-muted)",borderRadius:"var(--radius-md)"}}>
+                {soldiers
+                  .filter(s=>!soldierSearch.trim()||s.name.includes(soldierSearch)||s.id.includes(soldierSearch))
+                  .map(s=>{
+                    const checked=!!selectedIds[s.id];
+                    const hasWep=Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k));
+                    return <div key={s.id} onClick={()=>setSelectedIds(prev=>{
+                        const n={...prev};
+                        if(n[s.id]) delete n[s.id]; else n[s.id]=true;
+                        return n;
+                      })}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",
+                        background:checked?"var(--color-accent-bg)":"transparent",
+                        borderBottom:"1px solid var(--color-border-muted)"}}>
+                      <div style={{width:20,height:20,borderRadius:4,border:"2px solid "+(checked?"var(--color-accent-fg)":"var(--color-border-default)"),
+                        background:checked?"var(--color-accent-fg)":"transparent",
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {checked&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>✓</span>}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:checked?700:400,fontSize:"var(--text-sm)"}}>{s.name}</div>
+                        <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>פלוגה {s.unit} {hasWep?"🔫":""}</div>
+                      </div>
+                    </div>;
+                  })
+                }
+              </div>
+              {Object.keys(selectedIds).length>0&&(
+                <div style={{marginTop:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:"var(--text-sm)",color:"var(--color-accent-fg)",fontWeight:700}}>
+                    {Object.keys(selectedIds).length} חיילים נבחרו
+                  </span>
+                  <button onClick={()=>setSelectedIds({})}
+                    style={{...S.btn("gray"),padding:"2px 8px",fontSize:"var(--text-xs)"}}>נקה הכל</button>
+                </div>
+              )}
+            </div>
+          )}
 
           <label style={S.label}>שם החותם (נציג / אחראי)</label>
           <div style={{position:"relative"}}>
