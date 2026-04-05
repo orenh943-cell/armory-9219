@@ -1230,19 +1230,26 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     });
     return ()=>{ off1(); };
   },[]);
-  const testStatus = getTestStatus(db, auth.soldierId);
-  const needsTest = soldierNeedsTest(soldierData||{id:auth.soldierId,assigned:assigned}, db);
   const [step,setStep]=useState(sig?"done":"review");
   const [sigImg,setSigImg]=useState(sig?.sigData||null);
   const [testImg,setTestImg]=useState(sig?.testImg||null);
   const [showTestUpload,setShowTestUpload]=useState(false);
-  const [uploadedCert,setUploadedCert]=useState(null); // תמונת אישור בוחן חדש
+  const [uploadedCert,setUploadedCert]=useState(null);
+
+  // האזן גם לעדכוני testCerts מ-Firebase
+  useEffect(()=>{
+    const off2 = fbOn("db/testCerts/"+auth.soldierId, (cert)=>{
+      if(cert) setDb(prev=>({...prev, testCerts:{...(prev.testCerts||{}),[auth.soldierId]:cert}}));
+    });
+    return ()=>off2();
+  },[]);
+
   if(!soldier){
-    // חייל מותאם אישית — צור אובייקט זמני
     const customSoldier = Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
-    if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--color-danger-fg)",flexDirection:"column",gap:10}}><div style={{fontSize:40}}>⚠️</div><div>חייל לא נמצא במערכת</div><div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>מ.א: {auth.soldierId}</div></div>;
-  }
+    if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:
   const soldierData = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId) || {id:auth.soldierId,name:auth.name,unit:"—",phone:"—"};
+  const testStatus = getTestStatus(db, auth.soldierId);
+  const needsTest = soldierNeedsTest(soldierData, db);
   const items=Object.entries(assigned);
   const weapons=items.filter(([k])=>WEAPON_KEYS.includes(k));
   const accessories=items.filter(([k])=>!WEAPON_KEYS.includes(k));
