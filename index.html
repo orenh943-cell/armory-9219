@@ -341,24 +341,6 @@ input:focus, select:focus, textarea:focus {
 /* Desktop-only elements - hidden on mobile */
 .desktop-only { display: flex; }
 
-/* Bottom nav - hidden on desktop, shown on mobile */
-.bottom-nav {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  left: 0;
-  height: 60px;
-  background: var(--color-bg-default);
-  border-top: 1px solid var(--color-border-muted);
-  z-index: 100;
-  padding: 0 4px;
-  padding-bottom: env(safe-area-inset-bottom);
-  box-shadow: 0 -2px 12px rgba(0,0,0,.15);
-  justify-content: space-around;
-  align-items: center;
-}
-
 button {
   min-height: var(--tap-target);
   font-family: inherit;
@@ -446,9 +428,8 @@ button:disabled { opacity: .5; cursor: not-allowed; }
    ============================================================ */
 @media (max-width: 768px) {
   .desktop-sidebar { display: none !important; }
-  .main-content { margin-right: 0 !important; padding: 8px 8px 70px 8px !important; }
+  .main-content { margin-right: 0 !important; padding: 8px !important; }
   .mobile-header { display: flex !important; }
-  .bottom-nav { display: flex !important; }
   .desktop-only { display: none !important; }
   .grid-2 { grid-template-columns: 1fr !important; }
   .grid-stats { grid-template-columns: repeat(2,1fr) !important; }
@@ -4027,7 +4008,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {mobileMenu&&(
         <div style={{position:"fixed",inset:0,zIndex:200}} onClick={()=>setMobileMenu(false)}>
           <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.7)"}}/>
-          <div style={{position:"absolute",right:0,top:0,bottom:0,width:210,background:"var(--color-bg-default)",borderLeft:"1px solid #21262d"}} onClick={e=>e.stopPropagation()}><Sidebar/></div>
+          <div style={{position:"absolute",right:0,top:0,bottom:0,width:280,background:"var(--color-bg-default)",borderLeft:"1px solid var(--color-border-muted)",boxShadow:"-4px 0 20px rgba(0,0,0,.3)",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><Sidebar/></div>
         </div>
       )}
       <main className="main-content" role="main" style={{flex:1,marginRight:195,padding:"var(--space-5) var(--space-4)",minHeight:"100vh",background:"var(--color-bg-canvas)",transition:"background var(--transition)"}}>
@@ -4036,39 +4017,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           borderBottom:"1px solid var(--color-border-muted)",padding:"var(--space-2) var(--space-3)",margin:"0 -16px var(--space-3)",
           boxShadow:"var(--shadow-sm)"}}>
           <button onClick={()=>setMobileMenu(true)} style={{background:"none",border:"none",color:"var(--color-text-primary)",cursor:"pointer",fontSize:"var(--text-2xl)",padding:"8px",minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}>☰</button>
-          <span style={{fontWeight:700,flex:1,fontSize:15}}>ארמון 9219 מוריה</span>
+          <div style={{flex:1}}><div style={{fontWeight:800,fontSize:15}}>ארמון 9219 מוריה</div><div style={{fontSize:11,color:"var(--color-text-secondary)",marginTop:1}}>{tabs.find(t=>t.id===tab)?.icon} {tabs.find(t=>t.id===tab)?.label}</div></div>
           <button onClick={toggleTheme} className="theme-toggle" style={{minHeight:32}}>
             {theme==="dark"?"☀️":"🌙"}
           </button>
         </div>
-        {/* Bottom navigation bar - mobile only */}
-        <nav className="bottom-nav" role="navigation" aria-label="ניווט תחתון">
-          {[
-            {id:"dashboard", icon:"🛡️", label:"בקרה"},
-            {id:"signatures", icon:"✍️", label:"חתימות"},
-            {id:"guarantors", icon:"🤝", label:"ערבויות"},
-            {id:"mystock", icon:"📦", label:"מלאי"},
-            {id:"__menu__", icon:"☰", label:"תפריט"},
-          ].map(t => t.id==="__menu__"
-            ? <button key="menu" onClick={()=>setMobileMenu(true)}
-                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,
-                  flex:1,background:"none",border:"none",padding:"4px 0",
-                  color:"var(--color-text-secondary)",fontSize:10,minHeight:"auto",cursor:"pointer"}}>
-                <span style={{fontSize:22}}>☰</span>
-                <span>תפריט</span>
-              </button>
-            : <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,
-                  flex:1,background:"none",border:"none",padding:"4px 0",minHeight:"auto",cursor:"pointer",
-                  color: tab===t.id ? "var(--color-accent-fg)" : "var(--color-text-secondary)",
-                  fontSize:10, fontWeight: tab===t.id ? 700 : 400,
-                  borderTop: tab===t.id ? "2px solid var(--color-accent-fg)" : "2px solid transparent"}}>
-                <span style={{fontSize:22}}>{t.icon}</span>
-                <span>{t.label}</span>
-              </button>
-          )}
-        </nav>
-
         <div className="desktop-only" style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:12,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
           <span>🔄 רענון אחרון: {lastRefresh.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
           <button onClick={()=>setLastRefresh(new Date())} style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"2px 8px",color:"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-xs)"}}>רענן עכשיו</button>
