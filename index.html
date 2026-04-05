@@ -5757,43 +5757,43 @@ function MyStockTab({db, setDb, soldiers, auth}){
       {/* Modal הוספת פריט חדש */}
       {showAddNew&&(
         <Modal title="➕ הוספת פריט חדש למלאי ארמון" onClose={()=>{setShowAddNew(false);setNewName("");setNewMakat("");setNewSerial("");setNewQty("1");}}>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
-                <label style={S.label}>שם פריט *</label>
-                <input value={newName} onChange={e=>setNewName(e.target.value)}
-                  placeholder='לדוגמה: נגב 5.56'
-                  style={{...S.input,marginBottom:0}}/>
-              </div>
-              <div>
-                <label style={S.label}>מק"ט</label>
-                <input value={newMakat} onChange={e=>setNewMakat(e.target.value)}
-                  placeholder="100012066"
-                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
-              </div>
+            <div>
+              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>📦 שם פריט <span style={{color:"var(--color-danger-fg)"}}>*</span></label>
+              <input value={newName} onChange={e=>setNewName(e.target.value)}
+                placeholder="לדוגמה: נגב 5.56"
+                autoFocus
+                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}}/>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
-                <label style={S.label}>מספר סידורי (אם יש)</label>
-                <input value={newSerial} onChange={e=>setNewSerial(e.target.value)}
-                  placeholder="לדוגמה: 923456"
-                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
-              </div>
-              <div>
-                <label style={S.label}>כמות להוסיף</label>
-                <input value={newQty} onChange={e=>setNewQty(e.target.value.replace(/\D/g,""))}
-                  placeholder="1"
-                  style={{...S.input,marginBottom:0}} inputMode="numeric"/>
-              </div>
+            <div>
+              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>🔢 מק"ט</label>
+              <input value={newMakat} onChange={e=>setNewMakat(e.target.value)}
+                placeholder="לדוגמה: 100012066"
+                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
+            </div>
+
+            <div>
+              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>🔖 מספר סידורי <span style={{color:"var(--color-text-muted)",fontWeight:400}}>(אם יש)</span></label>
+              <input value={newSerial} onChange={e=>setNewSerial(e.target.value)}
+                placeholder="לדוגמה: 923456"
+                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
+            </div>
+
+            <div>
+              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>📊 כמות</label>
+              <input value={newQty} onChange={e=>setNewQty(e.target.value.replace(/[^0-9]/g,""))}
+                placeholder="1"
+                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
             </div>
 
             {newName.trim()&&(
-              <div style={{padding:"8px 12px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>
-                <div>📦 <b>{newName.trim()}</b>{newMakat&&` (מק"ט: ${newMakat})`}</div>
-                <div>כמות: {parseInt(newQty)||1} יחידות{newSerial&&` | סידורי: ${newSerial}`}</div>
-                <div style={{color:"var(--color-text-muted)",marginTop:2}}>יתווסף לכל הטבלאות: מלאי ארמון, רשימת סידוריים, טבלאות שיוך</div>
+              <div style={{padding:"10px 14px",background:"var(--color-accent-bg)",border:"1px solid var(--color-accent-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-sm)"}}>
+                <div style={{fontWeight:700,color:"var(--color-accent-fg)",marginBottom:4}}>✅ יתווסף למלאי:</div>
+                <div><b>{parseInt(newQty)||1}</b> × <b>{newName.trim()}</b></div>
+                {newMakat&&<div style={{color:"var(--color-text-secondary)"}}>מק"ט: {newMakat}</div>}
+                {newSerial&&<div style={{color:"var(--color-text-secondary)"}}>סידורי: {newSerial}</div>}
               </div>
             )}
 
@@ -5849,7 +5849,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
                 const ndb = {...db, armoryMaster: master2, unitItems: newUnitItems};
                 saveDB(ndb); setDb(ndb);
-                logAction("הוספת_פריט", `נוסף ${qty} × ${name}${serial?" סידורי:"+serial:""}${makat?" מק"ט:"+makat:""}`, auth?.name||"מערכת");
+                logAction("הוספת_פריט", "נוסף "+qty+" x "+name+(serial?" סידורי:"+serial:"")+(makat?" מקט:"+makat:""), auth?.name||"מערכת");
                 setShowAddNew(false);
                 setNewName(""); setNewMakat(""); setNewSerial(""); setNewQty("1");
               }} style={{...S.btn("blue"),flex:1}}>
