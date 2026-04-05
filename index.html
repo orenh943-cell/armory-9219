@@ -1247,6 +1247,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   if(!soldier){
     const customSoldier = Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
     if(!customSoldier) return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:
+  }
   const soldierData = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId) || {id:auth.soldierId,name:auth.name,unit:"—",phone:"—"};
   const testStatus = getTestStatus(db, auth.soldierId);
   const needsTest = soldierNeedsTest(soldierData, db);
