@@ -8651,8 +8651,17 @@ function TestCertView({auth, db, setDb}){
 
         <div style={{...S.card,border:"1px solid var(--color-accent-fg)"}}>
           <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:4}}>📋 העלאת אישור בוחן נשק</div>
-          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:16}}>
-            העלה צילום מסך של האישור שקיבלת לאחר עריכת הבוחן במערכת הצבאית
+          <div style={{marginBottom:16}}>
+            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:10}}>
+              העלה צילום מסך של האישור שקיבלת לאחר עריכת הבוחן
+            </div>
+            <button onClick={()=>window.open("https://martbase.digital.idf.il","_blank")}
+              style={{...S.btn("blue"),width:"100%",padding:"12px 0",fontSize:15,fontWeight:700}}>
+              🔗 כניסה לבוחן הנשק (martbase)
+            </button>
+            <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:6,textAlign:"center"}}>
+              לאחר עריכת הבוחן — חזור לכאן והעלה את האישור
+            </div>
           </div>
 
           {certImg
@@ -8975,12 +8984,16 @@ function App(){
     const exitId=params.get("exitform");
     const bulkSignId=params.get("bulksign");
     const testCertId=params.get("testcert");
+    // אם יש param כלשהו - נקה auth שמור (לא להיתקע על login ישן)
+    if(signId||exitId||bulkSignId||testCertId){
+      try{localStorage.removeItem("armory_auth");}catch(e){}
+    }
     // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
     function findSoldier(id){
       const raw=RAW_SOLDIERS.find(x=>x.id===id);
       if(raw) return raw;
       try{
-        const local=JSON.parse(localStorage.getItem("armory_9219_db")||"{}");
+        const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");
         const custom=Object.values(local.customSoldiers||{});
         return custom.find(x=>x.id===id)||null;
       }catch(e){return null;}
@@ -8997,7 +9010,7 @@ function App(){
     if(bulkSignId){
       // Rep signing a bulk guaranty from a link
       try{
-        const local=JSON.parse(localStorage.getItem("armory_9219_db")||"{}");
+        const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");
         const g=local.bulkGuarantors?.[bulkSignId];
         if(g) return{role:"bulkrep",name:g.repName||"נציג",bulkSignKey:bulkSignId,autoBulkSign:true};
       }catch(e){}
