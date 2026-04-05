@@ -642,6 +642,75 @@ function phoneToWA(p){if(!p)return null;const d=String(p).replace(/\D/g,"");retu
 
 // Firebase DB — שמירה וטעינה
 const DB_KEY="armory_9219_v4";
+
+function loadDB(){
+  try{
+    const raw=localStorage.getItem(DB_KEY);
+    return raw?JSON.parse(raw):null;
+  }catch(e){return null;}
+}
+
+function sanitizeForFirebase(obj){
+  if(obj===null||obj===undefined) return null;
+  if(Array.isArray(obj)) return obj.map(sanitizeForFirebase);
+  if(typeof obj==="object"){
+    const out={};
+    Object.entries(obj).forEach(([k,v])=>{
+      const sk=String(k).replace(/[.#$/\[\]]/g,"_");
+      out[sk]=sanitizeForFirebase(v);
+    });
+    return out;
+  }
+  return obj;
+}
+
+function cleanSigs(sigs){
+  if(!sigs) return {};
+  const out={};
+  Object.entries(sigs).forEach(([id,v])=>{
+    if(v && typeof v==="object" && v.sig) out[id]=v;
+    else if(typeof v==="string" && v.length>10) out[id]={sig:v,ts:Date.now()};
+  });
+  return out;
+}
+
+function todayStr(){
+  return new Date().toLocaleDateString("he-IL");
+}
+function nowStr(){
+  return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+}
+
+function saveDB(db){
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},...db};
+  try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
+  fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
+  fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
+  fbSet("db/customSoldiers", safe.customSoldiers).catch(e=>console.warn("FB err:",e));
+  fbSet("db/brokenItems", safe.brokenItems).catch(e=>console.warn("FB err:",e));
+  fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
+  fbSet("db/userPerms", safe.userPerms).catch(e=>console.warn("FB err:",e));
+  fbSet("db/userPasswords", safe.userPasswords).catch(e=>console.warn("FB err:",e));
+  fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
+  fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
+  fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
+  fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
+  fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
+}
+
+function initDB(){
+  const local = loadDB();
+  if(local) return local;
+  return {assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{}};
+}
+
+function logAction(type, details, actorName){
+  const ts=Date.now();
+  const now=new Date();
+  const entry={ts,type,details,actor:actorName||"מערכת",date:now.toLocaleDateString("he-IL"),time:now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),dateISO:now.toISOString().split("T")[0]};
+  fbSet("db/actLog/"+ts, entry).catch(e=>console.warn("log err:",e));
+}
+
 const INITIAL_UNIT_ITEMS = {};
 const ARMORY_MASTER = {"M4":{"total":340,"makat":100012066,"byUnit":{"א":50,"ב":49,"ג":44,"מסייעת":78,"אגמ":39,"פלסמ":31},"unassigned":49},"קלע סער":{"total":68,"makat":100012073,"byUnit":{"א":7,"ב":9,"ג":9,"מסייעת":11,"אגמ":2},"unassigned":30},"M16":{"total":148,"makat":100012332,"byUnit":{"א":1,"מסייעת":6,"אגמ":3,"פלסמ":49},"unassigned":89},"HTR 338":{"total":3,"makat":100014050,"byUnit":{},"unassigned":3},"M-24 חדש":{"total":9,"makat":100015536,"byUnit":{"מסייעת":4},"unassigned":5},"נגב 7.62":{"total":7,"makat":100020009,"byUnit":{"א":2,"ב":2,"ג":1,"מסייעת":1,"אגמ":1},"unassigned":0},"מטולון M320":{"total":34,"makat":100020017,"byUnit":{"א":4,"ב":5,"ג":8,"מסייעת":6,"אגמ":1},"unassigned":10},"מאג":{"total":38,"makat":100021013,"byUnit":{"ב":2,"מסייעת":5},"unassigned":31},"נגב 5.56":{"total":25,"makat":100022206,"byUnit":{"א":4,"ב":2,"ג":3,"מסייעת":3},"unassigned":13},"מק″כ 0.5":{"total":9,"makat":100024225,"byUnit":{},"unassigned":9},"מקלרון":{"total":1,"makat":100025019,"byUnit":{},"unassigned":1},"מקלר":{"total":4,"makat":100025132,"byUnit":{},"unassigned":4},"ישלט":{"total":2,"makat":100069180,"byUnit":{"מסייעת":2},"unassigned":0},"עדי":{"total":5,"makat":100070154,"byUnit":{"מסייעת":3,"אגמ":1},"unassigned":1},"שח″ע":{"total":16,"makat":100070170,"byUnit":{"א":5,"ב":5,"מסייעת":1},"unassigned":5},"וילון":{"total":19,"makat":100070537,"byUnit":{"מסייעת":2},"unassigned":17},"שח″ע ממותג":{"total":14,"makat":100070740,"byUnit":{"א":4,"ב":1,"ג":4,"מסייעת":3,"אגמ":1},"unassigned":1},"כוונת MUNS":{"total":1,"makat":100070758,"byUnit":{},"unassigned":1},"סמן לייזר ללאו":{"total":23,"makat":100071150,"byUnit":{"ב":6,"ג":1,"מסייעת":2},"unassigned":14},"שח″מ כחולה":{"total":39,"makat":100071258,"byUnit":{"א":3,"ב":2,"ג":2,"מסייעת":2,"אגמ":1},"unassigned":29},"שח''מ ירוקה":{"total":25,"makat":100072369,"byUnit":{"א":5,"ב":8,"ג":3,"מסייעת":6},"unassigned":3},"עידו":{"total":16,"makat":100072505,"byUnit":{"א":3,"ב":3,"ג":2,"מסייעת":4,"אגמ":2},"unassigned":2},"אורלי":{"total":2,"makat":100075431,"byUnit":{"מסייעת":2},"unassigned":0},"מפרולייט":{"total":16,"makat":100075873,"byUnit":{"מסייעת":4,"אגמ":1,"פלסמ":7},"unassigned":4},"עמית":{"total":7,"makat":100075881,"byUnit":{"ב":1,"ג":1,"מסייעת":4},"unassigned":1},"עמית איכון":{"total":2,"makat":100075946,"byUnit":{"מסייעת":2},"unassigned":0},"יחצ″ג מיני כוכב":{"total":1,"makat":100075962,"byUnit":{},"unassigned":1},"ערמון":{"total":2,"makat":100075989,"byUnit":{"א":1,"ג":1},"unassigned":0},"מפרומור":{"total":29,"makat":100076110,"byUnit":{"א":5,"ב":5,"ג":6,"מסייעת":8,"אגמ":2},"unassigned":3},"מיקרון":{"total":5,"makat":100077555,"byUnit":{"ג":1,"מסייעת":1,"אגמ":1},"unassigned":2},"טרמיס":{"total":11,"makat":100077656,"byUnit":{"א":3,"ב":3,"ג":3,"מסייעת":2},"unassigned":0},"NYX":{"total":4,"makat":100077889,"byUnit":{"א":1,"ב":1,"מסייעת":1,"אגמ":1},"unassigned":0},"ליאור":{"total":5,"makat":100079275,"byUnit":{"ב":2,"ג":2,"מסייעת":1},"unassigned":0},"מכבית":{"total":10,"makat":100079330,"byUnit":{},"unassigned":10},"פיגיון":{"total":3,"makat":100080125,"byUnit":{},"unassigned":3},"משקפת":{"total":66,"makat":100080494,"byUnit":{"א":5,"ב":8,"ג":9,"מסייעת":14,"אגמ":6},"unassigned":24},"משקפת 80*15":{"total":2,"makat":100081067,"byUnit":{"מסייעת":1},"unassigned":1},"עכבר":{"total":15,"makat":100081954,"byUnit":{"אגמ":2},"unassigned":13},"מאפס למטול":{"total":2,"makat":100082454,"byUnit":{},"unassigned":2},"פליר T75":{"total":12,"makat":100083523,"byUnit":{"מסייעת":4},"unassigned":8},"אקילה X4":{"total":52,"makat":100083582,"byUnit":{"א":8,"ב":6,"ג":5,"מסייעת":9,"אגמ":2},"unassigned":22},"טריגיקון":{"total":36,"makat":100083647,"byUnit":{"א":13,"ב":13,"ג":11,"מסייעת":12,"אגמ":3},"unassigned":0},"אקילה X6":{"total":8,"makat":100083680,"byUnit":{"מסייעת":3},"unassigned":5},"כוונת השלכה למטול M203":{"total":5,"makat":100085321,"byUnit":{},"unassigned":5},"זאבון":{"total":34,"makat":100085454,"byUnit":{"א":4,"ב":5,"ג":8,"מסייעת":6,"אגמ":1},"unassigned":10},"כוונת M5":{"total":296,"makat":100085518,"byUnit":{"א":42,"ב":41,"ג":38,"מסייעת":68,"אגמ":35,"פלסמ":30},"unassigned":42},"לאופולד 2":{"total":10,"makat":100086077,"byUnit":{"מסייעת":4},"unassigned":6},"לאופולד 6.5":{"total":2,"makat":100086131,"byUnit":{},"unassigned":2},"יראור":{"total":100,"makat":100086263,"byUnit":{"פלסמ":1},"unassigned":99},"ירין הגדלה משתנה":{"total":2,"makat":100086344,"byUnit":{},"unassigned":2},"מרק 6":{"total":5,"makat":100086412,"byUnit":{"מסייעת":2},"unassigned":3},"מרק 5":{"total":4,"makat":100086456,"byUnit":{"מסייעת":2},"unassigned":2},"מצפן":{"total":69,"makat":100087022,"byUnit":{"א":4,"ב":10,"ג":11,"מסייעת":14,"אגמ":3},"unassigned":27},"מטלון ישן":{"total":9,"makat":100087421,"byUnit":{"א":3,"ב":2,"מסייעת":2},"unassigned":2},"מטלון חדש":{"total":8,"makat":100087812,"byUnit":{"א":2,"ב":2,"ג":2,"מסייעת":2},"unassigned":0},"מטל סרוג 10":{"total":3,"makat":100087863,"byUnit":{},"unassigned":3},"מטל סרוג 20":{"total":1,"makat":100087871,"byUnit":{"מסייעת":1},"unassigned":0},"סמן לייזר למפקד":{"total":4,"makat":100088495,"byUnit":{"ג":1},"unassigned":3},"ציין לייזר לנגב":{"total":32,"makat":100088720,"byUnit":{"א":3,"ב":2,"ג":3,"מסייעת":4},"unassigned":20},"נטלי":{"total":7,"makat":100088843,"byUnit":{"ב":2},"unassigned":5},"צגון":{"total":4,"makat":100088983,"byUnit":{"מסייעת":4},"unassigned":0},"סמן PACK":{"total":59,"makat":100089149,"byUnit":{"א":11,"ב":12,"ג":7,"אגמ":5,"פלסמ":1},"unassigned":23},"שבשבת רוח":{"total":8,"makat":100092638,"byUnit":{"מסייעת":3},"unassigned":5},"מק פורק":{"total":10,"makat":113516712,"byUnit":{"א":58,"ב":58,"ג":53,"מסייעת":95,"אגמ":44,"פלסמ":80},"unassigned":0},"קנה לנגב 5.56":{"total":25,"makat":121502003,"byUnit":{},"unassigned":25},"קנה למאג":{"total":38,"makat":123400011,"byUnit":{},"unassigned":38},"חצובה גיל":{"total":2,"makat":146360017,"byUnit":{},"unassigned":2},"מטריס 30":{"total":2,"makat":146737000,"byUnit":{},"unassigned":2},"שלט מטריס 30":{"total":2,"makat":146737001,"byUnit":{},"unassigned":2},"רחפן איבו":{"total":7,"makat":146749000,"byUnit":{},"unassigned":7},"שלט אבוו מקס 4":{"total":6,"makat":146749001,"byUnit":{},"unassigned":6},"זיקים N":{"total":1,"makat":146749009,"byUnit":{},"unassigned":1},"כדור ברזל- מתקן הטלה":{"total":2,"makat":146749010,"byUnit":{},"unassigned":2},"אבטה":{"total":20,"makat":146755000,"byUnit":{},"unassigned":20},"משקפי אבטה":{"total":11,"makat":146755013,"byUnit":{},"unassigned":11},"שלט אבטה":{"total":11,"makat":146755014,"byUnit":{},"unassigned":11}};
 const INITIAL_ASSIGNMENTS = {};
