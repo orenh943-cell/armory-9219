@@ -1961,9 +1961,24 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 <span style={{color:"var(--color-success-fg)",fontWeight:700}}>✅ בוחן נשק תקף</span>
                 <span style={{color:"var(--color-text-secondary)"}}>עד: {ts.expiry}</span>
                 {ts.img&&<img src={ts.img} style={{height:28,borderRadius:4,cursor:"pointer"}} onClick={()=>window.open(ts.img,"_blank")} alt="אישור בוחן"/>}
+                {auth?.role==="admin"&&<button onClick={()=>{
+                  if(!window.confirm("למחוק את אישור הבוחן של "+soldier.name+"?")) return;
+                  const newCerts={...(db.testCerts||{})};
+                  delete newCerts[soldier.id];
+                  const ndb={...db,testCerts:newCerts};
+                  saveDB(ndb); onSave(ndb);
+                  fbSet("db/testCerts/"+soldier.id, null).catch(()=>{});
+                }} style={{...S.btn("red"),padding:"2px 8px",fontSize:10,minHeight:24,marginRight:"auto"}}>🗑️ מחק</button>}
               </div>;
-              return <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700}}>
-                ⚠️ {ts.expired?"אישור בוחן פג תוקף":"אין אישור בוחן"}
+              return <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
+                <span>⚠️ {ts.expired?"אישור בוחן פג תוקף":"אין אישור בוחן"}</span>
+                {auth?.role==="admin"&&<button onClick={()=>{
+                  const newCerts={...(db.testCerts||{})};
+                  delete newCerts[soldier.id];
+                  const ndb={...db,testCerts:newCerts};
+                  saveDB(ndb); onSave(ndb);
+                  fbSet("db/testCerts/"+soldier.id, null).catch(()=>{});
+                }} style={{...S.btn("red"),padding:"2px 8px",fontSize:10,minHeight:24,marginRight:"auto"}}>🗑️ מחק</button>}
               </div>;
             })()}
             {/* מיקום נשק */}
