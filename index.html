@@ -7899,6 +7899,9 @@ function BulkSendModal({db, soldiers, onClose, sendWhatsApp, sendExitFormWA}){
   const [sentCount, setSentCount] = React.useState(0);
   const [done, setDone] = React.useState(false);
   const [noPhone, setNoPhone] = React.useState([]);
+  const [queueMode, setQueueMode] = React.useState(false); // תור שליחה אחד-אחד
+  const [queue, setQueue] = React.useState([]);
+  const [queueIdx, setQueueIdx] = React.useState(0);
 
   const units = ["הכל",...new Set(soldiers.filter(s=>s.name).map(s=>s.unit))].sort();
 
@@ -7955,6 +7958,85 @@ function BulkSendModal({db, soldiers, onClose, sendWhatsApp, sendExitFormWA}){
     setSending(false);
     setDone(true);
   }
+
+  function startQueue(){
+    if(!selected.size){ alert("יש לבחור לפחות חייל אחד"); return; }
+    const q = filtered.filter(s=>selected.has(s.id) && phoneToWA(s.phone));
+    const missing = filtered.filter(s=>selected.has(s.id) && !phoneToWA(s.phone)).map(s=>s.name);
+    if(missing.length) setNoPhone(missing);
+    setQueue(q);
+    setQueueIdx(0);
+    setQueueMode(true);
+    // פתח את הראשון מיד
+    if(q.length>0){
+      if(mode==="sign") sendWhatsApp(q[0]);
+      else sendExitFormWA(q[0]);
+    }
+  }
+
+  function nextInQueue(){
+    const next = queueIdx+1;
+    if(next >= queue.length){
+      setQueueMode(false);
+      setDone(true);
+      setSentCount(queue.length);
+      return;
+    }
+    setQueueIdx(next);
+    if(mode==="sign") sendWhatsApp(queue[next]);
+    else sendExitFormWA(queue[next]);
+  }
+
+  function skipInQueue(){
+    const next = queueIdx+1;
+    if(next >= queue.length){
+      setQueueMode(false);
+      setDone(true);
+      setSentCount(queueIdx);
+      return;
+    }
+    setQueueIdx(next);
+    if(mode==="sign") sendWhatsApp(queue[next]);
+    else sendExitFormWA(queue[next]);
+  }
+
+  if(queueMode) return (
+    <Modal title="📤 שליחה בתור" onClose={()=>{setQueueMode(false);onClose();}}>
+      <div style={{textAlign:"center",padding:"8px 0"}}>
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginBottom:12}}>
+          {queueIdx+1} מתוך {queue.length}
+        </div>
+        <div style={{width:"100%",height:6,background:"var(--color-bg-subtle)",borderRadius:3,marginBottom:20,overflow:"hidden"}}>
+          <div style={{height:"100%",width:((queueIdx+1)/queue.length*100)+"%",background:"var(--color-success-fg)",borderRadius:3,transition:"width .3s"}}/>
+        </div>
+        <div style={{...S.card,marginBottom:20,textAlign:"right"}}>
+          <div style={{fontWeight:800,fontSize:"var(--text-xl)",marginBottom:4}}>{queue[queueIdx]?.name}</div>
+          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>
+            📱 {queue[queueIdx]?.phone} | פלוגה {queue[queueIdx]?.unit}
+          </div>
+          <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:4}}>
+            {Object.keys(queue[queueIdx]?.assigned||{}).filter(k=>WEAPON_KEYS.includes(k)).join(", ")}
+          </div>
+        </div>
+        <div style={{background:"var(--color-accent-bg)",border:"1px solid var(--color-accent-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:20,fontSize:"var(--text-sm)",color:"var(--color-accent-fg)"}}>
+          ✅ וואטסאפ נפתח — לחץ <b>שלח</b> ואז חזור לכאן
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={skipInQueue}
+            style={{...S.btn("gray"),flex:1,padding:"10px 0",fontSize:"var(--text-base)"}}>
+            ⏭️ דלג
+          </button>
+          <button onClick={nextInQueue}
+            style={{...S.btn("green"),flex:2,padding:"10px 0",fontSize:"var(--text-base)",fontWeight:800}}>
+            {queueIdx+1 < queue.length ? "שלחתי ← הבא ›" : "סיום ✅"}
+          </button>
+        </div>
+        {noPhone.length>0&&<div style={{marginTop:10,fontSize:"var(--text-xs)",color:"var(--color-danger-fg)"}}>
+          ⚠️ ללא טלפון: {noPhone.join(", ")}
+        </div>}
+      </div>
+    </Modal>
+  );
 
   if(done) return (
     <Modal title="📤 שליחה מרוכזת" onClose={onClose}>
@@ -8059,10 +8141,16 @@ function BulkSendModal({db, soldiers, onClose, sendWhatsApp, sendExitFormWA}){
         </div>
       )}
 
-      <button onClick={sendAll} disabled={sending||!selected.size}
-        style={{...S.btn("wa"),width:"100%",padding:"12px 0",fontSize:15,opacity:selected.size?1:0.5}}>
-        {sending?`שולח... ${sentCount}/${selected.size}`:`💬 שלח ל-${selected.size} חיילים ב-WhatsApp`}
-      </button>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <button onClick={startQueue} disabled={!selected.size}
+          style={{...S.btn("wa"),width:"100%",padding:"12px 0",fontSize:15,fontWeight:800,opacity:selected.size?1:0.5}}>
+          💬 שלח אחד-אחד עם "הבא →" ({selected.size} חיילים)
+        </button>
+        <button onClick={sendAll} disabled={sending||!selected.size}
+          style={{...S.btn("gray"),width:"100%",padding:"8px 0",fontSize:13,opacity:selected.size?1:0.5}}>
+          {sending ? "שולח... "+sentCount+"/"+selected.size : "⚡ פתח הכל בבת אחת ("+selected.size+")"}
+        </button>
+      </div>
     </Modal>
   );
 }
