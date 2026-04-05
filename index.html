@@ -923,7 +923,7 @@ function SerialPicker({itemName, value, onChange, db}){
       {open&&available.length>0&&(
         <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-canvas)",border:"1px solid #388bfd",borderRadius:8,zIndex:100,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
           <div style={{padding:"6px 10px",borderBottom:"1px solid var(--color-border-muted)",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>
-            {available.length} זמינים בנשקייה • {ALL_SERIALS.filter(s=>s.name.trim()===(itemName||"").trim()).length} סה"כ
+            {available.length} זמינים בנשקייה • {ALL_SERIALS.filter(s=>s.name.trim()===(itemName||"").trim()).length} סהכ
           </div>
           {filtered.map(serial=>(
             <div key={serial} onClick={()=>select(serial)}
@@ -2439,7 +2439,7 @@ td{padding:5px 8px;border:1px solid #ddd;font-size:10px}
 <p style="text-align:center;color:#666;font-size:12px">הופק: ${new Date().toLocaleString("he-IL")} | ${report?("בוחן: "+report.inspector):"כל הבחינות"}</p>
 
 <div class="summary">
-  <div class="sum-box"><div class="sum-num blue">${totalAll}</div><div class="sum-lbl">סה"כ אמצעים</div></div>
+  <div class="sum-box"><div class="sum-num blue">${totalAll}</div><div class="sum-lbl">סהכ אמצעים</div></div>
   <div class="sum-box"><div class="sum-num green">${totalInspected}</div><div class="sum-lbl">נבחנו</div></div>
   <div class="sum-box"><div class="sum-num orange">${totalAll-totalInspected}</div><div class="sum-lbl">טרם נבחנו</div></div>
   <div class="sum-box"><div class="sum-num ${totalPct===100?"green":totalPct>=50?"blue":"orange"}">${totalPct}%</div><div class="sum-lbl">כוסה</div></div>
@@ -2447,7 +2447,7 @@ td{padding:5px 8px;border:1px solid #ddd;font-size:10px}
 
 <h2>סיכום לפי סוג אמצעי</h2>
 <table>
-  <thead><tr><th>אמצעי</th><th>סה"כ</th><th>נבחנו</th><th>טרם</th><th>התקדמות</th></tr></thead>
+  <thead><tr><th>אמצעי</th><th>סהכ</th><th>נבחנו</th><th>טרם</th><th>התקדמות</th></tr></thead>
   <tbody>${statsRows}</tbody>
 </table>
 
@@ -2490,7 +2490,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
       {/* כרטיסי סיכום */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}}>
         {[
-          {label:"סה\"כ אמצעים",val:totalAll,color:"var(--color-accent-fg)",key:"all"},
+          {label:"סהכ אמצעים",val:totalAll,color:"var(--color-accent-fg)",key:"all"},
           {label:"נבחנו",val:totalInspected,color:"var(--color-success-fg)",key:"inspected"},
           {label:"טרם נבחנו",val:totalAll-totalInspected,color:totalAll-totalInspected>0?"var(--color-danger-fg)":"var(--color-success-fg)",key:"pending"},
           {label:"כיסוי",val:totalPct+"%",color:totalPct===100?"var(--color-success-fg)":totalPct>=50?"var(--color-accent-fg)":"var(--color-warning-fg)",key:"pct"},
@@ -2526,7 +2526,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:"var(--color-bg-canvas)"}}>
-                {["אמצעי","סה\"כ","נבחנו","טרם","התקדמות",""].map(h=>(
+                {["אמצעי","סהכ","נבחנו","טרם","התקדמות",""].map(h=>(
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
@@ -3132,18 +3132,18 @@ function buildDailyReport(soldiers, db){
     +"<h1>🛡️ דוח יומי — גדוד 9219 מוריה</h1>"
     +"<div style='color:#666;font-size:12px;margin-bottom:12px'>"+dateStr+" "+timeStr+"</div>"
     +"<div class='stats'>"
-    +"<div class='st'><div class='v'>"+allSols.length+"</div><div class='l'>סה"כ חיילים</div></div>"
+    +"<div class='st'><div class='v'>"+allSols.length+"</div><div class='l'>סהכ חיילים</div></div>"
     +"<div class='st'><div class='v' style='color:#2ea043'>"+signed.length+"</div><div class='l'>חתמו</div></div>"
     +"<div class='st'><div class='v' style='color:#d73a49'>"+unsigned.length+"</div><div class='l'>טרם חתמו</div></div>"
     +"<div class='st'><div class='v' style='color:#d73a49'>"+unsignedWithWeapon.length+"</div><div class='l'>עם נשק - לא חתמו</div></div>"
     +"<div class='st'><div class='v' style='color:#8957e5'>"+activeGuarantors.length+"</div><div class='l'>ערבויות פעילות</div></div>"
     +"</div>"
     +"<h2>סיכום לפי פלוגה</h2>"
-    +"<table><thead><tr><th>פלוגה</th><th>סה"כ</th><th>חתמו</th><th>טרם</th><th>התקדמות</th><th>שמות הממתינים</th></tr></thead>"
+    +"<table><thead><tr><th>פלוגה</th><th>סהכ</th><th>חתמו</th><th>טרם</th><th>התקדמות</th><th>שמות הממתינים</th></tr></thead>"
     +"<tbody>"+unitRows+"</tbody></table>"
     +(activeGuarantors.length>0
       ?"<h2>ערבויות פעילות ("+activeGuarantors.length+")</h2>"
-       +"<table><thead><tr><th>נציג</th><th>סה"כ חיילים</th><th>נותרו</th><th>פלוגה</th></tr></thead>"
+       +"<table><thead><tr><th>נציג</th><th>סהכ חיילים</th><th>נותרו</th><th>פלוגה</th></tr></thead>"
        +"<tbody>"+guarantorRows+"</tbody></table>"
       :"")
     +"<button class='np' onclick='window.print()' style='margin-top:16px;padding:10px 24px;font-size:14px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer'>🖨️ הדפס</button>"
@@ -4328,7 +4328,7 @@ function ViewerApp({auth, onLogout, db}){
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
           {[
-            {l:'סה"כ בסינון',v:filtered.length,c:"var(--color-accent-fg)"},
+            {l:'סהכ בסינון',v:filtered.length,c:"var(--color-accent-fg)"},
             {l:"חתומים",v:signed,c:"var(--color-success-fg)"},
             {l:"ממתינים",v:withWeapon-signed,c:"var(--color-warning-fg)"},
           ].map(s=>(
@@ -4470,7 +4470,7 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
   <div class="info-cell"><div class="lbl">שם הנציג / ערב</div><div class="val">${repName}</div></div>
   <div class="info-cell"><div class="lbl">מספר אישי</div><div class="val">${repId||"—"}</div></div>
   <div class="info-cell"><div class="lbl">מספר חיילים</div><div class="val">${soldiers.length} חיילים</div></div>
-  <div class="info-cell"><div class="lbl">סה"כ אמצעים</div><div class="val">${totalQty} יחידות</div></div>
+  <div class="info-cell"><div class="lbl">סהכ אמצעים</div><div class="val">${totalQty} יחידות</div></div>
 </div>
 
 <div class="disclaimer">
@@ -4493,7 +4493,7 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
     ${weaponItems.length>0?`<tr class="weapon-section-header"><td colspan="5">🔫 נשק (${weaponItems.length} סוגים)</td></tr>`:""}
     ${rows}
     <tr class="total-row">
-      <td colspan="3">סה"כ כל האמצעים</td>
+      <td colspan="3">סהכ כל האמצעים</td>
       <td>${totalQty} יח'</td>
       <td>${allItems.length} סוגים שונים</td>
     </tr>
@@ -5308,10 +5308,10 @@ function CabinetsTab({db, setDb, auth}){
     th{background:#1a1a2e;color:#fff}.total{font-weight:bold;background:#f0f4ff}
     @media print{button{display:none}}</style></head>
     <body><h2>🗄️ ${cabName}</h2>
-    <p style="color:#666">סה"כ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
+    <p style="color:#666">סהכ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
     <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th></tr></thead>
     <tbody>${items.map(i=>"<tr><td style='font-size:10px;font-family:monospace'>"+(i.makat||"—")+"</td><td>"+(i.alias||i.fullname)+"</td><td style='text-align:center;font-weight:bold'>"+i.qty+"</td></tr>").join("")}
-    <tr class="total"><td colspan="2">סה"כ</td><td style="text-align:center">${total}</td></tr>
+    <tr class="total"><td colspan="2">סהכ</td><td style="text-align:center">${total}</td></tr>
     </tbody></table>
     <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
     </body></html>`);
@@ -5536,11 +5536,11 @@ function MyStockTab({db, setDb, soldiers, auth}){
     <body><h2>📋 מלאי ארמון 9219 — ${unitLabel}</h2>
     <p style="color:#666;font-size:12px">הופק: ${new Date().toLocaleDateString("he-IL")} • ${liveData.length} סוגי אמצעים</p>
     <div class="summary">
-      <div class="sum-box"><b>${totalItems}</b>סה"כ</div>
+      <div class="sum-box"><b>${totalItems}</b>סהכ</div>
       <div class="sum-box"><b>${totalAssigned}</b>מוקצה</div>
       <div class="sum-box" style="color:green"><b>${totalFree}</b>פנוי</div>
     </div>
-    <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>סה"כ</th>${unitHeaders}<th>פנוי</th></tr></thead>
+    <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>סהכ</th>${unitHeaders}<th>פנוי</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <button onclick="window.print()" style="padding:10px 24px;font-size:15px;margin-top:10px;cursor:pointer">🖨️ הדפס</button>
     </body></html>`);
@@ -5554,7 +5554,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         <div>
           <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📋 מלאי ארמון</h2>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>
-            {liveData.length} סוגים · <span style={{color:"var(--color-accent-fg)"}}>{totalItems} סה"כ</span> · 
+            {liveData.length} סוגים · <span style={{color:"var(--color-accent-fg)"}}>{totalItems} סהכ</span> · 
             <span style={{color:"var(--color-warning-fg)"}}> {totalAssigned} מוקצה</span> · 
             <span style={{color:"var(--color-success-fg)"}}> {totalFree} פנוי</span>
           </div>
@@ -5858,7 +5858,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:10,color:"var(--color-accent-fg)"}}>
               {item.name} — פירוט לפי פלוגה
               <span style={{fontWeight:400,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginRight:8}}>
-                סה"כ: {item.total} | מוקצה: {item.liveTotal} | פנוי: {item.unassigned}
+                סהכ: {item.total} | מוקצה: {item.liveTotal} | פנוי: {item.unassigned}
               </span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8,marginBottom:10}}>
