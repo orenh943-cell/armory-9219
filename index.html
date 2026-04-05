@@ -3298,6 +3298,27 @@ function ResetTab({db, setDb, auth}){
 
     {phase==="menu"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
 
+      <div style={{...S.card,border:"2px solid var(--color-accent-fg)",background:"var(--color-accent-bg)"}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-accent-fg)",marginBottom:8}}>💾 גיבוי לפני עדכון</div>
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:12}}>
+          לפני כל עדכון קוד — הורד גיבוי מלא. אם משהו השתבש — שחזר מהגיבוי.
+        </div>
+        <button onClick={()=>{
+          const backup = JSON.stringify(db, null, 2);
+          const blob = new Blob([backup], {type:"application/json"});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          const d = new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
+          const t = new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}).replace(/:/g,"-");
+          a.download = "backup_armory_"+d+"_"+t+".json";
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a); URL.revokeObjectURL(url);
+        }} style={{...S.btn("blue"),width:"100%",fontSize:"var(--text-base)",padding:"12px 0"}}>
+          ⬇️ הורד גיבוי עכשיו
+        </button>
+      </div>
+
       <div style={{...S.card,border:"1px solid var(--color-danger-fg)",background:"var(--color-danger-bg)"}}>
         <div style={{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-danger-fg)",marginBottom:8}}>🔄 איפוס מלאי מלא</div>
         <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:12}}>
@@ -3773,8 +3794,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off2 = fbOn("db/assignments", (assignments)=>{
       setDb(prev=>{
         const asgn = assignments||{};
-        // Seed with complete assignments (incl. bundles) if empty or too few
-        if(Object.keys(asgn).length < 100){
+        // Only seed if completely empty (first run)
+        if(Object.keys(asgn).length === 0){
           fbSet("db/assignments", sanitizeForFirebase(INITIAL_ASSIGNMENTS)).catch(()=>{});
           const updated={...prev, assignments: INITIAL_ASSIGNMENTS};
           try{localStorage.setItem(DB_KEY,JSON.stringify(updated));}catch(e){}
@@ -3814,14 +3835,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off8 = fbOn("db/unitItems", (unitItems)=>{
       const items = unitItems||{};
-      const itemCount = Object.keys(items).length;
-      // If empty or old data (less than 500 items = old format), seed with new data
-      if(itemCount < 2000){
-        fbSet("db/unitItems", INITIAL_UNIT_ITEMS).catch(()=>{});
-        setDb(prev=>({...prev, unitItems: INITIAL_UNIT_ITEMS}));
-      } else {
-        setDb(prev=>({...prev, unitItems: items}));
-      }
+      // Never auto-seed unitItems - use only what's in Firebase
+      setDb(prev=>({...prev, unitItems: items}));
     });
     const off9 = fbOn("db/armoryMaster", (master)=>{
       if(master && Object.keys(master).length>0){
@@ -3986,6 +4001,17 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             {theme==="dark"?"☀️ מצב בהיר":"🌙 מצב כהה"}
           </button>
           <button onClick={onLogout} style={{...S.btn(),width:"100%",fontSize:"var(--text-sm)",minHeight:38,padding:"6px 12px"}}>🚪 יציאה</button>
+          {auth.role==="admin"&&<button onClick={()=>{
+            const backup=JSON.stringify(db,null,2);
+            const blob=new Blob([backup],{type:"application/json"});
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement("a");
+            a.href=url;
+            const d=new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
+            a.download="backup_9219_"+d+".json";
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);URL.revokeObjectURL(url);
+          }} style={{...S.btn("purple"),width:"100%",fontSize:"var(--text-sm)",minHeight:34,padding:"4px 12px",marginTop:4}}>💾 גיבוי נתונים</button>}
         </div>
       </div>
     );
