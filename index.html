@@ -2135,13 +2135,29 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             {forms.map((f,i)=><div key={i} style={{padding:"8px 10px",background:"var(--color-bg-canvas)",borderRadius:6,marginBottom:6,
               border:"1px solid "+(f.status==="אושר"?"var(--color-success-fg)":hasAnyRisk(f.answers)?"var(--color-danger-fg)":"var(--color-border-muted)")}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{f.createdAt}</span>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  {hasAnyRisk(f.answers)&&<span style={{color:"var(--color-danger-fg)",fontSize:12}}>⚠️</span>}
+                <div>
+                  <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{f.createdAt}</span>
+                  {hasAnyRisk(f.answers)&&<span style={{color:"var(--color-danger-fg)",fontSize:12,marginRight:6}}>⚠️</span>}
+                </div>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
                   <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,
                     background:f.status==="אושר"?"var(--color-success-bg)":f.status==="נדחה"?"var(--color-danger-bg)":"var(--color-warning-bg)",
                     color:f.status==="אושר"?"var(--color-success-fg)":f.status==="נדחה"?"var(--color-danger-fg)":"var(--color-warning-fg)"
                   }}>{f.status}</span>
+                  <button onClick={(e)=>{e.stopPropagation();
+                    const w=window.open("","_blank");
+                    w.document.write(buildFormHtml(f));
+                    w.document.close();
+                  }} style={{...S.btn("blue"),padding:"2px 8px",fontSize:10,minHeight:24}}>👁️ הצג</button>
+                  <button onClick={(e)=>{e.stopPropagation();
+                    const html=buildFormHtml(f);
+                    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+                    const url=URL.createObjectURL(blob);
+                    const a=document.createElement("a");
+                    a.href=url;a.download="יציאה_"+f.soldierName+"_"+f.createdAt.replace(/[/:]/g,"-")+".html";
+                    document.body.appendChild(a);a.click();document.body.removeChild(a);
+                    setTimeout(()=>URL.revokeObjectURL(url),2000);
+                  }} style={{...S.btn("gray"),padding:"2px 8px",fontSize:10,minHeight:24}}>⬇️</button>
                 </div>
               </div>
               <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>נשק: {f.weaponType||"—"}</div>
@@ -2872,7 +2888,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
                   border:`1px solid ${active?"var(--color-accent-fg)":"var(--color-border-default)"}`,
                   background:active?"var(--btn-blue-bg)":"var(--color-bg-canvas)"
                 }}>
-                  <div style={{width:14,height:14,borderRadius:3,background:active?"var(--color-accent-fg)":"var(--color-bg-subtle)",flexShrink:0}}/>
+                  <div style={{width:18,height:18,borderRadius:3,background:active?"var(--color-accent-fg)":"var(--color-bg-inset)",border:"1px solid "+(active?"var(--color-accent-fg)":"var(--color-border-default)"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700}}>{active?"✓":""}</div>
                   <span style={{fontSize:"var(--text-sm)",color:active?"var(--color-accent-fg)":"var(--color-text-secondary)"}}>{name}</span>
                 </div>
               );
@@ -7280,7 +7296,7 @@ function ExitFormTab({db, setDb, soldiers, auth}){
               {filteredForms.map(([id,f])=>{
                 const statusLabel = {ממתין_חייל:"⏳ ממתין לחייל",ממתין_מפ:'⏳ ממתין למ"פ',ממתין_מגד:"⏳ ממתין למגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
                 return (
-                  <tr key={id} style={{borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer"}} onClick={()=>openDetail(id)}>
+                  <tr key={id} onClick={()=>openDetail(id)} style={{borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer",background:hasAnyRisk(f.answers)?"rgba(248,81,73,0.08)":"inherit"}}
                     <td style={{padding:"8px 10px",fontSize:"var(--text-base)"}}>
                       {f.soldierName||<span style={{color:"var(--color-text-muted)"}}>ללא שם</span>}
                       {hasAnyRisk(f.answers)&&<span title="יש תשובות בעייתיות בשאלון" style={{marginRight:6,fontSize:12,color:"var(--color-danger-fg)",fontWeight:800}}>⚠️</span>}
