@@ -1894,7 +1894,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   return (
     <Modal title={`${soldier.name} • ${soldier.id}`} onClose={onClose} wide>
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"],["exitform","🏠 יציאה"]].map(([v,l])=>(
+        {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"],["exitform","🏠 יציאה"],["history","📋 היסטוריה"]].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)} style={{flex:1,minWidth:70,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"var(--color-accent-fg)":"var(--color-border-default)",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"var(--color-accent-fg)":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:"var(--text-sm)"}}>{l}</button>
         ))}
       </div>
@@ -2114,6 +2114,55 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
     {view==="exitform"&&(
       <SoldierExitFormView soldier={soldier} db={db} onSave={onSave} auth={auth} soldierExitForms={soldierExitForms} onSendExitWA={onSendExitWA}/>
+    )}
+    {view==="history"&&(
+      <div>
+        {db.signatures?.[soldier.id]&&<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-success-fg)"}}>
+          <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:6}}>✍️ חתימה על נשק</div>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>נחתם: {db.signatures[soldier.id].signedAt||"—"}</div>
+          {db.signatures[soldier.id].sigData&&<img src={db.signatures[soldier.id].sigData} style={{height:40,marginTop:6,borderRadius:4,border:"1px solid var(--color-border-muted)"}}/>}
+        </div>}
+        {(()=>{const ts=getTestStatus(db,soldier.id);return ts.date?<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-accent-fg)"}}>
+          <div style={{fontWeight:700,color:"var(--color-accent-fg)",marginBottom:6}}>📋 בוחן נשק</div>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>ביצוע: {ts.date} | תוקף: {ts.expiry}</div>
+          {ts.img&&<img src={ts.img} onClick={()=>window._showLightbox&&window._showLightbox(ts.img)} style={{maxWidth:"100%",maxHeight:120,borderRadius:6,marginTop:6,cursor:"zoom-in"}}/>}
+        </div>:null;})()}
+        {(()=>{
+          const forms=Object.values(db.exitForms||{}).filter(f=>f.soldierId===soldier.id).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+          if(!forms.length) return null;
+          return <div style={{...S.card,marginBottom:10}}>
+            <div style={{fontWeight:700,marginBottom:8}}>🏠 אישורי יציאה ({forms.length})</div>
+            {forms.map((f,i)=><div key={i} style={{padding:"8px 10px",background:"var(--color-bg-canvas)",borderRadius:6,marginBottom:6,
+              border:"1px solid "+(f.status==="אושר"?"var(--color-success-fg)":hasAnyRisk(f.answers)?"var(--color-danger-fg)":"var(--color-border-muted)")}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{f.createdAt}</span>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {hasAnyRisk(f.answers)&&<span style={{color:"var(--color-danger-fg)",fontSize:12}}>⚠️</span>}
+                  <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,
+                    background:f.status==="אושר"?"var(--color-success-bg)":f.status==="נדחה"?"var(--color-danger-bg)":"var(--color-warning-bg)",
+                    color:f.status==="אושר"?"var(--color-success-fg)":f.status==="נדחה"?"var(--color-danger-fg)":"var(--color-warning-fg)"
+                  }}>{f.status}</span>
+                </div>
+              </div>
+              <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>נשק: {f.weaponType||"—"}</div>
+            </div>)}
+          </div>;
+        })()}
+        {(()=>{
+          const logs=Object.values(db.actLog||{}).filter(l=>l.details&&l.details.includes(soldier.name)).sort((a,b)=>b.ts-a.ts).slice(0,20);
+          if(!logs.length) return <div style={{textAlign:"center",padding:20,color:"var(--color-text-muted)"}}>אין היסטוריה נוספת</div>;
+          return <div style={{...S.card}}>
+            <div style={{fontWeight:700,marginBottom:8}}>📋 לוג תנועות</div>
+            {logs.map((l,i)=><div key={i} style={{padding:"6px 0",borderBottom:i<logs.length-1?"1px solid var(--color-border-muted)":"none",fontSize:"var(--text-sm)"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontWeight:600,color:"var(--color-accent-fg)"}}>{l.type}</span>
+                <span style={{color:"var(--color-text-muted)",fontSize:10}}>{l.date} {l.time}</span>
+              </div>
+              <div style={{color:"var(--color-text-secondary)",fontSize:10,marginTop:2}}>{l.details}</div>
+            </div>)}
+          </div>;
+        })()}
+      </div>
     )}
     </Modal>
   );
@@ -7232,7 +7281,10 @@ function ExitFormTab({db, setDb, soldiers, auth}){
                 const statusLabel = {ממתין_חייל:"⏳ ממתין לחייל",ממתין_מפ:'⏳ ממתין למ"פ',ממתין_מגד:"⏳ ממתין למגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
                 return (
                   <tr key={id} style={{borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer"}} onClick={()=>openDetail(id)}>
-                    <td style={{padding:"8px 10px",fontSize:"var(--text-base)"}}>{f.soldierName||<span style={{color:"var(--color-text-muted)"}}>לא ידוע</span>}</td>
+                    <td style={{padding:"8px 10px",fontSize:"var(--text-base)"}}>
+                      {f.soldierName||<span style={{color:"var(--color-text-muted)"}}>ללא שם</span>}
+                      {hasAnyRisk(f.answers)&&<span title="יש תשובות בעייתיות בשאלון" style={{marginRight:6,fontSize:12,color:"var(--color-danger-fg)",fontWeight:800}}>⚠️</span>}
+                    </td>
                     <td style={{padding:"8px 10px",fontSize:"var(--text-base)",fontFamily:"monospace"}}>{f.soldierId}</td>
                     <td style={{padding:"8px 10px",fontSize:"var(--text-base)"}}>{f.unit||"—"}</td>
                     <td style={{padding:"8px 10px",fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>{f.destination||"—"}</td>
@@ -7529,6 +7581,15 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
         <h2 style={{margin:0,fontSize:"var(--text-lg)",fontWeight:800}}>🏠 אישור יציאה — {form.soldierName}</h2>
         <span style={{fontSize:"var(--text-base)",color:"var(--color-text-secondary)"}}>{statusLabel}</span>
         <button onClick={()=>printExitForm(form, db)} style={{...S.btn("gray"),fontSize:"var(--text-sm)",marginRight:"auto"}}>🖨️ הדפסה</button>
+        <button onClick={()=>{
+          const html = buildFormHtml(form);
+          const blob = new Blob([html],{type:"text/html;charset=utf-8"});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href=url; a.download="יציאה_"+form.soldierName+"_"+form.createdAt.replace(/[/:]/g,"-")+".html";
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(()=>URL.revokeObjectURL(url),2000);
+        }} style={{...S.btn("blue"),fontSize:"var(--text-sm)"}}>⬇️ הורד</button>
       </div>
 
       {/* סעיף 1 — שאלון */}
@@ -7539,8 +7600,6 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
           <div><span style={{color:"var(--color-text-muted)"}}>מספר אישי</span><br/><b style={{fontFamily:"monospace",fontSize:"var(--text-base)"}}>{form.soldierId}</b></div>
           <div><span style={{color:"var(--color-text-muted)"}}>תאריך ושעה</span><br/><b>{form.createdAt}</b></div>
           <div style={{gridColumn:"1/-1"}}><span style={{color:"var(--color-text-muted)"}}>סוג כלי הנשק</span><br/><b style={{color:"var(--color-accent-fg)",fontSize:"var(--text-base)"}}>{form.weaponType||"—"}</b></div>
-          {form.destination&&<div style={{gridColumn:"1/-1"}}><span style={{color:"var(--color-text-muted)"}}>יעד / מיקום</span><br/><b style={{color:"var(--color-warning-fg)"}}>{form.destination}</b></div>}
-          {form.exitItems?.length>0&&<div style={{gridColumn:"1/-1"}}><span style={{color:"var(--color-text-muted)"}}>פריטים יוצאים</span><br/><div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{form.exitItems.map(item=><span key={item} style={{background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:4,padding:"2px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>{item}</span>)}</div></div>}
           {form.address&&<div style={{gridColumn:"1/-1"}}><span style={{color:"var(--color-text-muted)"}}>כתובת</span><br/><b>{form.address}{form.city?" — "+form.city:""}</b></div>}
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -8057,14 +8116,7 @@ th{background:#e8edf5;font-weight:bold}
   <div class="info-box"><div class="label">סוג כלי נשק</div><div class="val" style="color:#1a5276">${form.weaponType||"—"}</div></div>
   <div class="info-box"><div class="label">פלוגה</div><div class="val">${form.unit}</div></div>
   <div class="info-box"><div class="label">סטטוס</div><div class="val status">${statusLabel}</div></div>
-  ${form.destination?`<div class="info-box" style="grid-column:1/-1"><div class="label">יעד / מיקום</div><div class="val" style="color:#8b4513">${form.destination}</div></div>`:""}
-</div>
-${form.exitItems&&form.exitItems.length?`<div class="section">
-  <div class="section-title">פריטים יוצאים</div>
-  <div style="display:flex;flex-wrap:wrap;gap:6px">
-    ${form.exitItems.map(item=>`<span style="background:#e8f5e9;border:1px solid #2e7d32;border-radius:3px;padding:3px 8px;font-size:11px;font-weight:bold">${item}</span>`).join("")}
-  </div>
-</div>`:""}
+
 <div class="section">
   <div class="section-title">סעיף 1 — שאלון</div>
   <table><thead><tr><th style="width:30px">מס"ד</th><th>שאלה</th><th style="width:60px">תשובה</th><th style="width:100px">החלטת מפקד</th></tr></thead>
@@ -9191,21 +9243,7 @@ function ExitFormDirectView({auth, onLogout, db, setDb}){
   const [sigImg, setSigImg] = React.useState(null);
   const [err, setErr] = React.useState("");
   const [done, setDone] = React.useState(false);
-  const [destination, setDestination] = React.useState("");
-  const [selectedItems, setSelectedItems] = React.useState(()=>{
-    // בחר אוטומטית את כל הנשק שמשויך לחייל
-    const assigned = db.assignments?.[auth.soldierId] ?? soldier?.assigned ?? {};
-    return new Set(Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(k)));
-  });
-
   function setAns(i,v){ const a=[...answers]; a[i]=v; setAnswers(a); }
-  function toggleItem(item){
-    const s=new Set(selectedItems);
-    s.has(item)?s.delete(item):s.add(item);
-    setSelectedItems(s);
-  }
-
-  const allAssigned = Object.entries(db.assignments?.[auth.soldierId] ?? soldier?.assigned ?? {});
 
   function save(){
     if(answers.some(a=>a===null)){ setErr("יש לענות על כל 10 השאלות"); return; }
@@ -9219,8 +9257,6 @@ function ExitFormDirectView({auth, onLogout, db, setDb}){
       unit: soldier?.unit||"",
       squad: soldier?.squad||"",
       address, city, weaponType,
-      destination,
-      exitItems: [...selectedItems],
       answers,
       soldierSig: sigImg,
       createdAt: todayStr()+" "+nowStr(),
@@ -9285,31 +9321,6 @@ function ExitFormDirectView({auth, onLogout, db, setDb}){
         </div>
       </div>
 
-      {/* יעד ופריטים */}
-      <div style={{...S.card,marginBottom:12}}>
-        <div style={{fontWeight:700,marginBottom:10,fontSize:"var(--text-base)",color:"var(--color-accent-fg)"}}>📍 יעד ופריטים יוצאים</div>
-        <input value={destination} onChange={e=>setDestination(e.target.value)}
-          placeholder="יעד / מיקום (לדוג׳: סדנא, חטיבה, שבת אצל ההורים...)"
-          style={{...S.input,marginBottom:10}}/>
-        <div style={{fontSize:"var(--text-sm)",fontWeight:600,marginBottom:6,color:"var(--color-text-secondary)"}}>
-          פריטים יוצאים — סמן מה יוצא איתך:
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {allAssigned.map(([item,val])=>(
-            <label key={item} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",
-              background:selectedItems.has(item)?"var(--color-success-bg)":"var(--color-bg-subtle)",
-              border:"1px solid "+(selectedItems.has(item)?"var(--color-success-fg)":"var(--color-border-muted)"),
-              borderRadius:"var(--radius-md)",padding:"6px 10px"}}>
-              <input type="checkbox" checked={selectedItems.has(item)} onChange={()=>toggleItem(item)}
-                style={{cursor:"pointer",width:16,height:16,accentColor:"var(--color-success-fg)"}}/>
-              <div>
-                <div style={{fontWeight:WEAPON_KEYS.includes(item)?700:400,fontSize:"var(--text-sm)"}}>{item}</div>
-                {val&&val!==1&&<div style={{fontSize:10,color:"var(--color-text-muted)",fontFamily:"monospace"}}>{val}</div>}
-              </div>
-            </label>
-          ))}
-        </div>
-      </div>
 
       {/* שאלון */}
       <div style={{...S.card,marginBottom:12}}>
