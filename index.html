@@ -9004,7 +9004,7 @@ function TestCertView({auth, db, setDb}){
   const [certImg, setCertImg] = React.useState(null);
   const [declared, setDeclared] = React.useState(false);
   const [done, setDone] = React.useState(false);
-  const [lightbox, setLightbox] = React.useState(false);
+  const [lightbox, setLightbox] = React.useState(null);
 
   const existing = getTestStatus(db, auth.soldierId);
 
@@ -9039,7 +9039,7 @@ function TestCertView({auth, db, setDb}){
         {existing.valid&&<div style={{...S.card,border:"1px solid var(--color-success-fg)",marginBottom:16}}>
           <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:4}}>✅ יש לך אישור תקף</div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>תוקף עד: {existing.expiry}</div>
-          {existing.img&&<img src={existing.img} onClick={()=>setLightbox(true)} style={{width:"100%",borderRadius:8,marginTop:8,cursor:"zoom-in",border:"1px solid var(--color-border-muted)"}}/>}
+          {existing.img&&<img src={existing.img} onClick={()=>setLightbox(existing.img)} style={{width:"100%",borderRadius:8,marginTop:8,cursor:"zoom-in",border:"1px solid var(--color-border-muted)"}}/>}
           <div style={{marginTop:12,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>רצונך להחליף את האישור? העלה חדש למטה.</div>
         </div>}
 
@@ -9060,7 +9060,7 @@ function TestCertView({auth, db, setDb}){
 
           {certImg
             ? <div>
-                <img src={certImg} onClick={()=>setLightbox(true)} style={{width:"100%",borderRadius:8,border:"2px solid var(--color-success-fg)",marginBottom:12,cursor:"zoom-in"}} title="לחץ להגדלה"/>
+                <img src={certImg} onClick={()=>setLightbox(certImg)} style={{width:"100%",borderRadius:8,border:"2px solid var(--color-success-fg)",marginBottom:12,cursor:"zoom-in"}} title="לחץ להגדלה"/>
                 <button onClick={()=>setCertImg(null)} style={{...S.btn("gray"),width:"100%",marginBottom:12}}>🗑️ החלף תמונה</button>
 
                 <div style={{background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",padding:"14px 16px",marginBottom:16,border:"1px solid var(--color-border-default)"}}>
@@ -9095,7 +9095,7 @@ function TestCertView({auth, db, setDb}){
         </div>
       </div>
     </div>
-    <ImageLightbox src={lightbox?(certImg||existing.img):null} onClose={()=>setLightbox(false)}/>
+    <ImageLightbox src={lightbox} onClose={()=>setLightbox(null)}/>
   </React.Fragment>;
 }
 
@@ -9516,7 +9516,10 @@ function App(){
 
   if(!auth)return<Login onLogin={handleLogin}/>;
   if(exitFormParam){
-    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===ex
+    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===exitFormParam);
+    const exitAuth={role:"soldier",name:s?.name||"חייל",soldierId:exitFormParam,autoExitForm:true,phone:s?.phone||""};
+    return<ExitFormDirectView auth={exitAuth} onLogout={()=>window.location.href=window.location.pathname} db={db} setDb={setDb}/>;
+  }
   if(auth.role==="soldier"&&auth.autoExitForm)return<ExitFormDirectView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="testcert"&&auth.autoTestCert)return<TestCertView auth={auth} db={db} setDb={setDb}/>;
