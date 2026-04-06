@@ -3781,7 +3781,7 @@ function PollTab({db, setDb, soldiers, auth}){
                   {poll.createdAt} | {poll.unit==="הכל"?"כל הגדוד":"פלוגה "+poll.unit}
                 </div>
               </div>
-              <div style={{display:"flex",gap:6"}}>
+              <div style={{display:"flex",gap:6}}>
                 <button onClick={()=>{
                   setSendQueue(Object.entries(poll.soldiers||{}).filter(([,s])=>s.status==="pending"&&phoneToWA(s.phone)).map(([id,s])=>({...s,id})));
                   setSendIdx(0); setActivePoll(poll); setQueueMode(true);
