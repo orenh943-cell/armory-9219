@@ -4982,14 +4982,17 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={{...S.td,minWidth:120}}>
                             {(()=>{
                               // חשב שלבים שהושלמו
-                              const hasWeapon = weps.length>0;
                               const hasSig = !!s.signature;
                               const ts = getTestStatus(db,s.id);
                               const needsTest = soldierNeedsTest(s,db);
-                              const hasTest = !needsTest || ts.valid;
-                              const hasExit = Object.values(db.exitForms||{}).some(f=>f.soldierId===s.id&&f.status==="אושר");
-                              const steps = [hasWeapon, hasTest, hasSig, hasExit];
-                              const done = steps.filter(Boolean).length;
+                              const exitForms = Object.values(db.exitForms||{}).filter(f=>f.soldierId===s.id);
+                              const hasPendingExit = exitForms.some(f=>f.soldierSig);
+                              const hasApprovedExit = exitForms.some(f=>f.status==="אושר");
+                              // שלבים רלוונטיים לחייל זה בלבד
+                              const steps = needsTest
+                                ? [{ok:hasSig,label:"חתימה"},{ok:ts.valid,label:"בוחן"},{ok:hasPendingExit,label:"יציאה"},{ok:hasApprovedExit,label:"אושר"}]
+                                : [{ok:hasSig,label:"חתימה"},{ok:hasPendingExit,label:"יציאה"},{ok:hasApprovedExit,label:"אושר"}];
+                              const done = steps.filter(x=>x.ok).length;
                               const total = steps.length;
                               const pct = Math.round(done/total*100);
                               const color = pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-warning-fg)";
@@ -5002,12 +5005,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                                   <div style={{height:"100%",width:pct+"%",background:color,borderRadius:3,transition:"width .3s"}}/>
                                 </div>
                                 <div style={{display:"flex",gap:2,marginTop:3,fontSize:9}}>
-                                  {[
-                                    {ok:hasWeapon,label:"נשק"},
-                                    {ok:hasTest,label:"בוחן"},
-                                    {ok:hasSig,label:"חתימה"},
-                                    {ok:hasExit,label:"יציאה"},
-                                  ].map(({ok,label})=>(
+                                  {steps.map(({ok,label})=>(
                                     <span key={label} style={{
                                       padding:"1px 4px",borderRadius:3,
                                       background:ok?"var(--color-success-bg)":"var(--color-bg-inset)",
