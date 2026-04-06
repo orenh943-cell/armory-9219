@@ -1922,7 +1922,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   if(!ts.valid&&ph) return <button onClick={()=>{
                     const phone=phoneToWA(ph);
                     const certLink="https://orenh943-cell.github.io/armory-9219?testcert="+soldier.id;
-                    const msg="שלום "+soldier.name+",\nנדרש לעבור בוחן נשק.\n1. בצע את הבוחן:\nhttps://martbase.digital.idf.il\n2. לאחר המעבר, העלה את האישור:\n"+certLink;
+                    const msg="שלום "+soldier.name+",\nנדרש לעבור בוחן נשק.\n1. בצע את הבוחן:\nhttps://smartbase.digital.idf.il/#/tests\n2. לאחר המעבר, העלה את האישור:\n"+certLink;
                     window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
                   }} style={{...S.btn("orange"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📋 שלח לבוחן</button>;
                   return null;
@@ -1939,7 +1939,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               if(ts.valid) return <div style={{marginTop:8,padding:"6px 10px",background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:"var(--radius-md)",fontSize:"var(--text-xs)",display:"flex",gap:8,alignItems:"center"}}>
                 <span style={{color:"var(--color-success-fg)",fontWeight:700}}>✅ בוחן נשק תקף</span>
                 <span style={{color:"var(--color-text-secondary)"}}>עד: {ts.expiry}</span>
-                {ts.img&&<img src={ts.img} style={{height:28,borderRadius:4,cursor:"pointer"}} onClick={()=>window.open(ts.img,"_blank")} title="לחץ להגדלה" style={{height:40,borderRadius:4,cursor:"zoom-in",border:"1px solid var(--color-border-muted)"}} alt="אישור בוחן"/>}
+                {ts.img&&<img src={ts.img} style={{height:28,borderRadius:4,cursor:"pointer"}} onClick={()=>window._showLightbox&&window._showLightbox(ts.img)} style={{height:40,borderRadius:4,cursor:"zoom-in",border:"1px solid var(--color-border-muted)",display:"inline-block"}} alt="אישור בוחן"/>}
                 {auth?.role==="admin"&&<button onClick={()=>{
                   if(!window.confirm("למחוק את אישור הבוחן של "+soldier.name+"?")) return;
                   const newCerts={...(db.testCerts||{})};
@@ -1991,7 +1991,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             {sig?.testImg&&(
               <div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
                 <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>📸 צילום מסך מבחן:</div>
-                <img src={sig.testImg} style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid var(--color-border-default)",cursor:"pointer"}} alt="מבחן" onClick={()=>window.open(sig.testImg,"_blank")}/>
+                <img src={sig.testImg} style={{maxWidth:"100%",maxHeight:120,borderRadius:6,border:"1px solid var(--color-border-default)",cursor:"pointer"}} alt="מבחן" onClick={()=>window._showLightbox&&window._showLightbox(sig.testImg)}/>
               </div>
             )}
           </div>
@@ -9049,9 +9049,9 @@ function TestCertView({auth, db, setDb}){
             <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:10}}>
               העלה צילום מסך של האישור שקיבלת לאחר עריכת הבוחן
             </div>
-            <button onClick={()=>window.open("https://martbase.digital.idf.il","_blank")}
+            <button onClick={()=>window.open("https://smartbase.digital.idf.il/#/tests","_blank")}
               style={{...S.btn("blue"),width:"100%",padding:"12px 0",fontSize:15,fontWeight:700}}>
-              🔗 כניסה לבוחן הנשק (martbase)
+              🔗 כניסה לבוחן הנשק (smartbase)
             </button>
             <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:6,textAlign:"center"}}>
               לאחר עריכת הבוחן — חזור לכאן והעלה את האישור
@@ -9501,6 +9501,11 @@ function App(){
   }
 
   const [db,setDb]=useState(()=>initDB());
+  const [globalLightbox,setGlobalLightbox]=useState(null);
+  React.useEffect(()=>{
+    window._showLightbox=(src)=>setGlobalLightbox(src);
+    return()=>{window._showLightbox=null;};
+  },[]);
 
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
   const exitFormParam = new URLSearchParams(window.location.search).get("exitform");
@@ -9524,7 +9529,10 @@ function App(){
   if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="testcert"&&auth.autoTestCert)return<TestCertView auth={auth} db={db} setDb={setDb}/>;
   if(auth.role==="bulkrep"&&auth.autoBulkSign)return<BulkRepSignView auth={auth} db={db} setDb={setDb}/>;
-  return<ManagerApp auth={auth} onLogout={handleLogout} db={db} setDb={setDb} theme={theme} toggleTheme={toggleTheme}/>;
+  return <React.Fragment>
+    <ManagerApp auth={auth} onLogout={handleLogout} db={db} setDb={setDb} theme={theme} toggleTheme={toggleTheme}/>
+    <ImageLightbox src={globalLightbox} onClose={()=>setGlobalLightbox(null)}/>
+  </React.Fragment>;
 }
 
 function ImageLightbox({src, onClose}){
