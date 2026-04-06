@@ -7296,7 +7296,7 @@ function ExitFormTab({db, setDb, soldiers, auth}){
               {filteredForms.map(([id,f])=>{
                 const statusLabel = {ממתין_חייל:"⏳ ממתין לחייל",ממתין_מפ:'⏳ ממתין למ"פ',ממתין_מגד:"⏳ ממתין למגד",אושר:"✅ אושר",נדחה:"❌ נדחה"}[f.status]||f.status;
                 return (
-                  <tr key={id} onClick={()=>openDetail(id)} style={{borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer",background:hasAnyRisk(f.answers)?"rgba(248,81,73,0.08)":"inherit"}}
+                  <tr key={id} onClick={()=>openDetail(id)} style={{borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer",background:hasAnyRisk(f.answers)?"rgba(248,81,73,0.08)":"inherit"}}>
                     <td style={{padding:"8px 10px",fontSize:"var(--text-base)"}}>
                       {f.soldierName||<span style={{color:"var(--color-text-muted)"}}>ללא שם</span>}
                       {hasAnyRisk(f.answers)&&<span title="יש תשובות בעייתיות בשאלון" style={{marginRight:6,fontSize:12,color:"var(--color-danger-fg)",fontWeight:800}}>⚠️</span>}
