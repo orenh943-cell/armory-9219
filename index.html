@@ -9505,12 +9505,18 @@ function App(){
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
   const exitFormParam = new URLSearchParams(window.location.search).get("exitform");
 
+  // testcert URL param - תמיד פתח עמוד בוחן, גם אם מחובר כמנהל
+  const testCertParam = new URLSearchParams(window.location.search).get("testcert");
+  if(testCertParam){
+    const ts = RAW_SOLDIERS.find(x=>x.id===testCertParam)
+      || Object.values(db.customSoldiers||{}).find(x=>x.id===testCertParam);
+    const tcAuth = {role:"testcert",name:ts?.name||"חייל",soldierId:testCertParam,autoTestCert:true};
+    return<TestCertView auth={tcAuth} db={db} setDb={setDb}/>;
+  }
+
   if(!auth)return<Login onLogin={handleLogin}/>;
   if(exitFormParam){
-    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===exitFormParam);
-    const exitAuth={role:"soldier",name:s?.name||"חייל",soldierId:exitFormParam,autoExitForm:true,phone:s?.phone};
-    return<ExitFormDirectView auth={exitAuth} onLogout={()=>window.location.href=window.location.pathname} db={db} setDb={setDb}/>;
-  }
+    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===ex
   if(auth.role==="soldier"&&auth.autoExitForm)return<ExitFormDirectView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
   if(auth.role==="testcert"&&auth.autoTestCert)return<TestCertView auth={auth} db={db} setDb={setDb}/>;
