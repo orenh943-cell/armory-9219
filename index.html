@@ -1891,6 +1891,38 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     logAction("ביטול_חתימה", `בוטלה חתימה של ${soldier.name} (${soldier.id})`, auth?.name);
   }
 
+  // עריכה ומחיקה
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState(soldier.name||"");
+  const [editPhone, setEditPhone] = useState(soldier.phone||"");
+  const [editUnit, setEditUnit] = useState(soldier.unit||"");
+  const [editSquad, setEditSquad] = useState(soldier.squad||"");
+
+  function saveEdit(){
+    if(!editName.trim()){alert("שם לא יכול להיות ריק");return;}
+    const isCustom = !!db.customSoldiers?.[soldier.id];
+    const updated = {...soldier, name:editName.trim(), phone:editPhone.trim(), unit:editUnit.trim(), squad:editSquad.trim()};
+    const ndb = {...db, customSoldiers:{...(db.customSoldiers||{}), [soldier.id]:updated}};
+    saveDB(ndb); onSave(ndb);
+    setEditMode(false);
+    logAction("עריכת_חייל", `עודכן פרופיל ${editName}`, auth?.name||"מערכת");
+  }
+
+  function deleteSoldier(){
+    if(!window.confirm("למחוק את "+soldier.name+"? פעולה זו תסיר את החייל מהמערכת.")) return;
+    const ndb = {...db};
+    // הסר מ-customSoldiers אם קיים
+    if(ndb.customSoldiers?.[soldier.id]){
+      const cs = {...ndb.customSoldiers}; delete cs[soldier.id]; ndb.customSoldiers = cs;
+    }
+    // הסר שיוך, חתימה
+    if(ndb.assignments){const a={...ndb.assignments};delete a[soldier.id];ndb.assignments=a;}
+    if(ndb.signatures){const s={...ndb.signatures};delete s[soldier.id];ndb.signatures=s;}
+    saveDB(ndb); onSave(ndb);
+    logAction("מחיקת_חייל", `נמחק חייל: ${soldier.name} (${soldier.id})`, auth?.name||"מערכת");
+    onClose();
+  }
+
   return (
     <Modal title={`${soldier.name} • ${soldier.id}`} onClose={onClose} wide>
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -1900,14 +1932,32 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       </div>
       {view==="profile"&&(
         <div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            {[["פלוגה",soldier.unit],["מחלקה",soldier.squad||"—"],["טלפון",soldier.phone||"—"],["מ. אישי",soldier.id]].map(([l,v])=>(
+          {auth?.role==="admin"&&<div style={{display:"flex",gap:6,marginBottom:10,justifyContent:"flex-end"}}>
+            <button onClick={()=>setEditMode(p=>!p)} style={{...S.btn(editMode?"orange":"blue"),padding:"4px 12px",fontSize:"var(--text-sm)",minHeight:30}}>
+              {editMode?"↩️ ביטול עריכה":"✏️ ערוך"}
+            </button>
+            <button onClick={deleteSoldier} style={{...S.btn("red"),padding:"4px 12px",fontSize:"var(--text-sm)",minHeight:30}}>🗑️ מחק חייל</button>
+          </div>}
+          {editMode
+            ? <div style={{...S.card,marginBottom:12,border:"1px solid var(--color-warning-fg)"}}>
+                <div style={{fontWeight:700,marginBottom:10,color:"var(--color-warning-fg)"}}>✏️ עריכת פרטים</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                  <div><label style={S.label}>שם מלא</label><input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                  <div><label style={S.label}>טלפון</label><input value={editPhone} onChange={e=>setEditPhone(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                  <div><label style={S.label}>פלוגה</label><input value={editUnit} onChange={e=>setEditUnit(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                  <div><label style={S.label}>מחלקה</label><input value={editSquad} onChange={e=>setEditSquad(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                </div>
+                <button onClick={saveEdit} style={{...S.btn("green"),width:"100%",fontWeight:700}}>💾 שמור שינויים</button>
+              </div>
+            : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                {[["פלוגה",soldier.unit],["מחלקה",soldier.squad||"—"],["טלפון",soldier.phone||"—"],["מ. אישי",soldier.id]].map(([l,v])=>(
               <div key={l} style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"9px 12px"}}>
                 <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}}>{l}</div>
                 <div style={{fontWeight:600,fontSize:"var(--text-base)",marginTop:2}}>{v}</div>
               </div>
             ))}
           </div>
+          }
           <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -4572,7 +4622,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             </div>
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 שם, מספר אישי, מחלקה..." style={{...S.input,flex:1,minWidth:160,marginBottom:0}}/>
-              <select value={filterUnit} onChange={e=>setFilterUnit(e.target.value)} style={{...S.input,width:"auto",marginBottom:0}}>
+              <select value={filterUnit} onChange={e=>{setFilterUnit(e.target.value);setFilterSquad("הכל");}} style={{...S.input,width:"auto",marginBottom:0}}>
                 {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>)}
               </select>
             </div>
