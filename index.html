@@ -2315,7 +2315,7 @@ function AddSoldierModal({db, onSave, onClose}){
   const [form, setForm] = useState({name:"",id:"",unit:"א",squad:"",phone:""});
   const [items, setItems] = useState([{name:"",serial:""}]);
   const [err, setErr] = useState("");
-  const units = ["א","ב","ג","מסייעת","אג\"מ","פלס\"מ"];
+  const units = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
 
   function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");}
 
@@ -2358,7 +2358,18 @@ function AddSoldierModal({db, onSave, onClose}){
         </div>
         <div>
           <label style={S.label}>מחלקה</label>
-          <input value={form.squad} onChange={e=>set("squad",e.target.value)} placeholder="מחלקה / תפקיד" style={S.input}/>
+          {(()=>{
+            const allSols = [...RAW_SOLDIERS, ...Object.values(db.customSoldiers||{})];
+            const squadsForUnit = [...new Set(allSols.filter(s=>s.unit===form.unit&&s.squad).map(s=>s.squad))].sort();
+            return squadsForUnit.length>0
+              ? <select value={form.squad} onChange={e=>set("squad",e.target.value)} style={S.input}>
+                  <option value="">-- בחר מחלקה --</option>
+                  {squadsForUnit.map(sq=><option key={sq} value={sq}>{sq}</option>)}
+                  <option value="__custom__">הקלד מחלקה חדשה...</option>
+                </select>
+              : <input value={form.squad} onChange={e=>set("squad",e.target.value)} placeholder="מחלקה / תפקיד" style={S.input}/>;
+          })()}
+          {form.squad==="__custom__"&&<input autoFocus value={""} onChange={e=>set("squad",e.target.value)} placeholder="שם המחלקה החדשה" style={{...S.input,marginTop:4}}/>}
         </div>
         <div style={{gridColumn:"1/-1"}}>
           <label style={S.label}>טלפון</label>
@@ -3504,6 +3515,333 @@ function buildGuarantorReport(repList, totDone, totRem, totSig){
 }
 
 
+// =================== POLL RESPONSE VIEW ===================
+function PollResponseView({pollId, soldierId, db, setDb}){
+  const [poll, setPoll] = React.useState(null);
+  const [done, setDone] = React.useState(false);
+  const [answer, setAnswer] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(()=>{
+    const off = fbOn("db/polls/"+pollId, (data)=>{
+      setPoll(data);
+      setLoading(false);
+      if(data?.soldiers?.[soldierId]?.status !== "pending"){
+        setDone(true);
+        setAnswer(data?.soldiers?.[soldierId]?.status);
+      }
+    });
+    return ()=>off();
+  },[]);
+
+  function respond(ans){
+    fbSet("db/polls/"+pollId+"/soldiers/"+soldierId+"/status", ans).catch(()=>{});
+    setAnswer(ans);
+    setDone(true);
+  }
+
+  if(loading) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{color:"var(--color-text-secondary)"}}>טוען...</div>
+  </div>;
+
+  if(!poll) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:40,marginBottom:8}}>⚠️</div>
+      <div style={{fontWeight:700}}>הסקר לא נמצא</div>
+    </div>
+  </div>;
+
+  const soldierData = poll.soldiers?.[soldierId];
+
+  if(done) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-bg-canvas)",padding:20}}>
+    <div style={{textAlign:"center",maxWidth:360}}>
+      <div style={{fontSize:64,marginBottom:16}}>{answer==="yes"?"✅":"❌"}</div>
+      <div style={{fontWeight:800,fontSize:"var(--text-xl)",color:answer==="yes"?"var(--color-success-fg)":"var(--color-danger-fg)",marginBottom:8}}>
+        {answer==="yes"?"תשובתך: מגיע!":"תשובתך: לא מגיע"}
+      </div>
+      <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>
+        תודה! תשובתך נרשמה במערכת.
+      </div>
+      <div style={{marginTop:16,fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>
+        {poll.title} — גדוד 9219 מוריה
+      </div>
+    </div>
+  </div>;
+
+  return <div style={{minHeight:"100vh",background:"var(--color-bg-canvas)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{maxWidth:400,width:"100%"}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontSize:48,marginBottom:8}}>📊</div>
+        <div style={{fontWeight:800,fontSize:"var(--text-xl)",marginBottom:4}}>
+          {poll.title}
+        </div>
+        <div style={{fontWeight:700,color:"var(--color-accent-fg)",fontSize:"var(--text-lg)",marginBottom:16}}>
+          שלום {soldierData?.name||"חייל"},
+        </div>
+        <div style={{...S.card,textAlign:"right",lineHeight:1.7,whiteSpace:"pre-wrap",fontSize:"var(--text-base)"}}>
+          {poll.message}
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <button onClick={()=>respond("yes")} style={{
+          padding:"20px 0",fontSize:18,fontWeight:800,
+          background:"var(--color-success-bg)",border:"2px solid var(--color-success-fg)",
+          color:"var(--color-success-fg)",borderRadius:"var(--radius-lg)",cursor:"pointer"
+        }}>
+          ✅<br/>כן, מגיע
+        </button>
+        <button onClick={()=>respond("no")} style={{
+          padding:"20px 0",fontSize:18,fontWeight:800,
+          background:"var(--color-danger-bg)",border:"2px solid var(--color-danger-fg)",
+          color:"var(--color-danger-fg)",borderRadius:"var(--radius-lg)",cursor:"pointer"
+        }}>
+          ❌<br/>לא מגיע
+        </button>
+      </div>
+      <div style={{textAlign:"center",marginTop:16,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+        גדוד 9219 מוריה חטיבה 6
+      </div>
+    </div>
+  </div>;
+}
+
+// =================== POLL TAB (סקר נוכחות) ===================
+function PollTab({db, setDb, soldiers, auth}){
+  const [polls, setPolls] = React.useState([]);
+  const [showCreate, setShowCreate] = React.useState(false);
+  const [activePoll, setActivePoll] = React.useState(null);
+
+  // טופס יצירה
+  const [pollTitle, setPollTitle] = React.useState("תעסוקה קרובה");
+  const [pollMsg, setPollMsg] = React.useState("זה אנחנו מארמון 9219 מוריה חטיבה 6\nנשמח לדעת האם אתה מגיע לתעסוקה הקרובה ע\"מ שנערך בהתאם");
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [sending, setSending] = React.useState(false);
+  const [sendIdx, setSendIdx] = React.useState(0);
+  const [sendQueue, setSendQueue] = React.useState([]);
+  const [queueMode, setQueueMode] = React.useState(false);
+
+  const units = ["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
+  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
+
+  // האזן ל-polls ב-Firebase
+  React.useEffect(()=>{
+    const off = fbOn("db/polls", (data)=>{
+      setPolls(Object.entries(data||{}).sort(([,a],[,b])=>b.createdAt>a.createdAt?1:-1));
+    });
+    return ()=>off();
+  },[]);
+
+  const baseURL = "https://orenh943-cell.github.io/armory-9219";
+
+  function createPoll(){
+    if(!pollTitle.trim()) return;
+    const id = "poll_"+Date.now();
+    const targetSoldiers = allSols.filter(s=>{
+      if(!s.name||!s.phone) return false;
+      if(filterUnit!=="הכל" && s.unit!==filterUnit) return false;
+      return true;
+    });
+    const poll = {
+      id, title:pollTitle.trim(), message:pollMsg.trim(),
+      unit:filterUnit, createdAt:new Date().toLocaleString("he-IL"),
+      createdBy:auth.name,
+      soldiers:targetSoldiers.reduce((acc,s)=>({...acc,[s.id]:{name:s.name,phone:s.phone,unit:s.unit,status:"pending"}}),{})
+    };
+    fbSet("db/polls/"+id, poll).catch(()=>{});
+    setActivePoll(poll);
+    setShowCreate(false);
+    // Start send queue
+    const queue = targetSoldiers.filter(s=>phoneToWA(s.phone));
+    setSendQueue(queue);
+    setSendIdx(0);
+    setQueueMode(true);
+    if(queue.length>0) sendWA(poll, queue[0]);
+    logAction("סקר_נוכחות", "נשלח סקר: "+pollTitle+" ל-"+targetSoldiers.length+" חיילים", auth.name);
+  }
+
+  function sendWA(poll, soldier){
+    const phone = phoneToWA(soldier.phone);
+    const link = baseURL+"?poll="+poll.id+"&sid="+soldier.id;
+    const msg = "שלום "+soldier.name+",\n"+poll.message+"\n\nלחץ לתשובה:\n"+link;
+    window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+  }
+
+  function nextInQueue(){
+    const next = sendIdx+1;
+    if(next >= sendQueue.length){ setQueueMode(false); return; }
+    setSendIdx(next);
+    sendWA(activePoll, sendQueue[next]);
+  }
+
+  function skipInQueue(){
+    const next = sendIdx+1;
+    if(next >= sendQueue.length){ setQueueMode(false); return; }
+    setSendIdx(next);
+    sendWA(activePoll, sendQueue[next]);
+  }
+
+  // סיכום תגובות לסקר
+  function getPollStats(poll){
+    const soldiers = Object.values(poll.soldiers||{});
+    return {
+      total: soldiers.length,
+      yes: soldiers.filter(s=>s.status==="yes").length,
+      no: soldiers.filter(s=>s.status==="no").length,
+      pending: soldiers.filter(s=>s.status==="pending").length,
+    };
+  }
+
+  if(queueMode && activePoll) return (
+    <div style={{maxWidth:520,margin:"0 auto",padding:16}}>
+      <div style={{...S.card,border:"1px solid var(--color-accent-fg)"}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:16,color:"var(--color-accent-fg)"}}>
+          📤 שליחת סקר — {activePoll.title}
+        </div>
+        <div style={{width:"100%",height:6,background:"var(--color-bg-subtle)",borderRadius:3,marginBottom:20,overflow:"hidden"}}>
+          <div style={{height:"100%",width:((sendIdx+1)/sendQueue.length*100)+"%",background:"var(--color-accent-fg)",borderRadius:3,transition:"width .3s"}}/>
+        </div>
+        <div style={{...S.card,marginBottom:20,textAlign:"right"}}>
+          <div style={{fontWeight:800,fontSize:"var(--text-xl)",marginBottom:4}}>{sendQueue[sendIdx]?.name}</div>
+          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>
+            📱 {sendQueue[sendIdx]?.phone} | פלוגה {sendQueue[sendIdx]?.unit}
+          </div>
+        </div>
+        <div style={{background:"var(--color-accent-bg)",border:"1px solid var(--color-accent-fg)",borderRadius:"var(--radius-md)",padding:"10px 14px",marginBottom:20,fontSize:"var(--text-sm)",color:"var(--color-accent-fg)"}}>
+          ✅ וואטסאפ נפתח — לחץ <b>שלח</b> ואז חזור לכאן
+        </div>
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginBottom:12,textAlign:"center"}}>
+          {sendIdx+1} מתוך {sendQueue.length}
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={skipInQueue} style={{...S.btn("gray"),flex:1,padding:"10px 0"}}>⏭️ דלג</button>
+          <button onClick={nextInQueue} style={{...S.btn("green"),flex:2,padding:"10px 0",fontWeight:800}}>
+            {sendIdx+1<sendQueue.length?"שלחתי ← הבא ›":"סיום ✅"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if(showCreate) return (
+    <div style={{maxWidth:560,margin:"0 auto",padding:16}}>
+      <div style={{...S.card,border:"1px solid var(--color-accent-fg)"}}>
+        <div style={{fontWeight:800,fontSize:"var(--text-base)",marginBottom:16,color:"var(--color-accent-fg)"}}>📊 סקר נוכחות חדש</div>
+        <label style={S.label}>כותרת הסקר</label>
+        <input value={pollTitle} onChange={e=>setPollTitle(e.target.value)} style={{...S.input}} placeholder="תעסוקה קרובה"/>
+        <label style={S.label}>הודעה לחיילים</label>
+        <textarea value={pollMsg} onChange={e=>setPollMsg(e.target.value)}
+          rows={4} style={{...S.input,fontFamily:"inherit",resize:"vertical"}}/>
+        <label style={S.label}>שלח לפלוגה</label>
+        <select value={filterUnit} onChange={e=>setFilterUnit(e.target.value)} style={{...S.input}}>
+          {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הגדוד":"פלוגה "+u}</option>)}
+        </select>
+        <div style={{background:"var(--color-bg-canvas)",borderRadius:"var(--radius-md)",padding:"12px",marginBottom:12,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>
+          <div style={{fontWeight:700,marginBottom:4}}>תצוגה מקדימה של ההודעה:</div>
+          <div style={{whiteSpace:"pre-wrap",color:"var(--color-text-primary)",lineHeight:1.6}}>
+            {"שלום [שם חייל],
+"+pollMsg}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={createPoll} style={{...S.btn("green"),flex:2,padding:"12px 0",fontWeight:800}}>
+            📤 צור ושלח
+          </button>
+          <button onClick={()=>setShowCreate(false)} style={{...S.btn("gray"),flex:1,padding:"12px 0"}}>ביטול</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>📊 סקרי נוכחות</h2>
+        <button onClick={()=>setShowCreate(true)} style={{...S.btn("green"),padding:"8px 20px"}}>
+          ➕ סקר חדש
+        </button>
+      </div>
+
+      {polls.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
+        <div style={{fontSize:48,marginBottom:12}}>📊</div>
+        <div>אין סקרים עדיין</div>
+        <div style={{fontSize:"var(--text-sm)",marginTop:8}}>צור סקר חדש כדי לשלוח לחיילים</div>
+      </div>}
+
+      {polls.map(([pollId, poll])=>{
+        const stats = getPollStats(poll);
+        const soldierList = Object.entries(poll.soldiers||{}).sort(([,a],[,b])=>
+          a.status==="yes"?-1:b.status==="yes"?1:a.status==="no"?-1:b.status==="no"?1:0
+        );
+        return (
+          <div key={pollId} style={{...S.card,marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
+              <div>
+                <div style={{fontWeight:800,fontSize:"var(--text-lg)"}}>{poll.title}</div>
+                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>
+                  {poll.createdAt} | {poll.unit==="הכל"?"כל הגדוד":"פלוגה "+poll.unit}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6"}}>
+                <button onClick={()=>{
+                  setSendQueue(Object.entries(poll.soldiers||{}).filter(([,s])=>s.status==="pending"&&phoneToWA(s.phone)).map(([id,s])=>({...s,id})));
+                  setSendIdx(0); setActivePoll(poll); setQueueMode(true);
+                  const first = Object.entries(poll.soldiers||{}).find(([,s])=>s.status==="pending"&&phoneToWA(s.phone));
+                  if(first) sendWA(poll, {...first[1],id:first[0]});
+                }} style={{...S.btn("wa"),padding:"4px 12px",fontSize:"var(--text-sm)"}}>💬 שלח שוב</button>
+                <button onClick={()=>{
+                  if(!window.confirm("למחוק סקר זה?")) return;
+                  fbDelete("db/polls/"+pollId).catch(()=>{});
+                }} style={{...S.btn("red"),padding:"4px 12px",fontSize:"var(--text-sm)"}}>🗑️</button>
+              </div>
+            </div>
+
+            {/* סטטיסטיקה */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+              {[
+                {label:"✅ מגיעים",val:stats.yes,color:"var(--color-success-fg)",bg:"var(--color-success-bg)"},
+                {label:"❌ לא מגיעים",val:stats.no,color:"var(--color-danger-fg)",bg:"var(--color-danger-bg)"},
+                {label:"⏳ לא הגיבו",val:stats.pending,color:"var(--color-text-muted)",bg:"var(--color-bg-subtle)"},
+              ].map(s=>(
+                <div key={s.label} style={{background:s.bg,borderRadius:"var(--radius-md)",padding:"10px 8px",textAlign:"center",border:"1px solid "+s.color}}>
+                  <div style={{fontSize:24,fontWeight:800,color:s.color}}>{s.val}</div>
+                  <div style={{fontSize:10,color:s.color,marginTop:2}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* רשימת חיילים */}
+            <div style={{border:"1px solid var(--color-border-muted)",borderRadius:"var(--radius-md)",overflow:"hidden"}}>
+              {soldierList.map(([sid, s])=>(
+                <div key={sid} style={{
+                  display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
+                  borderBottom:"1px solid var(--color-border-muted)",
+                  background:s.status==="yes"?"rgba(63,185,80,0.08)":s.status==="no"?"rgba(248,81,73,0.08)":"inherit"
+                }}>
+                  <span style={{fontSize:16}}>
+                    {s.status==="yes"?"✅":s.status==="no"?"❌":"⏳"}
+                  </span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{s.name}</div>
+                    <div style={{fontSize:10,color:"var(--color-text-muted)"}}>פלוגה {s.unit}</div>
+                  </div>
+                  <span style={{
+                    fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,
+                    background:s.status==="yes"?"var(--color-success-bg)":s.status==="no"?"var(--color-danger-bg)":"var(--color-bg-subtle)",
+                    color:s.status==="yes"?"var(--color-success-fg)":s.status==="no"?"var(--color-danger-fg)":"var(--color-text-muted)"
+                  }}>
+                    {s.status==="yes"?"מגיע ✅":s.status==="no"?"לא מגיע ❌":"לא הגיב ⏳"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // =================== EXTERNAL SIGN TAB ===================
 function ExternalSignTab({db, setDb, auth}){
   const [records, setRecords] = React.useState([]);
@@ -4524,6 +4862,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewSignatures!==false?[{id:"guarantors",label:"ערבויות",icon:"🛡️"}]:[]),
     ...(auth.role==="admin"?[{id:"reset",label:"איפוס",icon:"⚠️"}]:[]),
     ...(auth.role==="admin"?[{id:"external",label:"החתמה חיצונית",icon:"🏢"}]:[]),
+    ...(auth.role==="admin"?[{id:"poll",label:"סקר נוכחות",icon:"📊"}]:[]),
   ];
 
   function Sidebar(){
@@ -4641,7 +4980,46 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
                           <td style={{...S.td,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>{weps.length>0?weps.map(([k])=>nameWithMakat(k)).join(" | "):"—"}</td>
-                          <td style={S.td}>{s.signature?<Badge color="green" small>✅</Badge>:weps.length>0?<Badge color="orange" small>⏳</Badge>:<span style={{color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>—</span>}</td>
+                          <td style={{...S.td,minWidth:120}}>
+                            {(()=>{
+                              // חשב שלבים שהושלמו
+                              const hasWeapon = weps.length>0;
+                              const hasSig = !!s.signature;
+                              const ts = getTestStatus(db,s.id);
+                              const needsTest = soldierNeedsTest(s,db);
+                              const hasTest = !needsTest || ts.valid;
+                              const hasExit = Object.values(db.exitForms||{}).some(f=>f.soldierId===s.id&&f.status==="אושר");
+                              const steps = [hasWeapon, hasTest, hasSig, hasExit];
+                              const done = steps.filter(Boolean).length;
+                              const total = steps.length;
+                              const pct = Math.round(done/total*100);
+                              const color = pct===100?"var(--color-success-fg)":pct>=50?"var(--color-accent-fg)":"var(--color-warning-fg)";
+                              return <div>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                                  <span style={{fontSize:9,color:color,fontWeight:700}}>{done}/{total}</span>
+                                  <span style={{fontSize:9,color:"var(--color-text-muted)"}}>{pct}%</span>
+                                </div>
+                                <div style={{height:5,background:"var(--color-bg-subtle)",borderRadius:3,overflow:"hidden"}}>
+                                  <div style={{height:"100%",width:pct+"%",background:color,borderRadius:3,transition:"width .3s"}}/>
+                                </div>
+                                <div style={{display:"flex",gap:2,marginTop:3,fontSize:9}}>
+                                  {[
+                                    {ok:hasWeapon,label:"נשק"},
+                                    {ok:hasTest,label:"בוחן"},
+                                    {ok:hasSig,label:"חתימה"},
+                                    {ok:hasExit,label:"יציאה"},
+                                  ].map(({ok,label})=>(
+                                    <span key={label} style={{
+                                      padding:"1px 4px",borderRadius:3,
+                                      background:ok?"var(--color-success-bg)":"var(--color-bg-inset)",
+                                      color:ok?"var(--color-success-fg)":"var(--color-text-muted)",
+                                      border:"1px solid "+(ok?"var(--color-success-fg)":"var(--color-border-muted)")
+                                    }}>{ok?"✓":""} {label}</span>
+                                  ))}
+                                </div>
+                              </div>;
+                            })()}
+                          </td>
                           <td style={S.td}><button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"4px 10px",fontSize:"var(--text-sm)"}}>פרופיל</button></td>
                         </tr>
                       );
@@ -4829,6 +5207,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         )}
         {tab==="external"&&auth.role==="admin"&&(
           <ExternalSignTab db={db} setDb={setDb} auth={auth}/>
+        )}
+        {tab==="poll"&&auth.role==="admin"&&(
+          <PollTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="exitform"&&(
           <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
@@ -9496,9 +9877,12 @@ function App(){
     const exitId=params.get("exitform");
     const bulkSignId=params.get("bulksign");
     const testCertId=params.get("testcert");
+    const pollId=params.get("poll");
+    const pollSid=params.get("sid");
     // אם יש param כלשהו - נקה auth שמור (לא להיתקע על login ישן)
-    if(signId||exitId||bulkSignId||testCertId){
+    if(signId||exitId||bulkSignId||testCertId||pollId){
       try{localStorage.removeItem("armory_auth");}catch(e){}
+      try{sessionStorage.removeItem("armory_session");}catch(e){}
     }
     // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
     function findSoldier(id){
@@ -9586,6 +9970,13 @@ function App(){
 
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
   const exitFormParam = new URLSearchParams(window.location.search).get("exitform");
+
+  // poll response URL param
+  const pollParam = new URLSearchParams(window.location.search).get("poll");
+  const pollSidParam = new URLSearchParams(window.location.search).get("sid");
+  if(pollParam && pollSidParam){
+    return <PollResponseView pollId={pollParam} soldierId={pollSidParam} db={db} setDb={setDb}/>;
+  }
 
   // testcert URL param - תמיד פתח עמוד בוחן, גם אם מחובר כמנהל
   const testCertParam = new URLSearchParams(window.location.search).get("testcert");
