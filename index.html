@@ -633,6 +633,30 @@ const ALL_SERIALS = [{"name":"M4","serial":923300,"unit":"א","assignedToSoldier
 
 const NAME_TO_MAKAT = {"M4":100012066,"קלע סער":100012073,"M16":100012332,"HTR 338":100014050,"M-24 חדש":100015536,"נגב 7.62":100020009,"מטולון M320":100020017,"מאג":100021013,"נגב 5.56":100022206,"מק″כ 0.5":100024225,"מקלרון":100025019,"מקלר":100025132,"ישלט":100069180,"עדי":100070154,"שח″ע":100070170,"וילון":100070537,"שח″ע ממותג":100070740,"כוונת MUNS":100070758,"סמן לייזר ללאו":100071150,"שח″מ כחולה":100071258,"שח''מ ירוקה":100072369,"עידו":100072505,"אורלי":100075431,"מפרולייט":100075783,"עמית":100075881,"עמית איכון":100075946,"יחצ″ג מיני כוכב":100075962,"ערמון":100075989,"מפרומור":100076110,"מיקרון":100077555,"טרמיס":100077656,"NYX":100077889,"ליאור":100079275,"מכבית":100079330,"פיגיון":100080125,"משקפת":100081601,"משקפת 80*15":100081067,"עכבר":100081954,"מאפס למטול":100082454,"פליר T75":100083523,"אקילה X4":100083582,"טריגיקון":100083647,"אקילה X6":100083680,"כוונת השלכה למטול M203":100085321,"זאבון":100085454,"כוונת M5":100085518,"לאופולד 2":100086077,"לאופולד 6.5":100086131,"יראור":100086263,"ירין הגדלה משתנה":100086344,"מרק 6":100086412,"מרק 5":100086456,"מצפן":100087278,"מטלון ישן":100087421,"מטלון חדש":100087812,"מטל סרוג 10":100087863,"מטל סרוג 20":100087871,"סמן לייזר למפקד":100088495,"ציין לייזר לנגב":100088720,"נטלי":100088843,"צגון":100088983,"סמן PACK":100089149,"שבשבת רוח":100092638,"מק פורק":113516712,"קנה לנגב 5.56":121502003,"קנה למאג":123400011,"חצובה גיל":146360017,"מטריס 30":146737000,"שלט מטריס 30":146737001,"רחפן איבו":146749000,"שלט אבוו מקס 4":146749001,"זיקים N":146749009,"כדור ברזל- מתקן הטלה":146749010,"אבטה":146755000,"משקפי אבטה":146755013,"שלט אבטה":146755014,"קנה לנגב 7.62":121502222,"אלפא":146764009,"שלט אלפא":146764000,"מטלון ינאי":100087444,"איוטק OGL":100089717,"מתפס עליון":113514396,"מתפס תחתון":113514434,"כוונת אחורית":288800000,"כוונת קדמית מתקפלת":288800002};
 function getMakat(name){return NAME_TO_MAKAT[name]||null;}
+
+// שמור חתימה ישנה בהיסטוריה ואפס
+function archiveAndClearSig(db, soldierId){
+  const existing = db.signatures?.[soldierId];
+  if(!existing) return db;
+  const histKey = "sig_" + Date.now();
+  const ndb = {
+    ...db,
+    sigHistory: {
+      ...(db.sigHistory||{}),
+      [soldierId]: {
+        ...(db.sigHistory?.[soldierId]||{}),
+        [histKey]: {...existing, archivedAt: new Date().toLocaleString("he-IL")}
+      }
+    },
+    signatures: {...db.signatures}
+  };
+  delete ndb.signatures[soldierId];
+  // Save history to Firebase
+  fbSet("db/sigHistory/"+soldierId+"/"+histKey, {...existing, archivedAt: new Date().toLocaleString("he-IL")}).catch(()=>{});
+  fbDelete("db/signatures/"+soldierId).catch(()=>{});
+  return ndb;
+}
+
 function nameWithMakat(name){const m=getMakat(name);return m?`${name} (${m})`:name;}
 
 // רכיב להצגת מספרים סידוריים של אמצעי בלחיצה
@@ -1913,6 +1937,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [locNote,setLocNote]=useState("");
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
+  const [reSignNeeded,setReSignNeeded]=useState(null); // {soldier, newAssigned} for re-sign prompt
   const [newItems,setNewItems]=useState([{name:"",serial:""}]);
   const [retSel,setRetSel]=useState([]);
   const assigned=db.assignments[soldier.id]??soldier.assigned??{};
@@ -1929,18 +1954,20 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   function doCheckout(){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
     const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
-    const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    saveDB(ndb);onSave(ndb);
     logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")).join(", ")}`, auth?.name);
-    onClose();
+    setView("profile");
+    setReSignNeeded({soldier, newAssigned:na});
   }
   function doReturn(){
     if(!retSel.length)return;
     const na={...assigned};retSel.forEach(n=>delete na[n]);
-    const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    saveDB(ndb);onSave(ndb);
     logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
-    onClose();
+    setView("profile");
+    setReSignNeeded({soldier, newAssigned:na});
   }
   function clearSig(){
     const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
@@ -2218,16 +2245,88 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         </div>
       )}
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
+    {reSignNeeded&&(
+      <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{...S.card,maxWidth:440,width:"100%",border:"2px solid var(--color-warning-fg)"}}>
+          <div style={{fontSize:32,textAlign:"center",marginBottom:8}}>📋</div>
+          <div style={{fontWeight:800,fontSize:"var(--text-lg)",textAlign:"center",marginBottom:6,color:"var(--color-warning-fg)"}}>
+            נדרשת חתימה מחדש
+          </div>
+          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:16}}>
+            הציוד של <b>{reSignNeeded.soldier.name}</b> עודכן.<br/>
+            החתימה הקודמת נשמרה בהיסטוריה.<br/>
+            יש לשלוח לינק חתימה מחודש.
+          </div>
+          <div style={{background:"var(--color-bg-canvas)",borderRadius:"var(--radius-md)",padding:10,marginBottom:14,fontSize:"var(--text-sm)"}}>
+            <div style={{fontWeight:700,marginBottom:6}}>ציוד מעודכן:</div>
+            {Object.entries(reSignNeeded.newAssigned||{}).map(([k,v])=>(
+              <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
+                <span style={{fontWeight:WEAPON_KEYS.includes(k)?700:400,color:WEAPON_KEYS.includes(k)?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{k}</span>
+                <span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontSize:11}}>{v&&v!==1?v:"—"}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8,flexDirection:"column"}}>
+            {reSignNeeded.soldier.phone&&<button onClick={()=>{
+              const phone=phoneToWA(reSignNeeded.soldier.phone);
+              const link="https://orenh943-cell.github.io/armory-9219?sign="+reSignNeeded.soldier.id;
+              const weps=Object.entries(reSignNeeded.newAssigned||{}).filter(([k])=>WEAPON_KEYS.includes(k)).map(([k,v])=>k+(v&&v!==1?" ("+v+")":"")).join(", ");
+              const msg="שלום "+reSignNeeded.soldier.name+",
+ציודך עודכן ונדרשת חתימה מחדש.
+הנשק: "+weps+"
+
+לחץ לחתימה:
+"+link;
+              window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+            }} style={{...S.btn("wa"),width:"100%",padding:"11px 0",fontWeight:800,fontSize:"var(--text-base)"}}>
+              💬 שלח לחתימה בוואטסאפ
+            </button>}
+            <button onClick={()=>{
+              const link="https://orenh943-cell.github.io/armory-9219?sign="+reSignNeeded.soldier.id;
+              navigator.clipboard?.writeText(link).catch(()=>{});
+              alert("הלינק הועתק: "+link);
+            }} style={{...S.btn("blue"),width:"100%"}}>
+              🔗 העתק לינק חתימה
+            </button>
+            <button onClick={()=>setReSignNeeded(null)} style={{...S.btn("gray"),width:"100%"}}>סגור</button>
+          </div>
+        </div>
+      </div>
+    )}
     {view==="exitform"&&(
       <SoldierExitFormView soldier={soldier} db={db} onSave={onSave} auth={auth} soldierExitForms={soldierExitForms} onSendExitWA={onSendExitWA}/>
     )}
     {view==="history"&&(
       <div>
         {db.signatures?.[soldier.id]&&<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-success-fg)"}}>
-          <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:6}}>✍️ חתימה על נשק</div>
+          <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:6}}>✍️ חתימה פעילה</div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>נחתם: {db.signatures[soldier.id].signedAt||"—"}</div>
           {db.signatures[soldier.id].sigData&&<img src={db.signatures[soldier.id].sigData} style={{height:40,marginTop:6,borderRadius:4,border:"1px solid var(--color-border-muted)"}}/>}
         </div>}
+        {(()=>{
+          const hist = Object.entries(db.sigHistory?.[soldier.id]||{}).sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
+          if(!hist.length) return null;
+          return <div style={{...S.card,marginBottom:10,border:"1px solid var(--color-border-muted)"}}>
+            <div style={{fontWeight:700,marginBottom:8}}>📁 חתימות קודמות ({hist.length})</div>
+            {hist.map(([key,sig])=>(
+              <div key={key} style={{padding:"6px 0",borderBottom:"1px solid var(--color-border-muted)",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
+                  {sig.archivedAt||sig.signedAt||"—"}
+                </div>
+                {sig.sigData&&<img src={sig.sigData} style={{height:28,borderRadius:3,border:"1px solid var(--color-border-muted)",cursor:"pointer"}}
+                  onClick={()=>window._showLightbox&&window._showLightbox(sig.sigData)}/>}
+                <button onClick={()=>{
+                  const html=buildSignatureFormHtml({...soldier,id:soldier.id,name:soldier.name},{...sig,sigData:sig.sigData}, db.assignments?.[soldier.id]||soldier.assigned||{});
+                  const blob=new Blob([html],{type:"text/html"});
+                  const url=URL.createObjectURL(blob);
+                  const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+"_"+(sig.signedAt||key).replace(/[/:]/g,"-")+".html";
+                  document.body.appendChild(a);a.click();document.body.removeChild(a);
+                  setTimeout(()=>URL.revokeObjectURL(url),2000);
+                }} style={{...S.btn("gray"),padding:"2px 8px",fontSize:10,minHeight:24}}>⬇️</button>
+              </div>
+            ))}
+          </div>;
+        })()}
         {(()=>{const ts=getTestStatus(db,soldier.id);return ts.date?<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-accent-fg)"}}>
           <div style={{fontWeight:700,color:"var(--color-accent-fg)",marginBottom:6}}>📋 בוחן נשק</div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>ביצוע: {ts.date} | תוקף: {ts.expiry}</div>
@@ -2371,9 +2470,22 @@ function AddSoldierModal({db, onSave, onClose}){
   const [form, setForm] = useState({name:"",id:"",unit:"א",squad:"",phone:""});
   const [items, setItems] = useState([{name:"",serial:""}]);
   const [err, setErr] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
   const units = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
+  const allSoldiers = React.useMemo(()=>[...RAW_SOLDIERS,...Object.values(db.customSoldiers||{})],[db]);
 
-  function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");}
+  function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");
+    if(k==="name"||k==="id"){
+      const q=v.trim();
+      setSuggestions(q.length>1
+        ? allSoldiers.filter(s=>s.name.includes(q)||s.id.includes(q)).slice(0,6)
+        : []);
+    }
+  }
+  function pickSoldier(s){
+    setForm(p=>({...p,name:s.name,id:s.id,unit:s.unit||p.unit,squad:s.squad||p.squad,phone:s.phone||p.phone}));
+    setSuggestions([]);
+  }
 
   function save(){
     if(!form.name.trim()){setErr("חסר שם");return;}
@@ -2398,9 +2510,21 @@ function AddSoldierModal({db, onSave, onClose}){
   return (
     <Modal title="הוספת חייל חדש" onClose={onClose} wide>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
-        <div>
+        <div style={{position:"relative"}}>
           <label style={S.label}>שם מלא *</label>
-          <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="שם פרטי ומשפחה" style={S.input} autoFocus/>
+          <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="שם / מ.א לחיפוש..." style={{...S.input,marginBottom:0}}/>
+          {suggestions.length>0&&<div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-subtle)",
+            border:"1px solid var(--color-accent-fg)",borderRadius:8,zIndex:200,maxHeight:200,overflowY:"auto",
+            boxShadow:"0 4px 16px rgba(0,0,0,.4)"}}>
+            {suggestions.map(s=><div key={s.id} onClick={()=>pickSoldier(s)}
+              style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--color-border-muted)",
+                display:"flex",justifyContent:"space-between",alignItems:"center"}}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <span style={{fontWeight:600}}>{s.name}</span>
+              <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",fontFamily:"monospace"}}>{s.id} | {s.unit}</span>
+            </div>)}
+          </div>}
         </div>
         <div>
           <label style={S.label}>מספר אישי *</label>
@@ -4791,6 +4915,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off10 = fbOn("db/weaponLocations", (locs)=>{
       setDb(prev=>({...prev, weaponLocations: locs||{}}));
+    });
+    const offSigs = fbOn("db/userSigs", (sigs)=>{
+      setDb(prev=>({...prev, userSigs: sigs||{}}));
+    });
+    const offSigHist = fbOn("db/sigHistory", (hist)=>{
+      setDb(prev=>({...prev, sigHistory: hist||{}}));
     });
     const off11 = fbOn("db/cabinets", (cabs)=>{
       setDb(prev=>({...prev, cabinets: cabs||{}}));
@@ -8040,10 +8170,11 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
   const [mpNote, setMpNote] = React.useState(form?.mpNote||"");
   const [mpDecision, setMpDecision] = React.useState(form?.mpDecision||"");
   const [mpShowPad, setMpShowPad] = React.useState(false);
-  const [mpSig, setMpSig] = React.useState(form?.mpSig||null);
+  const savedSig = db.userSigs?.[auth.username] || null;
+  const [mpSig, setMpSig] = React.useState(form?.mpSig || savedSig || null);
   const [magadDecision, setMagadDecision] = React.useState(form?.magadDecision||"");
   const [magadShowPad, setMagadShowPad] = React.useState(false);
-  const [magadSig, setMagadSig] = React.useState(form?.magadSig||null);
+  const [magadSig, setMagadSig] = React.useState(form?.magadSig || savedSig || null);
   const [cmdDecisions, setCmdDecisions] = React.useState(form?.commanderDecisions||Array(10).fill(""));
   const [saved, setSaved] = React.useState(false);
 
@@ -8186,10 +8317,16 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
           <div>
             <textarea value={mpNote} onChange={e=>setMpNote(e.target.value)} placeholder='הערות מ"פ (אופציונלי)' style={{...S.input,width:"100%",minHeight:60,marginBottom:8}}/>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+              {savedSig&&!mpSig&&<button onClick={()=>setMpSig(savedSig)}
+                style={{...S.btn("green"),fontSize:"var(--text-sm)",padding:"4px 12px"}}>
+                ♻️ השתמש בחתימה שמורה
+              </button>}
               <button onClick={()=>setMpShowPad(true)} style={{...S.btn(mpSig?"green":"blue"),fontSize:"var(--text-sm)"}}>
-                {mpSig?"✅ חתימה קיימת":"✍️ חתימת מ\"פ"}
+                {mpSig?"✍️ חתום שוב":"✍️ חתימת מ"פ"}
               </button>
-              {mpSig&&<img src={mpSig} style={{height:36,border:"1px solid var(--color-border-default)",borderRadius:4}}/>}
+              {mpSig&&<img src={mpSig} onClick={()=>setMpSig(null)}
+                title="לחץ לביטול החתימה"
+                style={{height:36,border:"1px solid var(--color-border-default)",borderRadius:4,cursor:"pointer"}}/>}
             </div>
             <button onClick={saveSection3} style={{...S.btn("green"),width:"100%"}}>💾 אישור ושליחה למגד</button>
             {mpShowPad&&<Modal title='חתימת מ"פ' onClose={()=>setMpShowPad(false)}><SignaturePad onSave={d=>{setMpSig(d);setMpShowPad(false);}}/></Modal>}
@@ -8220,13 +8357,27 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
               ))}
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+              {savedSig&&!magadSig&&<button onClick={()=>setMagadSig(savedSig)}
+                style={{...S.btn("green"),fontSize:"var(--text-sm)",padding:"4px 12px"}}>
+                ♻️ השתמש בחתימה שמורה
+              </button>}
               <button onClick={()=>setMagadShowPad(true)} style={{...S.btn(magadSig?"green":"blue"),fontSize:"var(--text-sm)"}}>
-                {magadSig?"✅ חתימה קיימת":"✍️ חתימת מגד"}
+                {magadSig?"✍️ חתום שוב":"✍️ חתימת מגד"}
               </button>
-              {magadSig&&<img src={magadSig} style={{height:36,border:"1px solid var(--color-border-default)",borderRadius:4}}/>}
+              {magadSig&&<img src={magadSig} onClick={()=>setMagadSig(null)}
+                title="לחץ לביטול החתימה"
+                style={{height:36,border:"1px solid var(--color-border-default)",borderRadius:4,cursor:"pointer"}}/>}
             </div>
             {magadDecision&&<button onClick={saveSection4} style={{...S.btn(magadDecision==="מאשר"?"green":"red"),width:"100%"}}>💾 סיום — {magadDecision==="מאשר"?"אישור יציאה":"דחיית יציאה"}</button>}
-            {magadShowPad&&<Modal title="חתימת מגד" onClose={()=>setMagadShowPad(false)}><SignaturePad onSave={d=>{setMagadSig(d);setMagadShowPad(false);}}/></Modal>}
+            {magadShowPad&&<Modal title="חתימת מגד" onClose={()=>setMagadShowPad(false)}>
+              <SignaturePad onSave={d=>{
+                setMagadSig(d);
+                setMagadShowPad(false);
+                const ndb={...db,userSigs:{...(db.userSigs||{}),[auth.username]:d}};
+                setDb(ndb);
+                fbSet("db/userSigs/"+auth.username, d).catch(()=>{});
+              }}/>
+            </Modal>}
           </div>
         ):(
           <div style={{color:"var(--color-text-muted)",fontSize:"var(--text-base)"}}>
@@ -8571,6 +8722,27 @@ ${formsHtml}
     count++;
   });
 
+  // 4. היסטוריית חתימות (ישנות)
+  Object.entries(db.sigHistory||{}).forEach(([soldierId, history])=>{
+    const s = getSoldier(soldierId);
+    if(!s) return;
+    const {unit,squad,name} = soldierMap[soldierId]||{
+      unit:safeName(s.unit||"ללא_פלוגה"),
+      squad:safeName(s.squad||"ללא_מחלקה"),
+      name:safeName(s.name)
+    };
+    const histEntries = Object.entries(history).sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
+    histEntries.forEach(([key, sig], idx)=>{
+      if(!sig?.sigData) return;
+      const assigned = db.assignments?.[soldierId]||s.assigned||{};
+      const html = buildSignatureFormHtml(s, sig, assigned);
+      const dateStr = (sig.signedAt||sig.archivedAt||key).replace(/[/: ]/g,"-").slice(0,15);
+      const path = `פלוגה_${unit}/${squad}/${name}_${soldierId}/04_חתימות_קודמות/${(idx+1).toString().padStart(2,"0")}_${dateStr}.html`;
+      files[path] = enc(html);
+    });
+    if(histEntries.length) count++;
+  });
+
   if(!count){ alert("אין נתונים לייצוא"); return; }
 
   const now = new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
@@ -8583,6 +8755,7 @@ ${formsHtml}
   01_חתימה_על_נשק.html
   02_אישור_בוחן_נשק.html
   03_אישורי_יציאה_היסטוריה.html
+  04_חתימות_קודמות/ (חתימות לאחר שינויי ציוד)
 `;
   files["README.txt"] = enc(readme);
 
@@ -8979,8 +9152,17 @@ function PermissionsTab({db, setDb}){
                   {u.rank&&<span style={{color:"var(--color-text-muted)"}}>{u.rank}</span>}
                 </div>
               </div>
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||u.soldierId||"");}}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                {db.userSigs?.[username]&&<span style={{display:"flex",alignItems:"center",gap:4}}>
+                  <img src={db.userSigs[username]} style={{height:24,borderRadius:3,border:"1px solid var(--color-border-default)"}}/>
+                  <button onClick={()=>{
+                    const ndb={...db,userSigs:{...(db.userSigs||{})}};
+                    delete ndb.userSigs[username];
+                    saveDB(ndb); setDb(ndb);
+                    fbDelete("db/userSigs/"+username).catch(()=>{});
+                  }} style={{...S.btn("red"),padding:"2px 6px",fontSize:9,minHeight:22}}>✕</button>
+                </span>}
+                <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 {isDynamic&&(
                   <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
