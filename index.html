@@ -8320,7 +8320,7 @@ function ExitFormDetail({db, setDb, soldiers, auth, formId, onBack}){
                 ♻️ השתמש בחתימה שמורה
               </button>}
               <button onClick={()=>setMpShowPad(true)} style={{...S.btn(mpSig?"green":"blue"),fontSize:"var(--text-sm)"}}>
-                {mpSig?"✍️ חתום שוב":"✍️ חתימת מ"פ"}
+                {mpSig?"✍️ חתום שוב":`✍️ חתימת מ"פ`}
               </button>
               {mpSig&&<img src={mpSig} onClick={()=>setMpSig(null)}
                 title="לחץ לביטול החתימה"
