@@ -9160,7 +9160,7 @@ function PermissionsTab({db, setDb}){
                     fbDelete("db/userSigs/"+username).catch(()=>{});
                   }} style={{...S.btn("red"),padding:"2px 6px",fontSize:9,minHeight:22}}>✕</button>
                 </span>}
-                <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u
+                <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||"");}}
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 {isDynamic&&(
                   <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
