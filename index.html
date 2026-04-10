@@ -2465,7 +2465,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
 
 
 function AddSoldierModal({db, onSave, onClose}){
-  const [form, setForm] = useState({name:"",id:"",unit:"א",squad:"",phone:""});
+  const [form, setForm] = useState({firstName:"",lastName:"",id:"",unit:"א",squad:"",phone:""});
   const [items, setItems] = useState([{name:"",serial:""}]);
   const [err, setErr] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -2473,28 +2473,34 @@ function AddSoldierModal({db, onSave, onClose}){
   const allSoldiers = React.useMemo(()=>[...RAW_SOLDIERS,...Object.values(db.customSoldiers||{})],[db]);
 
   function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");
-    if(k==="name"||k==="id"){
-      const q=v.trim();
+    if(k==="firstName"||k==="lastName"||k==="id"){
+      const currentForm = {firstName:"",lastName:"",id:""};
+      const q = k==="id" ? v.trim() : v.trim();
       setSuggestions(q.length>1
         ? allSoldiers.filter(s=>s.name.includes(q)||s.id.includes(q)).slice(0,6)
         : []);
     }
   }
   function pickSoldier(s){
-    setForm(p=>({...p,name:s.name,id:s.id,unit:s.unit||p.unit,squad:s.squad||p.squad,phone:s.phone||p.phone}));
+    const parts=(s.name||'').trim().split(' ');const firstName=parts[0]||'';const lastName=parts.slice(1).join(' ')||'';
+    setForm(p=>({...p,firstName,lastName,id:s.id,unit:s.unit||p.unit,squad:s.squad||p.squad,phone:s.phone||p.phone}));;
     setSuggestions([]);
   }
 
   function save(){
-    if(!form.name.trim()){setErr("חסר שם");return;}
+    if(!form.firstName.trim()){setErr("חסר שם פרטי");return;}
+    if(!form.lastName.trim()){setErr("חסר שם משפחה");return;}
     if(!form.id.trim()){setErr("חסר מספר אישי");return;}
+    if(!form.phone.trim()){setErr("חסר טלפון");return;}
+    if(!form.unit.trim()){setErr("חסרה פלוגה");return;}
+    if(!form.squad.trim()||form.squad==="__custom__"){setErr("חסרה מחלקה");return;}
     if(RAW_SOLDIERS.find(s=>s.id===form.id.trim())||db.assignments[form.id.trim()]!==undefined){
       // check if already added via db
     }
     const assigned={};
     items.filter(i=>i.name).forEach(i=>{assigned[i.name]=i.serial||1;});
     // Save to db as a new soldier entry
-    const newSoldier={id:form.id.trim(),name:form.name.trim(),unit:form.unit,squad:form.squad.trim(),phone:form.phone.trim(),assigned,_custom:true};
+    const newSoldier={id:form.id.trim(),name:(form.firstName.trim()+" "+form.lastName.trim()).trim(),unit:form.unit,squad:form.squad.trim()==="__custom__"?"":form.squad.trim(),phone:form.phone.trim(),assigned:{}};
     const newDb={
       ...db,
       assignments:{...(db.assignments||{}),[form.id.trim()]:assigned},
@@ -2509,8 +2515,8 @@ function AddSoldierModal({db, onSave, onClose}){
     <Modal title="הוספת חייל חדש" onClose={onClose} wide>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
         <div style={{position:"relative"}}>
-          <label style={S.label}>שם מלא *</label>
-          <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="שם / מ.א לחיפוש..." style={{...S.input,marginBottom:0}}/>
+          <label style={S.label}>שם פרטי *</label>
+          <input value={form.firstName} onChange={e=>set("firstName",e.target.value)} placeholder="שם פרטי / חיפוש..." style={{...S.input,marginBottom:0}}/>
           {suggestions.length>0&&<div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-subtle)",
             border:"1px solid var(--color-accent-fg)",borderRadius:8,zIndex:200,maxHeight:200,overflowY:"auto",
             boxShadow:"0 4px 16px rgba(0,0,0,.4)"}}>
@@ -2525,17 +2531,21 @@ function AddSoldierModal({db, onSave, onClose}){
           </div>}
         </div>
         <div>
+          <label style={S.label}>שם משפחה *</label>
+          <input value={form.lastName} onChange={e=>set("lastName",e.target.value)} placeholder="שם משפחה" style={{...S.input,marginBottom:0}}/>
+        </div>
+        <div>
           <label style={S.label}>מספר אישי *</label>
           <input value={form.id} onChange={e=>set("id",e.target.value)} placeholder="מספר אישי" style={S.input} inputMode="numeric"/>
         </div>
         <div>
-          <label style={S.label}>פלוגה</label>
+          <label style={S.label}>פלוגה *</label>
           <select value={form.unit} onChange={e=>set("unit",e.target.value)} style={S.input}>
             {units.map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
         <div>
-          <label style={S.label}>מחלקה</label>
+          <label style={S.label}>מחלקה *</label>
           {(()=>{
             const allSols = [...RAW_SOLDIERS, ...Object.values(db.customSoldiers||{})];
             const squadsForUnit = [...new Set(allSols.filter(s=>s.unit===form.unit&&s.squad).map(s=>s.squad))].sort();
@@ -2550,7 +2560,7 @@ function AddSoldierModal({db, onSave, onClose}){
           {form.squad==="__custom__"&&<input autoFocus value={""} onChange={e=>set("squad",e.target.value)} placeholder="שם המחלקה החדשה" style={{...S.input,marginTop:4}}/>}
         </div>
         <div style={{gridColumn:"1/-1"}}>
-          <label style={S.label}>טלפון</label>
+          <label style={S.label}>טלפון *</label>
           <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="05X-XXXXXXX" style={S.input} inputMode="tel"/>
         </div>
       </div>
@@ -4626,7 +4636,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
 
   // Build unit list
   const units = React.useMemo(()=>{
-    const us = [...new Set(soldiers.map(s=>s.unit).filter(Boolean))].sort();
+    const us = [...new Set(soldiers.map(s=>(s.unit||"").trim()).filter(Boolean))].sort();
     return ["הכל", ...us];
   }, [soldiers]);
 
@@ -4962,7 +4972,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const guarantors=db.bulkGuarantors||{};
     return [...custom,...base].map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
-      return {...s,assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
+      return {...s,unit:(s.unit||"").trim(),assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
     });
   },[db]);
   const filtered=useMemo(()=>{let l=soldiers;if(filterUnit!=="הכל")l=l.filter(s=>s.unit===filterUnit);if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)||(s.squad||"").toLowerCase().includes(q));}return l;},[soldiers,filterUnit,search]);
@@ -8972,7 +8982,7 @@ const ROLE_TITLE_PRESETS = {
   'ע קח"ש':     {isMagad:false, canCommanderDecide:false, canApproveExitForm:false, canFillExitForm:false, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canDownload:true, canViewInspection:true, canViewActLog:false, canViewDaily:true, canViewCabinets:true, canEdit:true, canCheckout:true, canReturn:true, canSign:true, canBulkSign:true},
   'בוחן נש"ק':  {isMagad:false, canCommanderDecide:false, canApproveExitForm:false, canFillExitForm:false, canViewSoldiers:true, canViewSignatures:false, canViewBroken:true, canViewInventory:true, canDownload:true, canViewInspection:true, canViewActLog:false, canViewDaily:false, canViewCabinets:false, canEdit:false, canCheckout:false, canReturn:false, canSign:false, canBulkSign:false},
   'מש"ק ארמון': {isMagad:false, canCommanderDecide:false, canApproveExitForm:false, canFillExitForm:false, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canDownload:true, canViewInspection:true, canViewActLog:true, canViewDaily:true, canViewCabinets:true, canEdit:true, canCheckout:true, canReturn:true, canSign:true, canBulkSign:true},
-  'אחראי ארמון':{isMagad:false, canCommanderDecide:false, canApproveExitForm:false, canFillExitForm:false, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canDownload:true, canViewInspection:false, canViewActLog:false, canViewDaily:true, canViewCabinets:true, canEdit:false, canCheckout:true, canReturn:true, canSign:false, canBulkSign:false},
+  'אחראי ארמון':{isMagad:false, canCommanderDecide:false, canApproveExitForm:false, canFillExitForm:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canDownload:true, canEdit:true, canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canSendToUnit:true, canViewInspection:true, canViewActLog:true, canViewDaily:true, canViewCabinets:true}
 }
 const TAB_PERMS = {
   soldiers:"canViewSoldiers", signatures:"canViewSignatures",
