@@ -2274,12 +2274,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               const phone=phoneToWA(reSignNeeded.soldier.phone);
               const link="https://orenh943-cell.github.io/armory-9219?sign="+reSignNeeded.soldier.id;
               const weps=Object.entries(reSignNeeded.newAssigned||{}).filter(([k])=>WEAPON_KEYS.includes(k)).map(([k,v])=>k+(v&&v!==1?" ("+v+")":"")).join(", ");
-              const msg="שלום "+reSignNeeded.soldier.name+",
-ציודך עודכן ונדרשת חתימה מחדש.
-הנשק: "+weps+"
-
-לחץ לחתימה:
-"+link;
+              const msg="שלום "+reSignNeeded.soldier.name+",\nציודך עודכן ונדרשת חתימה מחדש.\nהנשק: "+weps+"\n\nלחץ לחתימה:\n"+link;
               window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
             }} style={{...S.btn("wa"),width:"100%",padding:"11px 0",fontWeight:800,fontSize:"var(--text-base)"}}>
               💬 שלח לחתימה בוואטסאפ
