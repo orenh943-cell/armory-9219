@@ -10631,16 +10631,27 @@ function App(){
       if(s) return{role:"soldier",name:s.name,soldierId:signId,autoSign:true,assignedFromLink};
       return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink};
     }
-    // שחזר session שמור
+    // שחזר session שמור — רק מנהלים, לא חיילים שנכנסו דרך לינק
     try{
       const saved=sessionStorage.getItem("armory_session");
-      if(saved) return JSON.parse(saved);
+      if(saved){
+        const parsed=JSON.parse(saved);
+        // אל תשחזר sessions של חיילים שנכנסו דרך לינק ייעודי
+        if(parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSign||parsed.role==="testcert"||parsed.role==="bulkrep"){
+          sessionStorage.removeItem("armory_session");
+          return null;
+        }
+        return parsed;
+      }
     }catch(e){}
     return null;
   });
 
   function handleLogin(a){
-    try{sessionStorage.setItem("armory_session",JSON.stringify(a));}catch(e){}
+    // אל תשמור sessions של חיילים שנכנסו דרך לינק - הם חד-פעמיים
+    if(!a.autoSign && !a.autoExitForm && !a.autoTestCert && !a.autoBulkSign && a.role!=="testcert" && a.role!=="bulkrep" && a.role!=="soldier"){
+      try{sessionStorage.setItem("armory_session",JSON.stringify(a));}catch(e){}
+    }
     // Log login to Firebase
     const logEntry = {
       username: a.username||a.name||"",
