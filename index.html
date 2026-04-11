@@ -1299,7 +1299,7 @@ function Login({onLogin}){
         }catch(e){}
       }
     });
-    setTimeout(()=>setLoading(false),10000); // timeout safety
+    setTimeout(()=>setLoading(false),4000); // timeout safety
     return ()=>{off1();off2();};
   },[]);
   function go(){
@@ -1431,7 +1431,6 @@ function Login({onLogin}){
         )}
         <button
           onClick={go}
-          disabled={loading}
           aria-busy={loading}
           style={{...S.btn("green"),width:"100%",padding:"var(--space-3) 0",fontSize:"var(--text-lg)",marginTop:"var(--space-1)"}}
         >
