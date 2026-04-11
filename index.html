@@ -1294,7 +1294,7 @@ function Login({onLogin}){
         }catch(e){}
       }
     });
-    setTimeout(()=>setLoading(false),6000); // timeout
+    setTimeout(()=>setLoading(false),10000); // timeout safety
     return ()=>{off1();off2();};
   },[]);
   function go(){
@@ -1334,10 +1334,27 @@ function Login({onLogin}){
       onLogin({role:"soldier",name:cs.name,soldierId:cs.id});
       return;
     }
+    // בדוק סיסמת איפוס
+    if(pTrim==="9219reset"){
+      // allow reset for any username - show info
+      setErr("לאיפוס סיסמה פנה למנהל המערכת");
+      return;
+    }
     if(loading){
-      setErr("המערכת עדיין נטענת, נסה שוב עוד שניה");
+      setErr("טוען נתונים מהשרת... נסה שוב בעוד שניה");
+      setTimeout(()=>go(), 1500); // auto retry
     } else {
-      setErr("שם משתמש או מספר אישי שגויים");
+      // Maybe Firebase just hasn't loaded yet - wait and retry once
+      setErr("בודק...");
+      setTimeout(()=>{
+        const u2=USERS[uTrim]||dynUsers[uTrim];
+        const ep2=userPasswords[uTrim]||u2?.pass;
+        if(u2 && (pTrim===ep2||pTrim===String(ep2))){
+          onLogin({role:u2.role,name:u2.name,username:uTrim,soldierId:u2.soldierId||"",viewUnit:u2.viewUnit||null});
+        } else {
+          setErr("שם משתמש או סיסמה שגויים");
+        }
+      }, 2000);
     }
   }
   return (
