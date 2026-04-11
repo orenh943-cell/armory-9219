@@ -10642,9 +10642,8 @@ function App(){
           sessionStorage.removeItem("armory_session");
           return null;
         }
-        // אל תשחזר sessions של חיילים בשום אופן
-        if(parsed.role==="soldier"||parsed.role==="testcert"||parsed.role==="bulkrep"||
-           parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSign){
+        // אל תשחזר sessions של חיילים שנכנסו דרך לינק
+        if(parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSign){
           sessionStorage.removeItem("armory_session");
           return null;
         }
@@ -10657,7 +10656,9 @@ function App(){
   function handleLogin(a){
     // אל תשמור sessions של חיילים שנכנסו דרך לינק - הם חד-פעמיים
     // שמור רק sessions של מנהלים — לעולם לא חיילים
-    if(a.role==="admin"||a.role==="manager"||a.role==="viewer"){
+    // שמור session לכל משתמש שנכנס דרך הכניסה - חוץ מחיילים דרך לינק
+    const isSoldierLink = a.autoSign||a.autoExitForm||a.autoTestCert||a.autoBulkSign;
+    if(!isSoldierLink){
       try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v4"}));}catch(e){}
     }
     // Log login to Firebase
