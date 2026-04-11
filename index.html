@@ -883,7 +883,7 @@ function cleanSigs(sigs){
 }
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
   fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
@@ -898,6 +898,8 @@ function saveDB(db){
   fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
   fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
   fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
+  if(safe.userSigs && Object.keys(safe.userSigs).length) fbSet("db/userSigs", safe.userSigs).catch(e=>console.warn("FB err:",e));
+  if(safe.deletedUsers && Object.keys(safe.deletedUsers).length) fbSet("db/deletedUsers", safe.deletedUsers).catch(e=>console.warn("FB err:",e));
 }
 
 function initDB(){
@@ -8731,154 +8733,99 @@ function downloadAllFormsZip(db, soldiers){
   const safeName = s => (s||"לא_ידוע").replace(/[\/\\:*?"<>|]/g,"_");
 
   const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
-  const getSoldier = id => allSols.find(s=>s.id===id);
+  // De-duplicate by ID
+  const solMap = {};
+  allSols.forEach(s=>{ if(s.name && s.id) solMap[s.id]=s; });
+  const uniqueSols = Object.values(solMap);
 
-  // מאגד testCerts לשימוש ב-buildSignatureFormHtml
   window._testCertsForZip = db.testCerts||{};
-
-  // מיפוי חיילים: פלוגה → מחלקה → חייל
-  const soldierMap = {};
-  allSols.forEach(s=>{
-    if(!s.name) return;
-    const unit  = safeName(s.unit||"ללא_פלוגה");
-    const squad = safeName(s.squad||"ללא_מחלקה");
-    const name  = safeName(s.name);
-    const key   = s.id;
-    if(!soldierMap[key]) soldierMap[key]={unit,squad,name,soldier:s};
-  });
 
   let count = 0;
 
-  // 1. חתימה על נשק
-  Object.entries(db.signatures||{}).forEach(([soldierId, sig])=>{
-    if(!sig?.sigData) return;
-    const s = getSoldier(soldierId);
-    if(!s) return;
-    const {unit,squad,name} = soldierMap[soldierId]||{
-      unit:safeName(s.unit||"ללא_פלוגה"),
-      squad:safeName(s.squad||"ללא_מחלקה"),
-      name:safeName(s.name)
-    };
-    const assigned = db.assignments?.[soldierId]||s.assigned||{};
-    const html = buildSignatureFormHtml(s, sig, assigned);
-    const path = `פלוגה_${unit}/${squad}/${name}_${soldierId}/01_חתימה_על_נשק.html`;
-    files[path] = enc(html);
-    count++;
-  });
+  // Iterate every soldier - create folder for each who has ANY data
+  uniqueSols.forEach(soldier=>{
+    const sid = soldier.id;
+    const unit  = safeName((soldier.unit||"ללא_פלוגה").trim());
+    const squad = safeName((soldier.squad||"ללא_מחלקה").trim());
+    const name  = safeName(soldier.name);
+    const folder = "פלוגה_"+unit+"/"+squad+"/"+name+"_"+sid;
 
-  // 2. אישור בוחן נשק
-  Object.entries(db.testCerts||{}).forEach(([soldierId, cert])=>{
-    if(!cert?.img) return;
-    const s = getSoldier(soldierId);
-    if(!s) return;
-    const {unit,squad,name} = soldierMap[soldierId]||{
-      unit:safeName(s.unit||"ללא_פלוגה"),
-      squad:safeName(s.squad||"ללא_מחלקה"),
-      name:safeName(s.name)
-    };
-    const expDate = cert.date ? new Date(new Date(cert.date).getTime()+183*86400000).toLocaleDateString("he-IL") : "—";
-    const certDate = cert.date ? new Date(cert.date).toLocaleDateString("he-IL") : "—";
-    const certSig = db.signatures?.[soldierId];
-    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>אישור בוחן נשק — ${s.name}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px;max-width:800px;margin:0 auto}
-  h1{text-align:center;font-size:17px;border-bottom:3px solid #1a3a6b;padding-bottom:8px;margin-bottom:4px;color:#1a3a6b}
-  .subtitle{text-align:center;font-size:11px;color:#666;margin-bottom:16px}
-  .info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-  .box{border:1px solid #aaa;padding:6px 10px;border-radius:3px;background:#fafafa}
-  .lbl{font-size:10px;color:#666;margin-bottom:2px}.val{font-weight:bold;font-size:13px}
-  .section{margin:10px 0;padding:10px 12px;border:1px solid #aaa;border-radius:4px}
-  .section-title{font-weight:bold;font-size:12px;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:8px;color:#1a3a6b}
-  .decl{background:#f9f9f9;border:1px solid #ccc;padding:10px 14px;border-radius:4px;font-size:11px;line-height:1.7;margin:8px 0}
-  @media print{.noprint{display:none}}
-</style></head><body>
-<h1>אישור בוחן נשק</h1>
-<div class="subtitle">גדוד 9219 מוריה | ${new Date().toLocaleDateString("he-IL")}</div>
-<div class="info">
-  <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
-  <div class="box"><div class="lbl">מספר אישי</div><div class="val">${soldierId}</div></div>
-  <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
-  <div class="box"><div class="lbl">תאריך ביצוע</div><div class="val">${certDate}</div></div>
-  <div class="box"><div class="lbl">תוקף עד</div><div class="val" style="color:#27ae60;font-size:14px">${expDate}</div></div>
-</div>
-<div class="section">
-  <div class="section-title">צילום אישור הבוחן</div>
-  <img src="${cert.img}" style="max-width:100%;max-height:380px;border:1px solid #ccc;border-radius:4px;display:block;margin:8px 0"/>
-</div>
-<div class="section">
-  <div class="section-title">הצהרת החייל</div>
-  <div class="decl">
-    אני הח"מ, <strong>${s.name}</strong> (מ.א. ${soldierId}), מצהיר כי ביצעתי בוחן נשק ועברתי אותו בהצלחה.
-    התמונה המצורפת היא אישור הבוחן האישי שלי. תוקף האישור הוא עד ${expDate}.
-  </div>
-  ${certSig?.sigData?`<div style="margin-top:8px"><div style="font-size:10px;color:#666;margin-bottom:3px">חתימת החייל</div><img src="${certSig.sigData}" style="height:50px;border:1px solid #999;border-radius:3px"/><div style="font-size:10px;color:#666;margin-top:3px">תאריך: ${certSig.signedAt||"—"}</div></div>`:""}
-</div>
-<button class="noprint" onclick="window.print()" style="margin-top:16px;padding:8px 20px;cursor:pointer;font-size:13px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפס</button>
-</body></html>`
-    const path = `פלוגה_${unit}/${squad}/${name}_${soldierId}/02_אישור_בוחן_נשק.html`;
-    files[path] = enc(html);
-    count++;
-  });
+    const sig     = db.signatures?.[sid];
+    const cert    = db.testCerts?.[sid];
+    const history = db.sigHistory?.[sid];
+    const assigned = db.assignments?.[sid]||soldier.assigned||{};
+    const exitForms = Object.values(db.exitForms||{}).filter(f=>f.soldierId===sid);
 
-  // 3. אישורי יציאה הביתה
-  const exitByPerson = {};
-  Object.entries(db.exitForms||{}).forEach(([formId, form])=>{
-    if(!exitByPerson[form.soldierId]) exitByPerson[form.soldierId]=[];
-    exitByPerson[form.soldierId].push({formId, ...form});
-  });
+    // Check if soldier has ANY data worth including
+    const hasAny = sig?.sigData || cert?.img || exitForms.length || 
+                   Object.keys(history||{}).length;
+    if(!hasAny) return;
 
-  Object.entries(exitByPerson).forEach(([soldierId, forms])=>{
-    const s = getSoldier(soldierId);
-    const name0 = s?safeName(s.name):safeName(forms[0].soldierName||soldierId);
-    const unit0 = s?safeName(s.unit||"ללא_פלוגה"):safeName(forms[0].unit||"ללא_פלוגה");
-    const squad0 = s?safeName(s.squad||"ללא_מחלקה"):safeName(forms[0].squad||"ללא_מחלקה");
+    // 01 - חתימה על נשק (current)
+    if(sig?.sigData){
+      const html = buildSignatureFormHtml(soldier, sig, assigned);
+      files[folder+"/01_חתימה_על_נשק.html"] = enc(html);
+    }
 
-    // כל הטפסים בעמוד אחד עם היסטוריה
-    const formsHtml = forms.sort((a,b)=>b.formId>a.formId?1:-1).map((form,idx)=>`
-      <div style="margin-bottom:20px;padding:12px;border:1px solid #aaa;border-radius:4px;page-break-inside:avoid">
-        <div style="font-weight:bold;font-size:12px;margin-bottom:8px;color:#1a3a6b">
-          יציאה מספר ${forms.length-idx} — ${form.createdAt||"—"} | סטטוס: ${form.status||"—"}
-        </div>
-        ${buildFormHtml(form).replace(/<!DOCTYPE.*<body>/s,"").replace(/<\/body><\/html>/,"")}
-      </div>`).join("<hr style='border:1px dashed #ccc;margin:12px 0'/>");
-
-    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>יציאות הביתה — ${forms[0].soldierName}</title>
-<style>body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px;max-width:800px;margin:0 auto}
-h1{text-align:center;font-size:16px;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:16px}
+    // 02 - אישור בוחן נשק
+    if(cert?.img){
+      const certDate = cert.date ? new Date(cert.date).toLocaleDateString("he-IL") : "—";
+      const expDate  = cert.date ? new Date(new Date(cert.date).getTime()+183*86400000).toLocaleDateString("he-IL") : "—";
+      const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>אישור בוחן — ${soldier.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:24px;max-width:600px;margin:0 auto}
+h1{text-align:center;border-bottom:3px solid #1a3a6b;padding-bottom:8px;color:#1a3a6b}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+.box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
+.lbl{font-size:10px;color:#666}.val{font-weight:bold;font-size:14px}
+img{max-width:100%;border:1px solid #ccc;border-radius:8px;margin-top:12px}
 @media print{button{display:none}}</style></head><body>
-<h1>היסטוריית יציאות הביתה — ${forms[0].soldierName} (${soldierId})</h1>
-<p style="text-align:center;color:#666;font-size:11px;margin-bottom:16px">${forms.length} יציאות | הורד: ${new Date().toLocaleString("he-IL")}</p>
-${formsHtml}
-<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;cursor:pointer;font-size:13px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפס</button>
+<h1>אישור בוחן נשק</h1>
+<div class="info">
+  <div class="box"><div class="lbl">שם</div><div class="val">${soldier.name}</div></div>
+  <div class="box"><div class="lbl">מספר אישי</div><div class="val">${sid}</div></div>
+  <div class="box"><div class="lbl">תאריך בוחן</div><div class="val">${certDate}</div></div>
+  <div class="box"><div class="lbl">תוקף עד</div><div class="val">${expDate}</div></div>
+  <div class="box"><div class="lbl">פלוגה</div><div class="val">${soldier.unit||"—"}</div></div>
+</div>
+<img src="${cert.img}" alt="אישור בוחן"/>
+<br/><button onclick="window.print()" style="margin-top:16px;padding:8px 20px;cursor:pointer">🖨️ הדפס</button>
 </body></html>`;
+      files[folder+"/02_אישור_בוחן_נשק.html"] = enc(html);
+    }
 
-    const path = `פלוגה_${unit0}/${squad0}/${name0}_${soldierId}/03_אישורי_יציאה_היסטוריה.html`;
-    files[path] = enc(html);
-    count++;
-  });
+    // 03 - טפסי יציאה הביתה
+    if(exitForms.length){
+      const sorted = exitForms.sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+      const formsHtml = sorted.map((form,i)=>`
+        <div style="margin-bottom:20px;padding:12px;border:1px solid #aaa;border-radius:4px;page-break-inside:avoid">
+          <div style="font-weight:bold;font-size:12px;margin-bottom:8px;color:#1a3a6b">
+            יציאה ${sorted.length-i} — ${form.createdAt||"—"} | סטטוס: ${form.status||"—"}
+          </div>
+          ${buildFormHtml(form).replace(/<!DOCTYPE.*?<body>/s,"").replace(/<\/body><\/html>/,"")}
+        </div>`).join("<hr/>");
+      const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>יציאות הביתה — ${soldier.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px}
+@media print{button{display:none}}</style></head><body>
+<h1 style="text-align:center;border-bottom:3px solid #000">היסטוריית יציאות — ${soldier.name} (${sid})</h1>
+<p style="text-align:center;color:#666">${sorted.length} יציאות | ${new Date().toLocaleDateString("he-IL")}</p>
+${formsHtml}
+<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;cursor:pointer">🖨️ הדפס</button>
+</body></html>`;
+      files[folder+"/03_אישורי_יציאה_היסטוריה.html"] = enc(html);
+    }
 
-  // 4. היסטוריית חתימות (ישנות)
-  Object.entries(db.sigHistory||{}).forEach(([soldierId, history])=>{
-    const s = getSoldier(soldierId);
-    if(!s) return;
-    const {unit,squad,name} = soldierMap[soldierId]||{
-      unit:safeName(s.unit||"ללא_פלוגה"),
-      squad:safeName(s.squad||"ללא_מחלקה"),
-      name:safeName(s.name)
-    };
-    const histEntries = Object.entries(history).sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
-    histEntries.forEach(([key, sig], idx)=>{
-      if(!sig?.sigData) return;
-      const assigned = db.assignments?.[soldierId]||s.assigned||{};
-      const html = buildSignatureFormHtml(s, sig, assigned);
-      const dateStr = (sig.signedAt||sig.archivedAt||key).replace(/[/: ]/g,"-").slice(0,15);
-      const path = `פלוגה_${unit}/${squad}/${name}_${soldierId}/04_חתימות_קודמות/${(idx+1).toString().padStart(2,"0")}_${dateStr}.html`;
-      files[path] = enc(html);
+    // 04 - חתימות קודמות (sig history)
+    const histEntries = Object.entries(history||{}).sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
+    histEntries.forEach(([key, oldSig], idx)=>{
+      if(!oldSig?.sigData) return;
+      const html = buildSignatureFormHtml(soldier, oldSig, assigned);
+      const dateStr = (oldSig.signedAt||oldSig.archivedAt||key).replace(/[/: ]/g,"-").slice(0,15);
+      files[folder+"/04_חתימות_קודמות/"+(idx+1).toString().padStart(2,"0")+"_"+dateStr+".html"] = enc(html);
     });
-    if(histEntries.length) count++;
+
+    count++;
   });
 
   if(!count){ alert("אין נתונים לייצוא"); return; }
@@ -8889,7 +8836,7 @@ ${formsHtml}
 תאריך: ${new Date().toLocaleString("he-IL")}
 
 מבנה התיקיות:
-פלוגה → מחלקה → שם_מ.א / 
+פלוגה → מחלקה → שם_מ.א /
   01_חתימה_על_נשק.html
   02_אישור_בוחן_נשק.html
   03_אישורי_יציאה_היסטוריה.html
@@ -8909,7 +8856,7 @@ ${formsHtml}
   });
 }
 
-// ——— ZIP BACKUP ———
+
 function buildFormHtml(form){
   const statusLabel = {ממתין_חייל:"ממתין לחייל",ממתין_מפ:'ממתין למ"פ',ממתין_מגד:"ממתין למגד",אושר:"אושר ✓",נדחה:"נדחה ✗"}[form.status]||form.status;
   const questionsHtml = EXIT_QUESTIONS.map((q,i)=>`
