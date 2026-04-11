@@ -9256,7 +9256,7 @@ function PermissionsTab({db, setDb, auth}){
               <label style={S.label}>דרגה (תופיע בטפסים)</label>
               <select value={newUser.rank||""} onChange={e=>setNewUser({...newUser,rank:e.target.value})} style={S.input}>
                 <option value="">— ללא דרגה —</option>
-                {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-סמל","סמל ראשון","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
+                {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-נגד",'נג"ד',"סגן-נגד","רב-סמל",'רס"ל','רס"ר','רס"מ','רס"ב','רנ"ג',"סמל ראשון","סמל","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
@@ -9334,7 +9334,7 @@ function PermissionsTab({db, setDb, auth}){
                     <select value={editRankVal} onChange={e=>setEditRankVal(e.target.value)}
                       style={{...S.input,flex:1,marginBottom:0}}>
                       <option value="">— ללא דרגה —</option>
-                      {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-סמל","סמל ראשון","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
+                      {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-נגד",'נג"ד',"סגן-נגד","רב-סמל",'רס"ל','רס"ר','רס"מ','רס"ב','רנ"ג',"סמל ראשון","סמל","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
                     </select>
                     <button onClick={()=>{
                       let ndb=db;
