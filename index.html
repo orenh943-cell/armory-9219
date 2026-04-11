@@ -8614,9 +8614,46 @@ function downloadSignaturesZip(db, signedSoldiers, filterUnit, filterSquad){
     const name  = safeName(s.name);
     const date  = (sig.signedAt||"").replace(/[\/: ]/g,"-");
 
-    const html = buildSignatureFormHtml(s, sig, assigned)
-    const path = `פלוגה_${unit}/${squad}/${name}_${s.id}_${date}.html`;
+    const html = buildSignatureFormHtml(s, sig, assigned);
+    const path = `פלוגה_${unit}/${squad}/${name}_${s.id}/01_חתימה_על_נשק.html`;
     files[path] = enc(html);
+    // Also add test cert if exists
+    const cert = db.testCerts?.[s.id];
+    if(cert?.img){
+      const certDate = cert.date ? new Date(cert.date).toLocaleDateString("he-IL") : "—";
+      const expDate  = cert.date ? new Date(new Date(cert.date).getTime()+183*86400000).toLocaleDateString("he-IL") : "—";
+      const certHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>בוחן — ${s.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:24px;max-width:600px;margin:0 auto}
+h1{text-align:center;border-bottom:3px solid #1a3a6b;padding-bottom:8px;color:#1a3a6b}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+.box{border:1px solid #ccc;padding:8px;border-radius:4px}.lbl{font-size:10px;color:#666}.val{font-weight:bold}
+img{max-width:100%;border:1px solid #ccc;border-radius:8px;margin-top:12px}
+@media print{button{display:none}}</style></head><body>
+<h1>אישור בוחן נשק</h1>
+<div class="info">
+  <div class="box"><div class="lbl">שם</div><div class="val">${s.name}</div></div>
+  <div class="box"><div class="lbl">מ.א</div><div class="val">${s.id}</div></div>
+  <div class="box"><div class="lbl">תאריך בוחן</div><div class="val">${certDate}</div></div>
+  <div class="box"><div class="lbl">תוקף עד</div><div class="val">${expDate}</div></div>
+</div>
+<img src="${cert.img}" alt="אישור"/>
+<br/><button onclick="window.print()">🖨️ הדפס</button>
+</body></html>`;
+      files[`פלוגה_${unit}/${squad}/${name}_${s.id}/02_אישור_בוחן_נשק.html`] = enc(certHtml);
+    }
+    // Exit forms
+    const exitForms = Object.values(db.exitForms||{}).filter(f=>f.soldierId===s.id).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+    if(exitForms.length){
+      const formsHtml = exitForms.map((form,i)=>`<div style="margin-bottom:20px;padding:12px;border:1px solid #aaa;border-radius:4px">
+        <b>יציאה ${exitForms.length-i} — ${form.createdAt} | ${form.status}</b>
+        ${buildFormHtml(form).replace(/<!DOCTYPE.*?<body>/s,"").replace(/<\/body><\/html>/,"")}
+      </div>`).join("<hr/>");
+      const exitHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>יציאות — ${s.name}</title>
+<style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}@media print{button{display:none}}</style></head><body>
+<h1 style="text-align:center;border-bottom:2px solid #000">יציאות הביתה — ${s.name} (${s.id})</h1>
+${formsHtml}<button onclick="window.print()">🖨️ הדפס</button></body></html>`;
+      files[`פלוגה_${unit}/${squad}/${name}_${s.id}/03_אישורי_יציאה_היסטוריה.html`] = enc(exitHtml);
+    }
   });
 
   const unitLabel = filterUnit==="הכל" ? "כל_הפלוגות" : "פלוגה_"+filterUnit;
