@@ -685,7 +685,7 @@ function SerialsList({itemName, assignedSerial}){
   </span>;
 }
 
-const WEAPON_KEYS = ["M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320","מקלר",'מק"כ 0.5',"HTR 338","מקלרון","M-24 חדש"];
+const WEAPON_KEYS = ["M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש"];
 
 // נשקים הדורשים אישור בוחן
 const TEST_REQUIRED_WEAPONS = ["M4","M16","קלע סער"];
@@ -2733,7 +2733,7 @@ const INITIAL_BROKEN = [{"id": "broken_sheet_0", "soldierId": "5786027", "soldie
 // רשימת משפחות ברירת מחדל — Admin יכול לשנות
 const DEFAULT_INSPECTION_FAMILIES = [
   "M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320",
-  'מק"כ 0.5',"HTR 338","מקלרון","M-24 חדש","אקילה X4","אקילה X6",
+  "מק״כ 05","HTR 338","מקלרון","M-24 חדש","אקילה X4","אקילה X6",
   "NYX","עידו","עמית","ערמון","מיקרון","פליר T75","עכבר","ליאור",
   "מכבית","שח″ע","שח″ע ממותג","שח″מ כחולה","שח'מ ירוקה","וילון",
   "רחפן איבו","אבטה","צגון"
@@ -4975,8 +4975,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const base=RAW_SOLDIERS.filter(s=>!customSoldiers[s.id]);
     const guarantors=db.bulkGuarantors||{};
     // Normalize unit names
-    const UNIT_NORMALIZE = {"אג"מ":"אגמ","פלס"מ":"פלסמ","אג″מ":"אגמ","פלס″מ":"פלסמ"};
-    function normUnit(u){ const t=(u||"").trim(); return UNIT_NORMALIZE[t]||t; }
+    function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
     return [...custom,...base].map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
       return {...s,unit:normUnit(s.unit),assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
