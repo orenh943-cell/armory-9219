@@ -1270,106 +1270,59 @@ function Login({onLogin}){
   const [user,setUser]=useState("");
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
-  const [dynUsers,setDynUsers]=useState(loadDB()?.dynamicUsers||{});
-  const [userPasswords,setUserPasswords]=useState(loadDB()?.userPasswords||{});
-  const [loading,setLoading]=useState(true);
-  // Refs to always have fresh data in closures (setTimeout etc.)
-  const dynUsersRef = React.useRef(dynUsers);
-  const userPasswordsRef = React.useRef(userPasswords);
-  React.useEffect(()=>{ dynUsersRef.current = dynUsers; }, [dynUsers]);
-  React.useEffect(()=>{ userPasswordsRef.current = userPasswords; }, [userPasswords]);
-  // טען משתמשים וסיסמאות מ-Firebase
+  const [checking,setChecking]=useState(false);
+  // טען משתמשים בזמן אמת מ-Firebase
+  const [dynUsers,setDynUsers]=useState(()=>loadDB()?.dynamicUsers||{});
+  const [userPasswords,setUserPasswords]=useState(()=>loadDB()?.userPasswords||{});
   useEffect(()=>{
-    const off1 = fbOn("db/dynamicUsers",(users)=>{
-      if(users){
-        setDynUsers(users);
-        try{
-          const local=loadDB()||{};
-          localStorage.setItem("armory_9219_v4",JSON.stringify({...local,dynamicUsers:users}));
-        }catch(e){}
-      }
-      setLoading(false);
-    });
-    const off2 = fbOn("db/userPasswords",(passwords)=>{
-      if(passwords){
-        setUserPasswords(passwords);
-        try{
-          const local=loadDB()||{};
-          localStorage.setItem("armory_9219_v4",JSON.stringify({...local,userPasswords:passwords}));
-        }catch(e){}
-      }
-    });
-    setTimeout(()=>setLoading(false),4000); // timeout safety
+    const off1 = fbOn("db/dynamicUsers",(u)=>{if(u) setDynUsers(u);});
+    const off2 = fbOn("db/userPasswords",(p)=>{if(p) setUserPasswords(p);});
     return ()=>{off1();off2();};
   },[]);
   function go(){
     const uTrim=user.trim();
     const pTrim=pass.trim();
     if(!uTrim||!pTrim){setErr("נא למלא שם ומספר אישי");return;}
-    const u=USERS[uTrim]||dynUsers[uTrim];
-    // Check password: Firebase override first, then default
-    const effectivePass = userPasswords[uTrim] || u?.pass;
-    if(u && (pTrim===effectivePass || pTrim===String(effectivePass))){
-      onLogin({
-        role:u.role,
-        name:u.name,
-        username:uTrim,
-        soldierId:u.soldierId||"",
-        viewUnit:u.viewUnit||null
-      });
-      return;
+
+    function tryLogin(du, up){
+      // מנפק/מנהל
+      const u = USERS[uTrim]||du[uTrim];
+      const effectivePass = up[uTrim]||u?.pass;
+      if(u && String(pTrim)===String(effectivePass)){
+        onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null});
+        return true;
+      }
+      // חייל מ-RAW_SOLDIERS
+      const s = RAW_SOLDIERS.find(x=>x.id===pTrim);
+      if(s&&(s.name.split(" ")[0]===uTrim||s.name.includes(uTrim)||uTrim===pTrim)){
+        onLogin({role:"soldier",name:s.name,soldierId:s.id}); return true;
+      }
+      const byId = RAW_SOLDIERS.find(x=>x.id===uTrim);
+      if(byId&&pTrim===uTrim){ onLogin({role:"soldier",name:byId.name,soldierId:byId.id}); return true; }
+      // חייל מותאם
+      const local=loadDB()||{};
+      const cs=Object.values(local.customSoldiers||{}).find(x=>x.id===pTrim&&(x.name.includes(uTrim)||uTrim===pTrim));
+      if(cs){ onLogin({role:"soldier",name:cs.name,soldierId:cs.id}); return true; }
+      return false;
     }
-    // בדוק חייל — שם פרטי + מספר אישי
-    const s=RAW_SOLDIERS.find(x=>x.id===pTrim);
-    if(s && (s.name.split(" ")[0]===uTrim||s.name.includes(uTrim)||uTrim===pTrim)){
-      onLogin({role:"soldier",name:s.name,soldierId:s.id});
-      return;
-    }
-    // fallback: חייל עם מספר אישי בשני השדות
-    const byId=RAW_SOLDIERS.find(x=>x.id===uTrim);
-    if(byId && pTrim===uTrim){
-      onLogin({role:"soldier",name:byId.name,soldierId:byId.id});
-      return;
-    }
-    // חייל מותאם אישית
-    const local=loadDB()||{};
-    const customSols=Object.values(local.customSoldiers||{});
-    const cs=customSols.find(x=>x.id===pTrim&&(x.name.split(" ")[0]===uTrim||x.name.includes(uTrim)||uTrim===pTrim));
-    if(cs){
-      onLogin({role:"soldier",name:cs.name,soldierId:cs.id});
-      return;
-    }
-    // בדוק סיסמת איפוס
-    if(pTrim==="9219reset"){
-      // allow reset for any username - show info
-      setErr("לאיפוס סיסמה פנה למנהל המערכת");
-      return;
-    }
-    if(loading){
-      setErr("טוען נתונים מהשרת... נסה שוב בעוד שניה");
-      setTimeout(()=>{
-        // Force re-check with latest Firebase data via refs
-        const u3=USERS[uTrim]||dynUsersRef.current[uTrim];
-        const ep3=userPasswordsRef.current[uTrim]||u3?.pass;
-        if(u3 && (pTrim===ep3||pTrim===String(ep3))){
-          onLogin({role:u3.role,name:u3.name,username:uTrim,soldierId:u3.soldierId||"",viewUnit:u3.viewUnit||null});
-        } else {
-          setErr("שם משתמש או סיסמה שגויים");
-        }
-      }, 2000);
-    } else {
-      // Maybe Firebase just hasn't loaded yet - wait and retry once
-      setErr("בודק...");
-      setTimeout(()=>{
-        const u2=USERS[uTrim]||dynUsersRef.current[uTrim];
-        const ep2=userPasswordsRef.current[uTrim]||u2?.pass;
-        if(u2 && (pTrim===ep2||pTrim===String(ep2))){
-          onLogin({role:u2.role,name:u2.name,username:uTrim,soldierId:u2.soldierId||"",viewUnit:u2.viewUnit||null});
-        } else {
-          setErr("שם משתמש או סיסמה שגויים");
-        }
-      }, 2000);
-    }
+
+    if(tryLogin(dynUsers, userPasswords)) return;
+
+    // לא הצליח - שלוף ישירות מ-Firebase ונסה שוב
+    setChecking(true);
+    setErr("");
+    Promise.all([
+      fbGet("db/dynamicUsers"),
+      fbGet("db/userPasswords")
+    ]).then(([du, up])=>{
+      setChecking(false);
+      if(!tryLogin(du||{}, up||{})){
+        setErr("שם משתמש או סיסמה שגויים");
+      }
+    }).catch(()=>{
+      setChecking(false);
+      setErr("שגיאת חיבור - נסה שוב");
+    });
   }
   return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-bg-canvas)",backgroundImage:"radial-gradient(ellipse at 60% 20%, rgba(88,166,255,.06) 0%, transparent 60%), radial-gradient(ellipse at 20% 80%, rgba(63,185,80,.04) 0%, transparent 50%)",padding:"var(--space-4)"}}>
@@ -1431,10 +1384,10 @@ function Login({onLogin}){
         )}
         <button
           onClick={go}
-          aria-busy={loading}
+          aria-busy={checking}
           style={{...S.btn("green"),width:"100%",padding:"var(--space-3) 0",fontSize:"var(--text-lg)",marginTop:"var(--space-1)"}}
         >
-          {loading?(
+          {checking?(
             <span style={{display:"inline-flex",alignItems:"center",gap:"var(--space-2)"}}><span style={{display:"inline-block",animation:"spin 1s linear infinite"}}>⟳</span>מתחבר...</span>
           ):"כניסה →"}
         </button>
