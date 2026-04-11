@@ -9333,7 +9333,7 @@ function PermissionsTab({db, setDb, auth}){
           <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:12,color:"var(--color-success-fg)"}}>➕ הוספת משתמש חדש</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
-              <label style={S.label}>שם משתמש (לכניסה)</label>
+              <label style={S.label}>שם משתמש לכניסה (לדוג׳: דרור)</label>
               <input value={newUser.username} onChange={e=>setNewUser({...newUser,username:e.target.value})} placeholder="לדוגמא: dani" style={S.input}/>
             </div>
             <div style={{position:"relative"}}>
@@ -9351,7 +9351,7 @@ function PermissionsTab({db, setDb, auth}){
                   {nameSuggestions.map(s=>(
                     <div key={s.id} onClick={()=>{
                       setNewUser(p=>({...p,name:s.name,soldierId:s.id,
-                        username:p.username||s.id,pass:p.pass||s.id,
+                        username:p.username||(s.name.split(' ')[0]),pass:p.pass||s.id,
                         phone:s.phone||p.phone||''}));
                       setNameSuggestions([]);
                     }} style={{padding:"9px 12px",cursor:"pointer",
@@ -9367,8 +9367,8 @@ function PermissionsTab({db, setDb, auth}){
               )}
             </div>
             <div>
-              <label style={S.label}>סיסמה</label>
-              <input value={newUser.pass} onChange={e=>setNewUser({...newUser,pass:e.target.value})} placeholder="סיסמה" style={S.input}/>
+              <label style={S.label}>סיסמה (מספר אישי — לדוג׳: 7171813)</label>
+              <input value={newUser.pass} onChange={e=>setNewUser({...newUser,pass:e.target.value})} placeholder="מספר אישי" style={S.input}/>
             </div>
             <div>
               <label style={S.label}>תפקיד</label>
