@@ -4974,9 +4974,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const custom=Object.values(customSoldiers);
     const base=RAW_SOLDIERS.filter(s=>!customSoldiers[s.id]);
     const guarantors=db.bulkGuarantors||{};
+    // Normalize unit names
+    const UNIT_NORMALIZE = {"אג"מ":"אגמ","פלס"מ":"פלסמ","אג″מ":"אגמ","פלס″מ":"פלסמ"};
+    function normUnit(u){ const t=(u||"").trim(); return UNIT_NORMALIZE[t]||t; }
     return [...custom,...base].map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
-      return {...s,unit:(s.unit||"").trim(),assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
+      return {...s,unit:normUnit(s.unit),assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
     });
   },[db]);
   const filtered=useMemo(()=>{let l=soldiers;if(filterUnit!=="הכל")l=l.filter(s=>s.unit===filterUnit);if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)||(s.squad||"").toLowerCase().includes(q));}return l;},[soldiers,filterUnit,search]);
@@ -5392,7 +5395,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           <LoginLogTab db={db}/>
         )}
         {tab==="perms"&&auth.role==="admin"&&(
-          <PermissionsTab db={db} setDb={setDb}/>
+          <PermissionsTab db={db} setDb={setDb} auth={auth}/>
         )}
         {tab==="inventory"&&(
           <InventoryTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
@@ -8996,7 +8999,7 @@ const TAB_PERMS = {
   cabinets:"canViewCabinets", daily:"canViewDaily",
   actlog:"canViewActLog",
 };
-function PermissionsTab({db, setDb}){
+function PermissionsTab({db, setDb, auth}){
   const deletedUsers = db.deletedUsers||{};
   const staticUsers = Object.entries(USERS).filter(([k,u])=>(u.role==="manager"||u.role==="admin")&&!deletedUsers[k]);
   const dynamicUsers = Object.entries(db.dynamicUsers||{});
