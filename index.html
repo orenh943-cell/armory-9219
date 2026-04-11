@@ -5984,7 +5984,7 @@ const UNIT_COLORS = {
 
 function InventoryTab({db, setDb, soldiers, auth}){
   const perms = getPerms(auth, db);
-  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [filterUnit, setFilterUnit] = React.useState(auth?.viewUnit&&auth.viewUnit!=="הכל"?auth.viewUnit:"הכל");
   const [filterType, setFilterType] = React.useState("הכל"); // הכל / soldier / unit
   const [filterName, setFilterName] = React.useState("");
   const [showAdd, setShowAdd] = React.useState(false);
@@ -6185,7 +6185,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
                 const borderColor = info.soldiers>0&&info.unitQty===0?"var(--color-accent-fg)":info.unitQty>0&&info.soldiers===0?"var(--color-warning-fg)":"var(--color-purple-fg)";
                 return (
                   <div key={name} onClick={()=>setExpandedItem2(isExp?null:unit+"_"+name)}
-                    style={{background:isExp?"#1a1f2e":"#0d1117",borderRadius:9,padding:"10px 12px",cursor:"pointer",
+                    style={{background:isExp?"var(--color-bg-default)":"var(--color-bg-subtle)",borderRadius:9,padding:"10px 12px",cursor:"pointer",
                       border:`1px solid ${isExp?color:"var(--color-border-muted)"}`,
                       borderTop:`3px solid ${borderColor}`,transition:"border .15s"}}>
                     <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color,lineHeight:1}}>{info.total}</div>
@@ -6525,91 +6525,140 @@ function ActivityLogTab({db}){
 
 // =================== CABINETS TAB (ארונות) ===================
 function CabinetsTab({db, setDb, auth}){
+  const perms = getPerms(auth, db);
+  const canEdit = auth.role==="admin" || perms.canEdit;
+
   const [selectedUnit, setSelectedUnit] = React.useState("א");
   const [editMode, setEditMode] = React.useState(false);
-  const [customCabinets, setCustomCabinets] = React.useState(()=>db.cabinets||{});
+  const [editingCabName, setEditingCabName] = React.useState(null); // {unit, idx}
+  const [cabNameVal, setCabNameVal] = React.useState("");
+  const [editingItem, setEditingItem] = React.useState(null); // {cabName, idx}
   const [addingTo, setAddingTo] = React.useState(null);
-  const [addForm, setAddForm] = React.useState({alias:'',makat:'',qty:1});
+  const [addForm, setAddForm] = React.useState({alias:"",makat:"",qty:1,serial:""});
+  const [search, setSearch] = React.useState("");
 
-  React.useEffect(()=>setCustomCabinets(db.cabinets||{}),[db.cabinets]);
-
-  // Unit -> cabinet names mapping
-  const UNIT_CABINETS = {
-    "א":        ["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],
-    "ב":        ["כנה ב","ארון ב 1","ארון ב 2","ארון רחפנים ב"],
-    "ג":        ["כנה ג","ארון ג 1","ארון ג 2","ארון רחפנים ג"],
+  const UNIT_CABINETS_DEFAULT = {
+    "א":       ["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],
+    "ב":       ["כנה ב","ארון ב 1","ארון ב 2","ארון רחפנים ב"],
+    "ג":       ["כנה ג","ארון ג 1","ארון ג 2","ארון רחפנים ג"],
     "מסייעת":  ["כנה מסייעת","ארון מסייעת 1","ארון מסייעת 2","ארון מסייעת 3","ארון מסייעת 4","ארון רחפנים מסייעת"],
-    "אגמ":      ["כנה אגמ","ארון אגמ 1","ארון אגמ 2","ארון רחפנים אגמ"],
-    "פלסמ":     ["כנה פלסמ","ארון פלסמ 1","ארון פלסמ 2","ארון רחפנים פלסמ"],
-    "גדודי":    ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
+    "אגמ":     ["כנה אגמ","ארון אגמ 1","ארון אגמ 2","ארון רחפנים אגמ"],
+    "פלסמ":    ["כנה פלסמ","ארון פלסמ 1","ארון פלסמ 2","ארון רחפנים פלסמ"],
+    "גדודי":   ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
   };
 
-  const units = Object.keys(UNIT_CABINETS);
-  const currentCabinets = UNIT_CABINETS[selectedUnit]||[];
+  const units = Object.keys(UNIT_CABINETS_DEFAULT);
 
-  // Map new cabinet names to original data keys
-  const CAB_DATA_MAP = {
-    "כנה א": "כנה א", "ארון א 1": "ארון א", "ארון א 2": [],
-    "כנה ב": "כנה ב", "ארון ב 1": "ארון ב", "ארון ב 2": [],
-    "כנה ג": "כנה ג", "ארון ג 1": "ארון ג", "ארון ג 2": [],
-    "כנה מסייעת": "ארון מסייעת", "ארון מסייעת 1": "מסייעת 1",
-    "ארון מסייעת 2": "מסייעת 2", "ארון מסייעת 3": "מסייעת 3", "ארון מסייעת 4": [],
-    "כנה אגמ": "ארון אגמ-פלסמ", "ארון אגמ 1": "אגמ-פלסמ", "ארון אגמ 2": [],
-    "ארון גדודי": "ארון גדודי", "ארמון 2": "ארמון 2", "ארמון 3": "ארמון 3", "ארמון 4": "ארמון 4",
-  };
+  // Cabinet names can be customized - stored in db.cabinetNames
+  function getCabNames(unit){
+    return db.cabinetNames?.[unit] || UNIT_CABINETS_DEFAULT[unit] || [];
+  }
+  function saveCabNames(unit, names){
+    const ndb={...db, cabinetNames:{...(db.cabinetNames||{}), [unit]:names}};
+    saveDB(ndb); setDb(ndb);
+  }
+
+  // Cabinet items stored in db.cabinets[cabName]
   function getItems(cabName){
-    const custom = customCabinets[cabName];
+    const custom = db.cabinets?.[cabName];
     if(custom) return custom;
-    const dataKey = CAB_DATA_MAP[cabName];
-    if(Array.isArray(dataKey)) return [];
-    if(dataKey) return CABINETS_DATA[dataKey]||[];
-    return CABINETS_DATA[cabName]||[];
+    const CAB_DATA_MAP = {
+      "כנה א":"כנה א","ארון א 1":"ארון א","כנה ב":"כנה ב","ארון ב 1":"ארון ב",
+      "כנה ג":"כנה ג","ארון ג 1":"ארון ג","כנה מסייעת":"ארון מסייעת",
+      "ארון מסייעת 1":"מסייעת 1","ארון מסייעת 2":"מסייעת 2","ארון מסייעת 3":"מסייעת 3",
+      "כנה אגמ":"ארון אגמ-פלסמ","ארון אגמ 1":"אגמ-פלסמ",
+      "ארון גדודי":"ארון גדודי","ארמון 2":"ארמון 2","ארמון 3":"ארמון 3","ארמון 4":"ארמון 4",
+    };
+    const key = CAB_DATA_MAP[cabName];
+    if(key && CABINETS_DATA[key]) return CABINETS_DATA[key];
+    return [];
   }
-
-  function updateQty(cabName, idx, newQty){
-    const items = [...getItems(cabName)];
-    items[idx] = {...items[idx], qty: parseInt(newQty)||0};
-    const updated = {...customCabinets, [cabName]: items};
-    setCustomCabinets(updated);
-    const ndb = {...db, cabinets: updated};
+  function saveItems(cabName, items){
+    const ndb={...db, cabinets:{...(db.cabinets||{}), [cabName]:items}};
     saveDB(ndb); setDb(ndb);
   }
 
-  function confirmAddItem(){
-    if(!addForm.alias.trim()) return;
-    const items = [...getItems(addingTo), {
-      makat: addForm.makat||'', 
-      alias: addForm.alias.trim(),
-      fullname: addForm.alias.trim(),
-      qty: parseInt(addForm.qty)||1
-    }];
-    const updated = {...customCabinets, [addingTo]: items};
-    setCustomCabinets(updated);
-    const ndb = {...db, cabinets: updated};
-    saveDB(ndb); setDb(ndb);
-    setAddingTo(null);
-    setAddForm({alias:'',makat:'',qty:1});
+  // Auto-suggestions from armory master + unit items
+  const itemSuggestions = React.useMemo(()=>{
+    const seen = new Set();
+    const list = [];
+    // From ARMORY_MASTER
+    Object.entries(ARMORY_MASTER||{}).forEach(([name,v])=>{
+      const key = name+"|"+(v.makat||"");
+      if(!seen.has(key)){ seen.add(key); list.push({alias:name, makat:String(v.makat||""), fullname:name}); }
+    });
+    // From unitItems
+    Object.values(db.unitItems||{}).forEach(item=>{
+      const nm = item.n||item.name||"";
+      const mk = String(item.s||item.serial||"");
+      if(nm && !seen.has(nm+"|")){ seen.add(nm+"|"); list.push({alias:nm, makat:"", fullname:nm}); }
+    });
+    return list.sort((a,b)=>a.alias.localeCompare(b.alias,"he"));
+  },[db.unitItems]);
+
+  const filteredSuggestions = search.length>0
+    ? itemSuggestions.filter(x=>x.alias.includes(search)||x.makat.includes(search))
+    : [];
+
+  function renameCabinet(unit, idx, newName){
+    const names = [...getCabNames(unit)];
+    const oldName = names[idx];
+    names[idx] = newName;
+    saveCabNames(unit, names);
+    // Also migrate items to new name
+    if(db.cabinets?.[oldName]){
+      const ndb={...db,
+        cabinetNames:{...(db.cabinetNames||{}), [unit]:names},
+        cabinets:{...(db.cabinets||{}), [newName]:db.cabinets[oldName]}
+      };
+      delete ndb.cabinets[oldName];
+      saveDB(ndb); setDb(ndb);
+    }
+    setEditingCabName(null);
+  }
+
+  function addCabinet(unit){
+    const names = [...getCabNames(unit), "ארון חדש "+(getCabNames(unit).length+1)];
+    saveCabNames(unit, names);
+  }
+
+  function removeCabinet(unit, idx){
+    if(!window.confirm("למחוק ארון זה?")) return;
+    const names = getCabNames(unit).filter((_,i)=>i!==idx);
+    saveCabNames(unit, names);
   }
 
   function addItem(cabName){
-    setAddingTo(cabName);
-    setAddForm({alias:'',makat:'',qty:1});
+    if(!addForm.alias.trim()) return;
+    const items = [...getItems(cabName), {
+      makat: addForm.makat||"",
+      alias: addForm.alias.trim(),
+      fullname: addForm.alias.trim(),
+      qty: parseInt(addForm.qty)||1,
+      serial: addForm.serial.trim()||null,
+    }];
+    saveItems(cabName, items);
+    setAddingTo(null);
+    setAddForm({alias:"",makat:"",qty:1,serial:""});
+    setSearch("");
+  }
+
+  function updateItem(cabName, idx, field, val){
+    const items = [...getItems(cabName)];
+    items[idx] = {...items[idx], [field]: field==="qty"?parseInt(val)||0:val};
+    saveItems(cabName, items);
   }
 
   function removeItem(cabName, idx){
     const items = getItems(cabName).filter((_,i)=>i!==idx);
-    const updated = {...customCabinets, [cabName]: items};
-    setCustomCabinets(updated);
-    const ndb = {...db, cabinets: updated};
-    saveDB(ndb); setDb(ndb);
+    saveItems(cabName, items);
   }
 
   function printCabinet(cabName){
     const items = getItems(cabName);
-    const total = items.reduce((s,i)=>s+i.qty,0);
+    const total = items.reduce((s,i)=>s+(i.qty||1),0);
     const win = window.open("","_blank");
-    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-    <title>${cabName}</title>
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${cabName}</title>
     <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
     h2{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:12px 0}
     th,td{border:1px solid #ccc;padding:6px 9px;text-align:right}
@@ -6617,65 +6666,38 @@ function CabinetsTab({db, setDb, auth}){
     @media print{button{display:none}}</style></head>
     <body><h2>🗄️ ${cabName}</h2>
     <p style="color:#666">סהכ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
-    <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th></tr></thead>
-    <tbody>${items.map(i=>"<tr><td style='font-size:10px;font-family:monospace'>"+(i.makat||"—")+"</td><td>"+(i.alias||i.fullname)+"</td><td style='text-align:center;font-weight:bold'>"+i.qty+"</td></tr>").join("")}
-    <tr class="total"><td colspan="2">סהכ</td><td style="text-align:center">${total}</td></tr>
+    <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th><th>סידורי/צ</th></tr></thead>
+    <tbody>${items.map(i=>`<tr><td style='font-size:10px;font-family:monospace'>${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style='text-align:center'>${i.qty||1}</td><td style='font-family:monospace;font-size:10px'>${i.serial||"—"}</td></tr>`).join("")}
+    <tr class="total"><td colspan="2">סהכ</td><td style="text-align:center">${total}</td><td></td></tr>
     </tbody></table>
     <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
     </body></html>`);
     win.document.close();
   }
 
-  function printAllUnit(){
-    const allItems = currentCabinets.flatMap(cab=>
-      getItems(cab).map(i=>({...i, cabinet:cab}))
-    );
-    const win = window.open("","_blank");
-    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-    <title>כל ארונות פלוגה ${selectedUnit}</title>
-    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
-    h2{margin-bottom:4px}h3{margin:16px 0 6px;color:#1a1a2e;border-bottom:2px solid #1a1a2e;padding-bottom:4px}
-    table{width:100%;border-collapse:collapse;margin:8px 0}
-    th,td{border:1px solid #ccc;padding:5px 8px;text-align:right}
-    th{background:#1a1a2e;color:#fff}.total{font-weight:bold;background:#f0f4ff}
-    @media print{button{display:none}}</style></head>
-    <body><h2>🗄️ ארונות פלוגה ${selectedUnit}</h2>
-    <p style="color:#666">הופק: ${new Date().toLocaleDateString("he-IL")}</p>
-    ${currentCabinets.map(cab=>{
-      const items=getItems(cab);
-      const total=items.reduce((s,i)=>s+i.qty,0);
-      const itemRows=items.map(i=>"<tr><td style='font-size:10px'>"+(i.makat||"—")+"</td><td>"+(i.alias||i.fullname)+"</td><td style='text-align:center;font-weight:bold'>"+i.qty+"</td></tr>").join("");
-      return "<h3>"+cab+" ("+total+" יחידות)</h3><table><thead><tr><th>מקט</th><th>אמצעי</th><th>כמות</th></tr></thead><tbody>"+itemRows+"<tr class='total'><td colspan='2'>סהכ</td><td style='text-align:center'>"+total+"</td></tr></tbody></table>";
-    }).join("")}
-    <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
-    </body></html>`);
-    win.document.close();
-  }
+  const currentCabNames = getCabNames(selectedUnit);
 
   return (
     <React.Fragment>
-    <div style={{maxWidth:900,margin:"0 auto",padding:16}}>
+    <div style={{maxWidth:960,margin:"0 auto",padding:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
         <div>
           <h2 style={{fontSize:17,fontWeight:800,margin:0}}>🗄️ ארונות פלוגות</h2>
-          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>ציוד מוקצה לפי ארון</div>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>ספירת ציוד לפי ארון</div>
         </div>
-        <div style={{display:"flex",gap:8}}>
-          {(auth.role==="admin"||getPerms(auth,db).canEdit)&&(
-            <button onClick={()=>setEditMode(p=>!p)}
-              style={{...S.btn(editMode?"orange":""),padding:"7px 14px",fontSize:"var(--text-base)"}}>
-              {editMode?"✓ סיום עריכה":"✏️ עריכה"}
-            </button>
-          )}
-          <button onClick={printAllUnit} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס פלוגה</button>
-        </div>
+        {canEdit&&(
+          <button onClick={()=>setEditMode(p=>!p)}
+            style={{...S.btn(editMode?"orange":""),padding:"7px 14px",fontSize:"var(--text-base)"}}>
+            {editMode?"✓ סיום עריכה":"✏️ עריכה"}
+          </button>
+        )}
       </div>
 
       {/* בחירת פלוגה */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
         {units.map(u=>(
           <button key={u} onClick={()=>setSelectedUnit(u)}
-            style={{padding:"6px 16px",borderRadius:20,border:`1px solid ${selectedUnit===u?"var(--color-accent-fg)":"var(--color-border-default)"}`,
+            style={{padding:"6px 16px",borderRadius:20,border:`1px solid ${selectedUnit===u?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
               background:selectedUnit===u?"var(--btn-blue-bg)":"transparent",
               color:selectedUnit===u?"var(--color-accent-fg)":"var(--color-text-secondary)",
               cursor:"pointer",fontWeight:selectedUnit===u?700:400,fontSize:"var(--text-base)",minHeight:36}}>
@@ -6684,73 +6706,164 @@ function CabinetsTab({db, setDb, auth}){
         ))}
       </div>
 
-      {/* ארונות הפלוגה */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>
-        {currentCabinets.map(cabName=>{
+      {/* ארונות */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+        {currentCabNames.map((cabName,cabIdx)=>{
           const items = getItems(cabName);
-          const total = items.reduce((s,i)=>s+i.qty,0);
+          const total = items.reduce((s,i)=>s+(i.qty||1),0);
           return (
-            <div key={cabName} style={{...S.card,marginBottom:0}}>
+            <div key={cabIdx} style={{...S.card,marginBottom:0}}>
+              {/* כותרת ארון */}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                 marginBottom:10,borderBottom:"1px solid var(--color-border-muted)",paddingBottom:8}}>
-                <div>
-                  <span style={{fontWeight:700,fontSize:"var(--text-base)"}}>{cabName}</span>
-                  <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginRight:6}}>{total} יחידות</span>
-                </div>
-                <div style={{display:"flex",gap:6}}>
-                  {editMode&&<button onClick={()=>{setAddingTo(addingTo===cabName?null:cabName);setAddForm({alias:'',makat:'',qty:1});}}
-                    style={{...S.btn("green"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:28}}>+ הוסף</button>}
-                  <button onClick={()=>printCabinet(cabName)}
-                    style={{...S.btn("blue"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:28}}>🖨️</button>
-                </div>
+                {editingCabName?.unit===selectedUnit && editingCabName?.idx===cabIdx ? (
+                  <div style={{display:"flex",gap:6,flex:1}}>
+                    <input value={cabNameVal} onChange={e=>setCabNameVal(e.target.value)}
+                      style={{...S.input,flex:1,marginBottom:0,fontSize:"var(--text-sm)"}}
+                      onKeyDown={e=>e.key==="Enter"&&renameCabinet(selectedUnit,cabIdx,cabNameVal)}
+                      autoFocus/>
+                    <button onClick={()=>renameCabinet(selectedUnit,cabIdx,cabNameVal)}
+                      style={{...S.btn("green"),padding:"4px 10px",fontSize:"var(--text-xs)"}}>✓</button>
+                    <button onClick={()=>setEditingCabName(null)}
+                      style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>✕</button>
+                  </div>
+                ):(
+                  <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
+                    <span style={{fontWeight:700,fontSize:"var(--text-base)"}}>{cabName}</span>
+                    <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>({total} פריטים)</span>
+                    {editMode&&<button onClick={()=>{setEditingCabName({unit:selectedUnit,idx:cabIdx});setCabNameVal(cabName);}}
+                      style={{...S.btn("gray"),padding:"2px 7px",fontSize:10}}>✎</button>}
+                    {editMode&&<button onClick={()=>removeCabinet(selectedUnit,cabIdx)}
+                      style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>🗑</button>}
+                  </div>
+                )}
+                <button onClick={()=>printCabinet(cabName)}
+                  style={{...S.btn(""),padding:"4px 8px",fontSize:"var(--text-xs)",marginRight:4}}>🖨️</button>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+
+              {/* רשימת פריטים */}
+              <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:editMode?10:0}}>
+                {items.length===0&&<div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)",textAlign:"center",padding:"8px 0"}}>ריק</div>}
                 {items.map((item,idx)=>(
-                  <div key={idx} style={{display:"flex",alignItems:"center",gap:6,
-                    padding:"5px 7px",background:"var(--color-bg-canvas)",borderRadius:5}}>
-                    <span style={{flex:1,fontSize:"var(--text-sm)",fontWeight:500}}>{item.alias||item.fullname}</span>
-                    {editMode
-                      ?<input type="number" value={item.qty} min="0"
-                          onChange={e=>updateQty(cabName,idx,e.target.value)}
-                          style={{...S.input,width:55,marginBottom:0,textAlign:"center",padding:"3px 6px"}}/>
-                      :<span style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-accent-fg)",minWidth:28,textAlign:"center"}}>{item.qty}</span>
-                    }
-                    {editMode&&<button onClick={()=>removeItem(cabName,idx)}
-                      style={{...S.btn("red"),padding:"2px 6px",fontSize:10,minHeight:26}}>✕</button>}
+                  <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
+                    background:"var(--color-bg-canvas)",borderRadius:6,
+                    border:"1px solid var(--color-border-muted)"}}>
+                    {editingItem?.cabName===cabName && editingItem?.idx===idx ? (
+                      <div style={{display:"flex",gap:4,flex:1,flexWrap:"wrap"}}>
+                        <input value={item.alias||item.fullname} onChange={e=>updateItem(cabName,idx,"alias",e.target.value)}
+                          placeholder="שם אמצעי" style={{...S.input,flex:2,marginBottom:0,fontSize:11,minWidth:80}}/>
+                        <input value={item.makat||""} onChange={e=>updateItem(cabName,idx,"makat",e.target.value)}
+                          placeholder="מק״ט" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
+                        <input value={item.serial||""} onChange={e=>updateItem(cabName,idx,"serial",e.target.value)}
+                          placeholder="סידורי/צ" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
+                        <input value={item.qty||1} onChange={e=>updateItem(cabName,idx,"qty",e.target.value)}
+                          type="number" min="0" placeholder="כמות" style={{...S.input,width:55,marginBottom:0,fontSize:11}}/>
+                        <button onClick={()=>setEditingItem(null)}
+                          style={{...S.btn("green"),padding:"3px 8px",fontSize:10}}>✓ שמור</button>
+                      </div>
+                    ):(
+                      <>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{item.alias||item.fullname}</div>
+                          <div style={{display:"flex",gap:8,fontSize:10,color:"var(--color-text-muted)",marginTop:2}}>
+                            {item.makat&&<span style={{fontFamily:"monospace"}}>מק״ט: {item.makat}</span>}
+                            {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>סידורי: {item.serial}</span>}
+                          </div>
+                        </div>
+                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
+                        {editMode&&(
+                          <div style={{display:"flex",gap:4}}>
+                            <button onClick={()=>setEditingItem({cabName,idx})}
+                              style={{...S.btn("blue"),padding:"2px 7px",fontSize:10}}>✎</button>
+                            <button onClick={()=>removeItem(cabName,idx)}
+                              style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>✕</button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 ))}
-                {items.length===0&&<div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)",textAlign:"center",padding:8}}>ריק</div>}
               </div>
+
+              {/* הוספת פריט */}
+              {editMode&&(
+                addingTo===cabName ? (
+                  <div style={{marginTop:8,padding:"10px",background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}}>
+                    <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginBottom:8}}>➕ הוספת פריט</div>
+                    {/* חיפוש מרשימה קיימת */}
+                    <input value={search} onChange={e=>setSearch(e.target.value)}
+                      placeholder="🔍 חיפוש פריט מהמלאי..." style={{...S.input,marginBottom:4}}/>
+                    {filteredSuggestions.length>0&&(
+                      <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-muted)",
+                        borderRadius:6,maxHeight:120,overflowY:"auto",marginBottom:6}}>
+                        {filteredSuggestions.slice(0,8).map((s,i)=>(
+                          <div key={i} onClick={()=>{setAddForm(p=>({...p,alias:s.alias,makat:s.makat}));setSearch("");}}
+                            style={{padding:"6px 10px",cursor:"pointer",fontSize:"var(--text-sm)",
+                              borderBottom:"1px solid var(--color-border-muted)"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                            onMouseLeave={e=>e.currentTarget.style.background=""}>
+                            {s.alias} {s.makat&&<span style={{color:"var(--color-text-muted)",fontSize:10,fontFamily:"monospace"}}>{s.makat}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+                      <div>
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>שם אמצעי *</div>
+                        <input value={addForm.alias} onChange={e=>setAddForm(p=>({...p,alias:e.target.value}))}
+                          placeholder="שם האמצעי" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>מק״ט</div>
+                        <input value={addForm.makat} onChange={e=>setAddForm(p=>({...p,makat:e.target.value}))}
+                          placeholder="מק״ט" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>מספר סידורי / צ</div>
+                        <input value={addForm.serial} onChange={e=>setAddForm(p=>({...p,serial:e.target.value}))}
+                          placeholder="סידורי (אם קיים)" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>כמות</div>
+                        <input value={addForm.qty} onChange={e=>setAddForm(p=>({...p,qty:e.target.value}))}
+                          type="number" min="1" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}/>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>addItem(cabName)}
+                        style={{...S.btn("green"),flex:1,padding:"8px 0"}}>✅ הוסף פריט</button>
+                      <button onClick={()=>{setAddingTo(null);setSearch("");setAddForm({alias:"",makat:"",qty:1,serial:""});}}
+                        style={{...S.btn("gray"),padding:"8px 14px"}}>ביטול</button>
+                    </div>
+                  </div>
+                ):(
+                  <button onClick={()=>setAddingTo(cabName)}
+                    style={{...S.btn("blue"),width:"100%",padding:"6px 0",fontSize:"var(--text-sm)",marginTop:6}}>
+                    ➕ הוסף פריט לארון
+                  </button>
+                )
+              )}
             </div>
           );
         })}
+
+        {/* הוסף ארון חדש */}
+        {editMode&&(
+          <div style={{...S.card,marginBottom:0,display:"flex",alignItems:"center",justifyContent:"center",
+            border:"2px dashed var(--color-border-muted)",cursor:"pointer",minHeight:100}}
+            onClick={()=>addCabinet(selectedUnit)}>
+            <div style={{textAlign:"center",color:"var(--color-text-muted)"}}>
+              <div style={{fontSize:28}}>+</div>
+              <div style={{fontSize:"var(--text-sm)"}}>הוסף ארון</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-
-    {/* מודל הוספת פריט */}
-    {addingTo&&(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div style={{background:"var(--color-bg-default)",borderRadius:14,padding:"20px 24px",width:"100%",maxWidth:380,border:"1px solid var(--color-border-default)"}}>
-          <h3 style={{margin:"0 0 14px",fontSize:15}}>➕ הוסף פריט — {addingTo}</h3>
-          <label style={S.label}>שם אמצעי *</label>
-          <input value={addForm.alias} onChange={e=>setAddForm(p=>({...p,alias:e.target.value}))}
-            placeholder="שם האמצעי" style={S.input} autoFocus/>
-          <label style={S.label}>מק"ט (אופציונלי)</label>
-          <input value={addForm.makat} onChange={e=>setAddForm(p=>({...p,makat:e.target.value}))}
-            placeholder="מספר מק׳׳ט" style={S.input} inputMode="numeric"/>
-          <label style={S.label}>כמות</label>
-          <input value={addForm.qty} onChange={e=>setAddForm(p=>({...p,qty:e.target.value}))}
-            type="number" min="1" style={S.input}/>
-          <div style={{display:"flex",gap:8,marginTop:8}}>
-            <button onClick={confirmAddItem} style={{...S.btn("green"),flex:1}}>הוסף</button>
-            <button onClick={()=>setAddingTo(null)} style={{...S.btn(),flex:1}}>ביטול</button>
-          </div>
-        </div>
-      </div>
-    )}
     </React.Fragment>
   );
 }
+
 
 // =================== MY STOCK TAB (מלאי ארמון) ===================
 function MyStockTab({db, setDb, soldiers, auth}){
