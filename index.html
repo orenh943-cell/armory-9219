@@ -4774,6 +4774,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
   exitFormsCount, guarantyStats, setDashModal, setTab, setAddModal, setQuickModal,
   setDailyType, setBulkModal}){
 
+  const perms = auth ? getPerms(auth, db) : {};
   const [activeUnit, setActiveUnit] = React.useState("הכל");
 
   // Build unit list
@@ -4951,7 +4952,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
             {perms.canEdit&&<button onClick={()=>setAddModal(true)} style={{...S.btn("green"),textAlign:"right"}}>👤 הוסף חייל</button>}
             {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),textAlign:"right"}}>➕ משיכה / החזרה</button>}
             <button onClick={()=>setTab("signatures")} style={{...S.btn("wa"),textAlign:"right"}}>💬 חתימות</button>
-            {auth.role!=="viewer"&&<button onClick={()=>setBulkModal(true)} style={{...S.btn("purple"),textAlign:"right"}}>✍️ ערבות מרוכזת</button>}
+            {perms.canBulkSign&&<button onClick={()=>setBulkModal(true)} style={{...S.btn("purple"),textAlign:"right"}}>✍️ ערבות מרוכזת</button>}
             <button onClick={()=>buildDailyReport(soldiers,db)} style={{...S.btn("blue"),textAlign:"right"}}>📊 דוח יומי</button>
           </div>
         </div>
