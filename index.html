@@ -4636,7 +4636,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
 
   // Build unit list
   const units = React.useMemo(()=>{
-    const us = [...new Set(soldiers.map(s=>(s.unit||"").trim()).filter(Boolean))].sort();
+    const us = [...new Set(soldiers.map(s=>(s.unit||"").trim().replace(/\s+/g,"")).filter(Boolean))].sort();
     return ["הכל", ...us];
   }, [soldiers]);
 
@@ -8993,7 +8993,8 @@ const TAB_PERMS = {
   actlog:"canViewActLog",
 };
 function PermissionsTab({db, setDb}){
-  const staticUsers = Object.entries(USERS).filter(([,u])=>u.role==="manager"||u.role==="admin");
+  const deletedUsers = db.deletedUsers||{};
+  const staticUsers = Object.entries(USERS).filter(([k,u])=>(u.role==="manager"||u.role==="admin")&&!deletedUsers[k]);
   const dynamicUsers = Object.entries(db.dynamicUsers||{});
   const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
@@ -9034,10 +9035,13 @@ function PermissionsTab({db, setDb}){
 
   function deleteUser(username){
     if(!window.confirm("למחוק משתמש "+username+"?")) return;
-    const newDyn={...db.dynamicUsers}; delete newDyn[username];
-    const newPerms={...db.userPerms}; delete newPerms[username];
-    const ndb={...db,dynamicUsers:newDyn,userPerms:newPerms};
+    const newDyn={...(db.dynamicUsers||{})}; delete newDyn[username];
+    const newPerms={...(db.userPerms||{})}; delete newPerms[username];
+    // mark static users as deleted
+    const deletedUsers={...(db.deletedUsers||{}), [username]:true};
+    const ndb={...db,dynamicUsers:newDyn,userPerms:newPerms,deletedUsers};
     saveDB(ndb); setDb(ndb);
+    fbSet("db/deletedUsers/"+username, true).catch(()=>{});
   }
 
   const ROLE_LABELS = {admin:"מנהל ראשי",manager:"מנהל",viewer:"צפייה בלבד"};
@@ -9172,8 +9176,8 @@ function PermissionsTab({db, setDb}){
                 </span>}
                 <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||"");}}
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
-                {isDynamic&&(
-                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
+                {username!==auth?.username&&(
+                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padd</button>
                 )}
               </div>
               {editPassUser===username&&(
@@ -9207,11 +9211,12 @@ function PermissionsTab({db, setDb}){
                       }
                       saveDB(ndb); setDb(ndb);
                     }} style={{
-                      padding:"3px 10px",borderRadius:6,
-                      border:"1px solid "+(isActive?"var(--color-accent-fg)":"var(--color-border-default)"),
-                      cursor:"pointer",fontSize:"var(--text-xs)",fontWeight:isActive?800:600,
-                      background:isActive?"var(--btn-blue-bg)":"var(--color-bg-subtle)",
-                      color:isActive?"var(--color-accent-fg)":"var(--color-text-secondary)"
+                      padding:"4px 12px",borderRadius:6,
+                      border:"1px solid "+(isActive?"#1f6feb":"var(--color-border-default)"),
+                      cursor:"pointer",fontSize:"var(--text-xs)",fontWeight:isActive?800:500,
+                      background:isActive?"#1f6feb":"var(--color-bg-subtle)",
+                      color:isActive?"#ffffff":"var(--color-text-secondary)",
+                      transition:"all .15s"
                     }}>{isActive?"✓ "+roleTitle:roleTitle}</button>
                   );})}
                   <button onClick={()=>{
