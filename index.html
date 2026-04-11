@@ -748,7 +748,16 @@ const DEFAULT_PERMS = {
 function getPerms(auth, db){
   const base = DEFAULT_PERMS[auth.role]||DEFAULT_PERMS.viewer;
   const custom = db?.userPerms?.[auth.username];
-  return custom ? {...base,...custom} : base;
+  const merged = custom ? {...base,...custom} : base;
+  // Pass through editUnit from auth for unit-scoped edit permissions
+  return {...merged, _editUnit: auth?.editUnit||"הכל"};
+}
+// Check if user can edit a specific unit's data
+function canEditUnit(auth, db, unit){
+  const perms = getPerms(auth, db);
+  if(!perms.canEdit) return false;
+  const eu = auth?.editUnit || perms._editUnit || "הכל";
+  return eu==="הכל" || !unit || eu===unit;
 }
 function getUserMeta(auth, db){
   const perms = db?.userPerms?.[auth.username]||{};
@@ -1289,7 +1298,7 @@ function Login({onLogin}){
       const u = USERS[uTrim]||du[uTrim];
       const effectivePass = up[uTrim]||u?.pass;
       if(u && String(pTrim)===String(effectivePass)){
-        onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null});
+        onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null,editUnit:u.editUnit||"הכל"});
         return true;
       }
       // חייל מ-RAW_SOLDIERS
@@ -2091,6 +2100,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const myGuarantees=Object.values(db.bulkGuarantors||{}).filter(g=>g.repId===soldier.id);
   const totalRemaining=myGuarantees.reduce((sum,g)=>sum+(g.remaining||[]).length,0);
   const perms=auth?getPerms(auth,db):{};
+  const canEditThisSoldier = canEditUnit(auth, db, soldier.unit);
   // טופס יציאה — קיים לחייל?
   const exitForms=db.exitForms||{};
   const soldierExitForms=Object.entries(exitForms).filter(([,f])=>f.soldierId===soldier.id).sort(([,a],[,b])=>b.createdAt?.localeCompare?.(a.createdAt)||0);
@@ -2153,7 +2163,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   return (
     <Modal title={`${soldier.name} • ${soldier.id}`} onClose={onClose} wide>
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {[["profile","👤 פרופיל"],["checkout","➕ שיוך"],["return","➖ ביטול"],["exitform","🏠 יציאה"],["history","📋 היסטוריה"]].map(([v,l])=>(
+        {[["profile","👤 פרופיל"],...(canEditThisSoldier&&perms.canCheckout?[["checkout","➕ שיוך"]]:[]),...(canEditThisSoldier&&perms.canReturn?[["return","➖ ביטול"]]:[]),["exitform","🏠 יציאה"],["history","📋 היסטוריה"]].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)} style={{flex:1,minWidth:70,padding:"7px 0",borderRadius:8,border:"1.5px solid",borderColor:view===v?"var(--color-accent-fg)":"var(--color-border-default)",background:view===v?"#1f3a5f":"#0d1117",color:view===v?"var(--color-accent-fg)":"#8b949e",cursor:"pointer",fontWeight:600,fontSize:"var(--text-sm)"}}>{l}</button>
         ))}
       </div>
@@ -2356,7 +2366,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           }
         </div>
       )}
-      {view==="checkout"&&(
+      {view==="checkout"&&canEditThisSoldier&&perms.canCheckout&&(
         <div>
           {newItems.map((item,i)=>(
             <div key={i} style={{display:"flex",gap:8,marginBottom:8}}>
@@ -2372,7 +2382,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           <button onClick={doCheckout} disabled={!newItems.some(i=>i.name)} style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:newItems.some(i=>i.name)?1:0.5}}>✅ שייך</button>
         </div>
       )}
-      {view==="return"&&(
+      {view==="return"&&canEditThisSoldier&&perms.canReturn&&(
         <div>
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
@@ -6754,8 +6764,12 @@ function CabinetsTab({db, setDb, auth}){
                           placeholder="שם אמצעי" style={{...S.input,flex:2,marginBottom:0,fontSize:11,minWidth:80}}/>
                         <input value={item.makat||""} onChange={e=>updateItem(cabName,idx,"makat",e.target.value)}
                           placeholder="מק״ט" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
-                        <input value={item.serial||""} onChange={e=>updateItem(cabName,idx,"serial",e.target.value)}
-                          placeholder="סידורי/צ" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
+                        <div style={{position:"relative",display:"flex",gap:3,alignItems:"center"}}>
+                          <input value={item.serial||""} onChange={e=>updateItem(cabName,idx,"serial",e.target.value)}
+                            placeholder="סידורי/צ" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
+                          {item.serial&&<button onClick={()=>updateItem(cabName,idx,"serial","")}
+                            style={{...S.btn("red"),padding:"2px 5px",fontSize:9,minHeight:22}}>✕</button>}
+                        </div>
                         <input value={item.qty||1} onChange={e=>updateItem(cabName,idx,"qty",e.target.value)}
                           type="number" min="0" placeholder="כמות" style={{...S.input,width:55,marginBottom:0,fontSize:11}}/>
                         <button onClick={()=>setEditingItem(null)}
@@ -6818,10 +6832,40 @@ function CabinetsTab({db, setDb, auth}){
                         <input value={addForm.makat} onChange={e=>setAddForm(p=>({...p,makat:e.target.value}))}
                           placeholder="מק״ט" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}/>
                       </div>
-                      <div>
-                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>מספר סידורי / צ</div>
-                        <input value={addForm.serial} onChange={e=>setAddForm(p=>({...p,serial:e.target.value}))}
-                          placeholder="סידורי (אם קיים)" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}/>
+                      <div style={{gridColumn:"1 / -1"}}>
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:4}}>מספר סידורי / צ — בחר מהרשימה או הכנס ידנית</div>
+                        {/* Serials from ALL_SERIALS for this item */}
+                        {(()=>{
+                          const itemSerials = ALL_SERIALS.filter(x=>
+                            x.name===addForm.alias || (ARMORY_MASTER[addForm.alias]&&x.name===addForm.alias)
+                          );
+                          return itemSerials.length>0 ? (
+                            <div style={{marginBottom:6}}>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:80,overflowY:"auto",
+                                padding:4,background:"var(--color-bg-canvas)",borderRadius:6,
+                                border:"1px solid var(--color-border-muted)"}}>
+                                {itemSerials.map(x=>(
+                                  <button key={x.serial} onClick={()=>setAddForm(p=>({...p,serial:String(x.serial)}))}
+                                    style={{padding:"2px 8px",borderRadius:12,fontSize:11,fontFamily:"monospace",
+                                      cursor:"pointer",
+                                      background:addForm.serial===String(x.serial)?"var(--btn-blue-bg)":"var(--color-bg-subtle)",
+                                      border:`1px solid ${addForm.serial===String(x.serial)?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
+                                      color:addForm.serial===String(x.serial)?"var(--color-accent-fg)":"var(--color-text-primary)"}}>
+                                    {x.serial}
+                                    {x.assignedToSoldier&&<span style={{fontSize:9,color:"var(--color-warning-fg)",marginRight:3}}>●</span>}
+                                  </button>
+                                ))}
+                              </div>
+                              <div style={{fontSize:9,color:"var(--color-text-muted)",marginTop:2}}>● = משויך לחייל</div>
+                            </div>
+                          ) : null;
+                        })()}
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <input value={addForm.serial} onChange={e=>setAddForm(p=>({...p,serial:e.target.value}))}
+                            placeholder="הכנסה ידנית / בחר למעלה" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}}/>
+                          {addForm.serial&&<button onClick={()=>setAddForm(p=>({...p,serial:""}))}
+                            style={{...S.btn("gray"),padding:"4px 8px",fontSize:11,minHeight:32}}>✕ נקה</button>}
+                        </div>
                       </div>
                       <div>
                         <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>כמות</div>
@@ -9378,7 +9422,7 @@ function PermissionsTab({db, setDb, auth}){
   const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
   const [showAdd, setShowAdd] = useState(false);
-  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",soldierId:"",phone:""});
+  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",editUnit:"הכל",soldierId:"",phone:""});
   const [err, setErr] = useState("");
   const [searchUser, setSearchUser] = useState("");
   const [editPassUser, setEditPassUser] = useState(null);
@@ -9407,7 +9451,7 @@ function PermissionsTab({db, setDb, auth}){
     setErr("");
     if(!newUser.username.trim()||!newUser.name.trim()||!newUser.pass.trim()){setErr("יש למלא את כל השדות");return;}
     if(USERS[newUser.username]||db.dynamicUsers?.[newUser.username]){setErr("שם משתמש כבר קיים");return;}
-    const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",phone:newUser.phone||"",viewUnit:newUser.viewUnit,roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
+    const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",phone:newUser.phone||"",viewUnit:newUser.viewUnit,editUnit:newUser.editUnit||"הכל",roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
     const rolePreset = newUser.roleTitle ? ROLE_TITLE_PRESETS[newUser.roleTitle] : null;
     const ndb = {...db,
       dynamicUsers:{...(db.dynamicUsers||{}),[newUser.username.trim()]:u},
@@ -9416,7 +9460,7 @@ function PermissionsTab({db, setDb, auth}){
     saveDB(ndb); setDb(ndb);
     // Show share modal after creating user
     setShareUser({username:newUser.username.trim(), name:newUser.name.trim(), pass:newUser.pass.trim(), phone:newUser.phone||""});
-    setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",roleTitle:"",rank:"",phone:""});
+    setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",editUnit:"הכל",roleTitle:"",rank:"",phone:""});
     setShowAdd(false);
   }
 
@@ -9521,9 +9565,15 @@ function PermissionsTab({db, setDb, auth}){
                 placeholder="05X-XXXXXXX" style={S.input}/>
             </div>
             <div>
-              <label style={S.label}>הגבל לפלוגה (אופציונלי)</label>
+              <label style={S.label}>🔭 צפייה — הגבל לפלוגה</label>
               <select value={newUser.viewUnit} onChange={e=>setNewUser({...newUser,viewUnit:e.target.value})} style={S.input}>
-                {UNIT_OPTS.map(u=><option key={u} value={u}>{u==="הכל"?"כל הגדוד — ללא הגבלה":"פלוגה "+u}</option>)}
+                {UNIT_OPTS.map(u=><option key={u} value={u}>{u==="הכל"?"כל הגדוד":"פלוגה "+u}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={S.label}>✏️ עריכה — הגבל לפלוגה</label>
+              <select value={newUser.editUnit||"הכל"} onChange={e=>setNewUser({...newUser,editUnit:e.target.value})} style={S.input}>
+                {UNIT_OPTS.map(u=><option key={u} value={u}>{u==="הכל"?"כל הגדוד":"פלוגה "+u}</option>)}
               </select>
             </div>
           </div>
@@ -9556,6 +9606,8 @@ function PermissionsTab({db, setDb, auth}){
                   {merged._roleTitle&&<span style={{background:"#1f6feb",color:"#ffffff",padding:"2px 8px",borderRadius:10,fontWeight:700,fontSize:"var(--text-xs)"}}>{merged._roleTitle}</span>}
                   {(u.rank||merged._rank)&&<span style={{background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",borderRadius:8,padding:"1px 6px",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>{u.rank||merged._rank}</span>}
                   {u.phone&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",fontFamily:"monospace"}}>📱 {u.phone}</span>}
+                  {u.viewUnit&&u.viewUnit!=="הכל"&&<span style={{fontSize:"var(--text-xs)",background:"var(--color-accent-subtle)",border:"1px solid var(--color-accent-muted)",borderRadius:8,padding:"1px 6px",color:"var(--color-accent-fg)"}}>🔭 {u.viewUnit}</span>}
+                  {u.editUnit&&u.editUnit!=="הכל"&&<span style={{fontSize:"var(--text-xs)",background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-muted)",borderRadius:8,padding:"1px 6px",color:"var(--color-warning-fg)"}}>✏️ {u.editUnit}</span>}
                 </div>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
