@@ -1273,6 +1273,11 @@ function Login({onLogin}){
   const [dynUsers,setDynUsers]=useState(loadDB()?.dynamicUsers||{});
   const [userPasswords,setUserPasswords]=useState(loadDB()?.userPasswords||{});
   const [loading,setLoading]=useState(true);
+  // Refs to always have fresh data in closures (setTimeout etc.)
+  const dynUsersRef = React.useRef(dynUsers);
+  const userPasswordsRef = React.useRef(userPasswords);
+  React.useEffect(()=>{ dynUsersRef.current = dynUsers; }, [dynUsers]);
+  React.useEffect(()=>{ userPasswordsRef.current = userPasswords; }, [userPasswords]);
   // טען משתמשים וסיסמאות מ-Firebase
   useEffect(()=>{
     const off1 = fbOn("db/dynamicUsers",(users)=>{
@@ -1342,13 +1347,22 @@ function Login({onLogin}){
     }
     if(loading){
       setErr("טוען נתונים מהשרת... נסה שוב בעוד שניה");
-      setTimeout(()=>go(), 1500); // auto retry
+      setTimeout(()=>{
+        // Force re-check with latest Firebase data via refs
+        const u3=USERS[uTrim]||dynUsersRef.current[uTrim];
+        const ep3=userPasswordsRef.current[uTrim]||u3?.pass;
+        if(u3 && (pTrim===ep3||pTrim===String(ep3))){
+          onLogin({role:u3.role,name:u3.name,username:uTrim,soldierId:u3.soldierId||"",viewUnit:u3.viewUnit||null});
+        } else {
+          setErr("שם משתמש או סיסמה שגויים");
+        }
+      }, 2000);
     } else {
       // Maybe Firebase just hasn't loaded yet - wait and retry once
       setErr("בודק...");
       setTimeout(()=>{
-        const u2=USERS[uTrim]||dynUsers[uTrim];
-        const ep2=userPasswords[uTrim]||u2?.pass;
+        const u2=USERS[uTrim]||dynUsersRef.current[uTrim];
+        const ep2=userPasswordsRef.current[uTrim]||u2?.pass;
         if(u2 && (pTrim===ep2||pTrim===String(ep2))){
           onLogin({role:u2.role,name:u2.name,username:uTrim,soldierId:u2.soldierId||"",viewUnit:u2.viewUnit||null});
         } else {
