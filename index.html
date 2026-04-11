@@ -10632,7 +10632,7 @@ function App(){
       return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink};
     }
     // שחזר session שמור — רק מנהלים, לא חיילים
-    const SESSION_VERSION = "v3"; // שנה כדי לאפס את כל הסשנים
+    const SESSION_VERSION = "v4"; // שנה כדי לאפס את כל הסשנים
     try{
       const saved=sessionStorage.getItem("armory_session");
       if(saved){
@@ -10658,7 +10658,7 @@ function App(){
     // אל תשמור sessions של חיילים שנכנסו דרך לינק - הם חד-פעמיים
     // שמור רק sessions של מנהלים — לעולם לא חיילים
     if(a.role==="admin"||a.role==="manager"||a.role==="viewer"){
-      try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v3"}));}catch(e){}
+      try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v4"}));}catch(e){}
     }
     // Log login to Firebase
     const logEntry = {
@@ -10709,7 +10709,15 @@ function App(){
     return<ExitFormDirectView auth={exitAuth} onLogout={()=>window.location.href=window.location.pathname} db={db} setDb={setDb}/>;
   }
   if(auth.role==="soldier"&&auth.autoExitForm)return<ExitFormDirectView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
-  if(auth.role==="soldier")return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
+  // חייל ללא URL param - משהו לא תקין, שלח להתחברות מחדש
+  if(auth.role==="soldier"){
+    const hasSignParam = new URLSearchParams(window.location.search).get("sign");
+    if(!hasSignParam && !auth.autoSign){
+      handleLogout();
+      return<Login onLogin={handleLogin}/>;
+    }
+    return<SoldierSignView auth={auth} onLogout={handleLogout} db={db} setDb={setDb}/>;
+  }
   if(auth.role==="testcert"&&auth.autoTestCert)return<TestCertView auth={auth} db={db} setDb={setDb}/>;
   if(auth.role==="bulkrep"&&auth.autoBulkSign)return<BulkRepSignView auth={auth} db={db} setDb={setDb}/>;
   return <React.Fragment>
