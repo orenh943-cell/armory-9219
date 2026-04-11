@@ -9352,7 +9352,8 @@ function PermissionsTab({db, setDb, auth}){
                   {nameSuggestions.map(s=>(
                     <div key={s.id} onClick={()=>{
                       setNewUser(p=>({...p,name:s.name,soldierId:s.id,
-                        username:p.username||s.id,pass:p.pass||s.id}));
+                        username:p.username||s.id,pass:p.pass||s.id,
+                        phone:s.phone||p.phone||''}));
                       setNameSuggestions([]);
                     }} style={{padding:"9px 12px",cursor:"pointer",
                       borderBottom:"1px solid var(--color-border-muted)",display:"flex",
