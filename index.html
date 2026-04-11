@@ -8671,95 +8671,90 @@ ${formsHtml}<button onclick="window.print()">🖨️ הדפס</button></body></h
 }
 
 function buildSignatureFormHtml(s, sig, assigned){
+  const DECL_TEXT = "עם הגיעך לביצוע שירות מילואים פעיל, הינך מקבל לידך אמצעים לוגיסטיים יקרי ערך (לבוש, מיגון, נשק, צלם, אופיטיקה, אמר\"ל, קשר, תחמושת וכו'). באחריותך האישית לוודא שאמצעים אלו חוזרים לרשות הצבא בסיום שירותך במילואים. מדינת ישראל וצה\"ל משקיעים מדי שנה סכומי עתק לוודא שיהיו ברשותך האמצעים הטובים ביותר לביצוע משימתך. האחריות לשמירה על האמצעים מוטלת עלייך כפי שהיא מוטלת על מפקדים ברמות השונות. בכדי לוודא שאמצעים אלו ימשיכו לשרת את כולנו ולא יגיעו לידיים עוינות - עלייך לוודא כי בעת קבלת ציוד לידך מכל סוג, תוחתם על אמצעים אלו בחתימת ידך ע\"ג טופס 1008. מרגע שהוחתמת על טופס זה הינך אחראי ישיר לכשירותו ואבטחתו של הציוד.";
   const weps = Object.entries(assigned||{});
-  const weaponRows = weps.filter(([k])=>WEAPON_KEYS.includes(k)).map(([k,v])=>`
+  const allRows = weps.map(([k,v])=>`
     <tr>
-      <td style="padding:6px 10px;border:1px solid #555;font-weight:bold">${k}</td>
-      <td style="padding:6px 10px;border:1px solid #555;font-family:monospace;text-align:center">${v&&v!==1?String(v):"—"}</td>
-    </tr>`).join("");
-  const accRows = weps.filter(([k])=>!WEAPON_KEYS.includes(k)).map(([k,v])=>`
-    <tr>
-      <td style="padding:5px 10px;border:1px solid #ccc;color:#333">${k}</td>
-      <td style="padding:5px 10px;border:1px solid #ccc;font-family:monospace;text-align:center;color:#333">${v&&v!==1?String(v):"—"}</td>
+      <td style="padding:4px 8px;border:1px solid #000;text-align:center;font-size:11px">${getMakat(k)||"—"}</td>
+      <td style="padding:4px 8px;border:1px solid #000;font-size:11px">${k}</td>
+      <td style="padding:4px 8px;border:1px solid #000;text-align:center;font-size:11px">1</td>
+      <td style="padding:4px 8px;border:1px solid #000;font-family:monospace;text-align:center;font-size:11px">${v&&v!==1?String(v):"—"}</td>
     </tr>`).join("");
 
-  const ts = window._testCertsForZip?.[s.id];
-  const tsDate = ts?.date ? new Date(ts.date).toLocaleDateString("he-IL") : "—";
-  const tsExpiry = ts?.date ? new Date(new Date(ts.date).getTime()+183*86400000).toLocaleDateString("he-IL") : "—";
-  const testSection = ts?.img ? `
-    <div class="section">
-      <div class="section-title">אישור בוחן נשק</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <div class="box"><div class="lbl">תאריך ביצוע</div><div class="val">${tsDate}</div></div>
-        <div class="box"><div class="lbl">תוקף עד</div><div class="val" style="color:#27ae60">${tsExpiry}</div></div>
-      </div>
-      <img src="${ts.img}" style="max-width:100%;max-height:280px;border:1px solid #ccc;border-radius:4px;display:block;margin-bottom:6px"/>
-      <p style="font-size:10px;color:#444;font-style:italic">★ החייל הצהיר בחתימתו כי ביצע בוחן נשק ועבר אותו בהצלחה, והתמונה המצורפת היא אישורו האישי.</p>
-    </div>` : `
-    <div class="section">
-      <div class="section-title">אישור בוחן נשק</div>
-      <p style="color:#c0392b;font-weight:bold">לא הועלה אישור בוחן</p>
-    </div>`;
+  const issuerSig = sig.issuerSig||null;
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>טופס 1008 — ${s.name}</title>
+<title>טופס החתמה במקום 1008 — ${s.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#000;font-size:12px;max-width:800px;margin:0 auto}
-  h1{text-align:center;font-size:17px;border-bottom:3px solid #1a3a6b;padding-bottom:8px;margin-bottom:4px;color:#1a3a6b}
-  .subtitle{text-align:center;font-size:11px;color:#666;margin-bottom:16px}
-  .info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-  .box{border:1px solid #aaa;padding:6px 10px;border-radius:3px;background:#fafafa}
-  .lbl{font-size:10px;color:#666;margin-bottom:2px}
-  .val{font-weight:bold;font-size:13px}
-  .section{margin:10px 0;padding:10px 12px;border:1px solid #aaa;border-radius:4px}
-  .section-title{font-weight:bold;font-size:12px;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:8px;color:#1a3a6b;text-transform:uppercase;letter-spacing:.5px}
-  table{width:100%;border-collapse:collapse;margin:4px 0}
-  th{background:#1a3a6b;color:#fff;padding:6px 10px;border:1px solid #1a3a6b;text-align:right;font-size:11px}
-  td{border:1px solid #ccc;padding:5px 10px;font-size:12px}
-  .decl{background:#f9f9f9;border:1px solid #ccc;padding:10px 14px;border-radius:4px;font-size:11px;line-height:1.7;margin:8px 0}
-  .sig-row{display:flex;align-items:flex-end;gap:16px;margin-top:8px}
+  body{font-family:Arial,sans-serif;direction:rtl;padding:16px;color:#000;font-size:12px;max-width:780px;margin:0 auto}
+  .form-title{text-align:center;font-size:16px;font-weight:bold;padding:10px;border:2px solid #000;background:#f0f0f0;letter-spacing:1px}
+  .info-row{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #000;border-top:none}
+  .info-cell{padding:6px 10px;border-left:1px solid #000}
+  .info-cell:last-child{border-left:none}
+  .info-lbl{font-size:10px;color:#555;font-weight:bold}
+  .info-val{font-size:13px;font-weight:bold;min-height:18px}
+  .sec-hdr{background:#d0d8e4;font-weight:bold;font-size:11px;padding:4px 8px;border:1px solid #000;border-top:2px solid #000;margin-top:8px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#1a3a6b;color:#fff;padding:5px 8px;border:1px solid #000;text-align:center;font-size:11px;font-weight:bold}
+  td{border:1px solid #000}
+  .decl{border:1px solid #000;padding:10px 12px;font-size:10px;line-height:1.75;margin-top:0;background:#fafafa;border-top:2px solid #000}
+  .sig-block{display:grid;grid-template-columns:1fr 1fr;border:2px solid #000;margin-top:8px}
+  .sig-side{padding:8px 12px}
+  .sig-left{border-right:1px solid #000}
+  .sig-title{font-weight:bold;font-size:12px;border-bottom:2px solid #000;padding:5px;margin:-8px -12px 8px;text-align:center;background:#e8eef5}
+  .sig-row{display:grid;grid-template-columns:80px 1fr;margin-bottom:5px;align-items:end}
+  .sl{font-size:10px;font-weight:bold;color:#444}
+  .sv{border-bottom:1px solid #777;min-height:20px;padding:1px 4px;font-size:12px}
   @media print{.noprint{display:none}}
 </style></head><body>
-<h1>טופס 1008 — החתמת חייל על נשק</h1>
-<div class="subtitle">גדוד 9219 מוריה | ${new Date().toLocaleDateString("he-IL")}</div>
+<button class="noprint" onclick="window.print()" style="margin-bottom:10px;padding:6px 18px;cursor:pointer;font-size:12px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפסה</button>
 
-<div class="info">
-  <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
-  <div class="box"><div class="lbl">מספר אישי</div><div class="val">${s.id}</div></div>
-  <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
-  <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
-  <div class="box"><div class="lbl">תאריך חתימה</div><div class="val">${sig.signedAt||"—"}</div></div>
+<div class="form-title">טופס החתמה במקום 1008</div>
+
+<div class="info-row">
+  <div class="info-cell"><div class="info-lbl">פלוגה</div><div class="info-val">${s.unit||"—"}</div></div>
+  <div class="info-cell"><div class="info-lbl">במקום 1008</div><div class="info-val">&nbsp;</div></div>
+  <div class="info-cell"><div class="info-lbl">מחלקה</div><div class="info-val">${s.squad||"—"}</div></div>
 </div>
 
-<div class="section">
-  <div class="section-title">רשימת נשק ואמצעים</div>
-  <table>
-    <thead><tr><th>שם האמצעי</th><th style="text-align:center;width:160px">מספר סידורי</th></tr></thead>
-    <tbody>
-      ${weaponRows}
-      ${accRows?`<tr><td colspan="2" style="background:#f5f5f5;font-size:10px;color:#666;padding:3px 10px">ציוד נלווה</td></tr>${accRows}`:""}
-    </tbody>
-  </table>
-</div>
+<div class="sec-hdr">רשימת הנשק והאמצעים</div>
+<table>
+  <thead><tr>
+    <th style="width:110px">מק"ט</th>
+    <th style="text-align:right">תיאור פריט</th>
+    <th style="width:55px">כמות</th>
+    <th style="width:130px">סידורי</th>
+  </tr></thead>
+  <tbody>
+    ${allRows||`<tr><td colspan="4" style="padding:8px;text-align:center;color:#888">אין אמצעים משויכים</td></tr>`}
+  </tbody>
+</table>
 
-<div class="section">
-  <div class="section-title">הצהרת החייל</div>
-  <div class="decl">
-    אני הח"מ, <strong>${s.name}</strong> (מ.א. ${s.id}), מצהיר כי קיבלתי לחזקתי את האמצעים המפורטים לעיל,
-    שנסקרו בפני ונמצאו תקינים. אני מתחייב לשמור על האמצעים, לדווח על כל אובדן או נזק, ולהחזירם כנדרש.
+<div class="decl">${DECL_TEXT}</div>
+
+<div class="sig-block">
+  <div class="sig-side sig-left">
+    <div class="sig-title">פרטי מנפק</div>
+    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">טלפון נייד</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${sig.signedAt||"&nbsp;"}</div></div>
+    <div class="sig-row"><div class="sl">חתימה</div><div class="sv" style="min-height:46px">${issuerSig?`<img src="${issuerSig}" style="height:42px;max-width:100%"/>`:"&nbsp;"}</div></div>
   </div>
-  <div class="sig-row">
-    ${sig.sigData?`<div><div style="font-size:10px;color:#666;margin-bottom:3px">חתימת החייל</div><img src="${sig.sigData}" style="height:56px;border:1px solid #999;border-radius:3px"/></div>`:"<div style='border-bottom:1px solid #000;width:160px;margin-bottom:4px'></div>"}
-    <div style="font-size:10px;color:#666">תאריך: ${sig.signedAt||"—"}</div>
+  <div class="sig-side">
+    <div class="sig-title">פרטי מקבל</div>
+    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">${s.id}</div></div>
+    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">${s.name}</div></div>
+    <div class="sig-row"><div class="sl">טלפון נייד</div><div class="sv">${s.phone||"&nbsp;"}</div></div>
+    <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${sig.signedAt||"&nbsp;"}</div></div>
+    <div class="sig-row"><div class="sl">חתימה</div><div class="sv" style="min-height:46px">${sig.sigData?`<img src="${sig.sigData}" style="height:42px;max-width:100%"/>`:"&nbsp;"}</div></div>
   </div>
 </div>
 
-${testSection}
-
-<button class="noprint" onclick="window.print()" style="margin-top:16px;padding:8px 20px;cursor:pointer;font-size:13px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפס</button>
 </body></html>`;
 }
+
 
 
 function downloadAllFormsZip(db, soldiers){
