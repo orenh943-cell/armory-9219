@@ -9245,6 +9245,7 @@ function UserProfileModal({auth, db, setDb, onClose}){
         </div>
 
       </div>
+      {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
   );
 }
@@ -9641,7 +9642,6 @@ function PermissionsTab({db, setDb, auth}){
           </div>
         </div>
       )}
-      {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
   );
 }
