@@ -10631,13 +10631,20 @@ function App(){
       if(s) return{role:"soldier",name:s.name,soldierId:signId,autoSign:true,assignedFromLink};
       return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink};
     }
-    // שחזר session שמור — רק מנהלים, לא חיילים שנכנסו דרך לינק
+    // שחזר session שמור — רק מנהלים, לא חיילים
+    const SESSION_VERSION = "v3"; // שנה כדי לאפס את כל הסשנים
     try{
       const saved=sessionStorage.getItem("armory_session");
       if(saved){
         const parsed=JSON.parse(saved);
-        // אל תשחזר sessions של חיילים שנכנסו דרך לינק ייעודי
-        if(parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSign||parsed.role==="testcert"||parsed.role==="bulkrep"){
+        // בדוק גרסת סשן — ישנים נמחקים
+        if(parsed._sv !== SESSION_VERSION){
+          sessionStorage.removeItem("armory_session");
+          return null;
+        }
+        // אל תשחזר sessions של חיילים בשום אופן
+        if(parsed.role==="soldier"||parsed.role==="testcert"||parsed.role==="bulkrep"||
+           parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSign){
           sessionStorage.removeItem("armory_session");
           return null;
         }
@@ -10649,8 +10656,9 @@ function App(){
 
   function handleLogin(a){
     // אל תשמור sessions של חיילים שנכנסו דרך לינק - הם חד-פעמיים
-    if(!a.autoSign && !a.autoExitForm && !a.autoTestCert && !a.autoBulkSign && a.role!=="testcert" && a.role!=="bulkrep" && a.role!=="soldier"){
-      try{sessionStorage.setItem("armory_session",JSON.stringify(a));}catch(e){}
+    // שמור רק sessions של מנהלים — לעולם לא חיילים
+    if(a.role==="admin"||a.role==="manager"||a.role==="viewer"){
+      try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v3"}));}catch(e){}
     }
     // Log login to Firebase
     const logEntry = {
