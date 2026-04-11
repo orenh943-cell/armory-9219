@@ -9177,7 +9177,7 @@ function PermissionsTab({db, setDb}){
                 <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||"");}}
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 {username!==auth?.username&&(
-                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padd</button>
+                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
                 )}
               </div>
               {editPassUser===username&&(
