@@ -5047,8 +5047,13 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off8 = fbOn("db/unitItems", (unitItems)=>{
       const items = unitItems||{};
-      // Never auto-seed unitItems - use only what's in Firebase
-      setDb(prev=>({...prev, unitItems: items}));
+      if(Object.keys(items).length===0 && IMPORTED_UNIT_ITEMS && Object.keys(IMPORTED_UNIT_ITEMS).length>0){
+        // Firebase empty - seed from imported data
+        fbSet("db/unitItems", IMPORTED_UNIT_ITEMS).catch(()=>{});
+        setDb(prev=>({...prev, unitItems: IMPORTED_UNIT_ITEMS}));
+      } else {
+        setDb(prev=>({...prev, unitItems: items}));
+      }
     });
     const off9 = fbOn("db/armoryMaster", (master)=>{
       if(master && Object.keys(master).length>0){
