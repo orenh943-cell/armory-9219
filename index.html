@@ -10572,8 +10572,11 @@ function App(){
     const testCertId=params.get("testcert");
     const pollId=params.get("poll");
     const pollSid=params.get("sid");
-    // אם יש param כלשהו - נקה auth שמור (לא להיתקע על login ישן)
+    // נקה את ה-URL מיד - כך הדפדפן לא ישמור את הפרמטר בהיסטוריה
     if(signId||exitId||bulkSignId||testCertId||pollId){
+      try{
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }catch(e){}
       try{localStorage.removeItem("armory_auth");}catch(e){}
       try{sessionStorage.removeItem("armory_session");}catch(e){}
     }
