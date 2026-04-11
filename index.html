@@ -5584,6 +5584,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
+      {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
   );
 }
@@ -9245,7 +9246,6 @@ function UserProfileModal({auth, db, setDb, onClose}){
         </div>
 
       </div>
-      {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
   );
 }
@@ -9258,13 +9258,15 @@ function PermissionsTab({db, setDb, auth}){
   const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
   const [showAdd, setShowAdd] = useState(false);
-  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",soldierId:""});
+  const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",soldierId:"",phone:""});
   const [err, setErr] = useState("");
   const [searchUser, setSearchUser] = useState("");
   const [editPassUser, setEditPassUser] = useState(null);
   const [editPassVal, setEditPassVal] = useState("");
   const [editRankUser, setEditRankUser] = useState(null);
   const [editRankVal, setEditRankVal] = useState("");
+  const [editPhoneUser, setEditPhoneUser] = useState(null);
+  const [editPhoneVal, setEditPhoneVal] = useState("");
   const [shareUser, setShareUser] = useState(null);
   const [sigModalUser, setSigModalUser] = useState(null); // ✍️ חתימה שמורה
   const [nameSuggestions, setNameSuggestions] = useState([]);
@@ -9285,7 +9287,7 @@ function PermissionsTab({db, setDb, auth}){
     setErr("");
     if(!newUser.username.trim()||!newUser.name.trim()||!newUser.pass.trim()){setErr("יש למלא את כל השדות");return;}
     if(USERS[newUser.username]||db.dynamicUsers?.[newUser.username]){setErr("שם משתמש כבר קיים");return;}
-    const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",viewUnit:newUser.viewUnit,roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
+    const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",phone:newUser.phone||"",viewUnit:newUser.viewUnit,roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
     const rolePreset = newUser.roleTitle ? ROLE_TITLE_PRESETS[newUser.roleTitle] : null;
     const ndb = {...db,
       dynamicUsers:{...(db.dynamicUsers||{}),[newUser.username.trim()]:u},
@@ -9293,8 +9295,8 @@ function PermissionsTab({db, setDb, auth}){
     };
     saveDB(ndb); setDb(ndb);
     // Show share modal after creating user
-    setShareUser({username:newUser.username.trim(), name:newUser.name.trim(), pass:newUser.pass.trim()});
-    setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",roleTitle:"",rank:""});
+    setShareUser({username:newUser.username.trim(), name:newUser.name.trim(), pass:newUser.pass.trim(), phone:newUser.phone||""});
+    setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",roleTitle:"",rank:"",phone:""});
     setShowAdd(false);
   }
 
@@ -9393,6 +9395,11 @@ function PermissionsTab({db, setDb, auth}){
               </select>
             </div>
             <div>
+              <label style={S.label}>טלפון נייד (לשליחת פרטי כניסה)</label>
+              <input value={newUser.phone||""} onChange={e=>setNewUser({...newUser,phone:e.target.value})}
+                placeholder="05X-XXXXXXX" style={S.input}/>
+            </div>
+            <div>
               <label style={S.label}>הגבל לפלוגה (אופציונלי)</label>
               <select value={newUser.viewUnit} onChange={e=>setNewUser({...newUser,viewUnit:e.target.value})} style={S.input}>
                 {UNIT_OPTS.map(u=><option key={u} value={u}>{u==="הכל"?"כל הגדוד — ללא הגבלה":"פלוגה "+u}</option>)}
@@ -9427,6 +9434,7 @@ function PermissionsTab({db, setDb, auth}){
                   <span>{ROLE_LABELS[baseRole]||baseRole}{u.roleTitle&&<span style={{marginRight:6,color:"var(--color-accent-fg)",fontWeight:700}}>· {u.roleTitle}</span>}{u.rank&&<span style={{marginRight:6,color:"var(--color-warning-fg)",fontSize:10}}>{u.rank}</span>} • {username} {isDynamic&&<span style={{color:"var(--color-success-fg)",fontSize:10}}>● דינמי</span>}</span>
                   {merged._roleTitle&&<span style={{background:"#1f6feb",color:"#ffffff",padding:"2px 8px",borderRadius:10,fontWeight:700,fontSize:"var(--text-xs)"}}>{merged._roleTitle}</span>}
                   {(u.rank||merged._rank)&&<span style={{background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",borderRadius:8,padding:"1px 6px",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>{u.rank||merged._rank}</span>}
+                  {u.phone&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",fontFamily:"monospace"}}>📱 {u.phone}</span>}
                 </div>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -9443,9 +9451,11 @@ function PermissionsTab({db, setDb, auth}){
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 <button onClick={()=>{setEditRankUser(username);setEditRankVal(u.rank||"");}}
                   style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🎖️ דרגה</button>
+                <button onClick={()=>{setEditPhoneUser(username);setEditPhoneVal(u.phone||"");}}
+                  style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>📱 טלפון</button>
                 <button onClick={()=>{
                   const pass = db.userPasswords?.[username]||u.pass||"";
-                  setShareUser({username, name:u.name, pass});
+                  setShareUser({username, name:u.name, pass, phone:u.phone||""});
                 }} style={{...S.btn("wa"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>📤 שתף</button>
                 <button onClick={()=>setSigModalUser({username, name:u.name})}
                   style={{...S.btn(db.userSigs?.[username]?"green":"gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>
@@ -9492,7 +9502,27 @@ function PermissionsTab({db, setDb, auth}){
                   </div>
                 </div>
               )}
-            </div>
+
+              {editPhoneUser===username&&(
+                <div style={{marginTop:8}}>
+                  <label style={{...S.label,fontSize:"var(--text-xs)"}}>טלפון נייד</label>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input value={editPhoneVal} onChange={e=>setEditPhoneVal(e.target.value)}
+                      placeholder="05X-XXXXXXX" style={{...S.input,flex:1,marginBottom:0}}/>
+                    <button onClick={()=>{
+                      let ndb=db;
+                      if(isDynamic){
+                        ndb={...db,dynamicUsers:{...db.dynamicUsers,[username]:{...db.dynamicUsers[username],phone:editPhoneVal.trim()}}};
+                      } else {
+                        ndb={...db,userPerms:{...(db.userPerms||{}),[username]:{...(db.userPerms?.[username]||{}),_phone:editPhoneVal.trim()}}};
+                      }
+                      saveDB(ndb); setDb(ndb); setEditPhoneUser(null);
+                    }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
+                    <button onClick={()=>setEditPhoneUser(null)}
+                      style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
+                  </div>
+                </div>
+              )}            </div>
             {(true&&(
               <div>
                 {/* תפקיד + תבנית מהירה */}
@@ -9612,6 +9642,8 @@ function PermissionsTab({db, setDb, auth}){
                 <span style={{fontFamily:"monospace",fontSize:11,wordBreak:"break-all"}}>https://orenh943-cell.github.io/armory-9219</span>
                 <span style={{color:"var(--color-text-secondary)"}}>👤 משתמש:</span>
                 <span style={{fontWeight:700}}>{shareUser.username}</span>
+                <span style={{color:"var(--color-text-secondary)"}}>📱 טלפון:</span>
+                <span style={{fontFamily:"monospace"}}>{shareUser.phone||"לא הוזן"}</span>
                 <span style={{color:"var(--color-text-secondary)"}}>🔑 סיסמה:</span>
                 <span style={{fontWeight:700,fontFamily:"monospace"}}>{shareUser.pass}</span>
               </div>
@@ -9621,7 +9653,8 @@ function PermissionsTab({db, setDb, auth}){
               {/* שלח בוואטסאפ */}
               <button onClick={()=>{
                 const msg = "שלום " + shareUser.name + ",\n\nנוצר לך חשבון במערכת ניהול ארמון גדוד 9219 מוריה.\n\n🔗 כניסה לאתר:\nhttps://orenh943-cell.github.io/armory-9219\n\n👤 שם משתמש: " + shareUser.username + "\n🔑 סיסמה: " + shareUser.pass + "\n\nשמור פרטים אלו בצד שלך.";
-                window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+                const waPhone = shareUser.phone ? phoneToWA(shareUser.phone) : "";
+                window.open("https://wa.me/"+(waPhone||"")+"?text="+encodeURIComponent(msg),"_blank");
               }} style={{...S.btn("wa"),padding:"11px 0",fontWeight:800,fontSize:"var(--text-base)"}}>
                 💬 שלח בוואטסאפ
               </button>
