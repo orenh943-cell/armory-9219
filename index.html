@@ -1458,7 +1458,23 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       newTestCerts[auth.soldierId] = {img:uploadedCert, date:new Date().toISOString(), signedAt};
       fbSet("db/testCerts/"+auth.soldierId, newTestCerts[auth.soldierId]).catch(()=>{});
     }
-    const sigEntry = {sigData, signedAt, ...(testImg?{testImg}:{})};
+    // מצא אחראי ארמון
+    const armoryUser = (() => {
+      const allU = {...(db.dynamicUsers||{}), ...USERS};
+      const entry = Object.entries(allU).find(([,u]) => {
+        const perms = db.userPerms?.[Object.keys(allU).find(k=>allU[k]===u)]||{};
+        return (u.roleTitle==='אחראי ארמון') || perms._roleTitle==='אחראי ארמון';
+      });
+      if(!entry) return null;
+      const [uname, u] = entry;
+      const perms = db.userPerms?.[uname]||{};
+      const rank = u.rank||perms._rank||"";
+      return {name: u.name||uname, rank, username: uname};
+    })();
+    const issuerDisplay = armoryUser
+      ? [armoryUser.rank, "אחראי ארמון", armoryUser.name].filter(Boolean).join(" ")
+      : "אחראי ארמון";
+    const sigEntry = {sigData, signedAt, issuerName: issuerDisplay, ...(testImg?{testImg}:{})};
     const newDb={...db,
       signatures:{...db.signatures,[auth.soldierId]:sigEntry},
       bulkGuarantors:newGuarantors,
@@ -5090,6 +5106,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [bulkModal,setBulkModal]=useState(false);
   const [bulkSendModal,setBulkSendModal]=useState(false);
   const [mobileMenu,setMobileMenu]=useState(false);
+  const [showProfile,setShowProfile]=useState(false);
   const [addModal,setAddModal]=useState(false);
 
   const units=useMemo(()=>["הכל",...[...new Set(RAW_SOLDIERS.map(s=>s.unit).filter(Boolean))].sort()],[]);
@@ -5195,7 +5212,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       <div role="complementary" aria-label="סרגל צד" style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden",background:"var(--color-bg-default)"}}>
         <div style={{padding:"var(--space-4)",borderBottom:"1px solid var(--color-border-muted)"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}><img src="data:image/png;base64,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" style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/><div style={{fontWeight:800,fontSize:15}}>ארמון 9219</div></div>
-          <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)",marginTop:3}}>{auth.name}</div>
+          <div onClick={()=>setShowProfile(true)} title="פרופיל אישי" style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)",marginTop:3,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{auth.name}
+            <span style={{fontSize:9,color:"var(--color-accent-fg)"}}>👤 פרופיל</span>
+          </div>
           {auth.role==="viewer"&&<div style={{fontSize:10,color:"var(--color-warning-fg)",marginTop:2}}>👁️ צפייה בלבד</div>}
         </div>
         <nav role="navigation" aria-label="ניווט ראשי" style={{flex:1,padding:"var(--space-2) 0",overflowY:"auto",overflowX:"hidden"}}>
@@ -5213,6 +5232,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           <button onClick={()=>{setSearchModal(true);setMobileMenu(false);}} style={{...S.btn("blue"),width:"100%",fontSize:"var(--text-sm)",minHeight:38,padding:"6px 12px"}}>🔍 חיפוש צ׳ / סידורי</button>
           <button className="theme-toggle" onClick={toggleTheme} style={{width:"100%",minHeight:34,padding:"4px 10px"}}>
             {theme==="dark"?"☀️ מצב בהיר":"🌙 מצב כהה"}
+          </button>
+          <button onClick={()=>setShowProfile(true)} style={{...S.btn("blue"),width:"100%",fontSize:"var(--text-sm)",minHeight:34,padding:"4px 12px",marginBottom:4}}>
+            👤 הפרופיל שלי
           </button>
           <button onClick={onLogout} style={{...S.btn(),width:"100%",fontSize:"var(--text-sm)",minHeight:38,padding:"6px 12px"}}>🚪 יציאה</button>
           {auth.role==="admin"&&<button onClick={()=>{
@@ -8682,6 +8704,7 @@ function buildSignatureFormHtml(s, sig, assigned){
     </tr>`).join("");
 
   const issuerSig = sig.issuerSig||null;
+  const issuerName = sig.issuerName||"אחראי ארמון";
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <title>טופס החתמה במקום 1008 — ${s.name}</title>
@@ -8737,7 +8760,7 @@ function buildSignatureFormHtml(s, sig, assigned){
   <div class="sig-side sig-left">
     <div class="sig-title">פרטי מנפק</div>
     <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">&nbsp;</div></div>
-    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">${issuerName}</div></div>
     <div class="sig-row"><div class="sl">טלפון נייד</div><div class="sv">&nbsp;</div></div>
     <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${sig.signedAt||"&nbsp;"}</div></div>
     <div class="sig-row"><div class="sl">חתימה</div><div class="sv" style="min-height:46px">${issuerSig?`<img src="${issuerSig}" style="height:42px;max-width:100%"/>`:"&nbsp;"}</div></div>
@@ -9101,6 +9124,132 @@ const TAB_PERMS = {
   cabinets:"canViewCabinets", daily:"canViewDaily",
   actlog:"canViewActLog",
 };
+// ══════════════════════════════════════════
+// PROFILE MODAL - פרופיל אישי
+// ══════════════════════════════════════════
+function UserProfileModal({auth, db, setDb, onClose}){
+  const [newPass, setNewPass] = React.useState("");
+  const [newPass2, setNewPass2] = React.useState("");
+  const [showPad, setShowPad] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  const [msgType, setMsgType] = React.useState("success");
+  const perms = db.userPerms?.[auth.username]||{};
+  const dynUser = db.dynamicUsers?.[auth.username];
+  const meta = getUserMeta(auth, db);
+  const savedSig = db.userSigs?.[auth.username];
+
+  function showMsg(text, type="success"){
+    setMsg(text); setMsgType(type);
+    setTimeout(()=>setMsg(""), 3000);
+  }
+
+  function savePass(){
+    if(!newPass.trim()){showMsg("הכנס סיסמה חדשה","error");return;}
+    if(newPass!==newPass2){showMsg("הסיסמאות לא תואמות","error");return;}
+    if(newPass.length<4){showMsg("סיסמה חייבת להכיל לפחות 4 תווים","error");return;}
+    const ndb={...db,userPasswords:{...(db.userPasswords||{}),[auth.username]:newPass.trim()}};
+    saveDB(ndb); setDb(ndb);
+    setNewPass(""); setNewPass2("");
+    showMsg("✅ סיסמה עודכנה בהצלחה");
+  }
+
+  function saveSig(sigData){
+    const ndb={...db,userSigs:{...(db.userSigs||{}),[auth.username]:sigData}};
+    setDb(ndb);
+    fbSet("db/userSigs/"+auth.username, sigData).catch(()=>{});
+    setShowPad(false);
+    showMsg("✅ חתימה נשמרה");
+  }
+
+  function clearSig(){
+    const ndb={...db,userSigs:{...(db.userSigs||{})}};
+    delete ndb.userSigs[auth.username];
+    setDb(ndb);
+    fbDelete("db/userSigs/"+auth.username).catch(()=>{});
+    showMsg("חתימה נמחקה");
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{...S.card,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+
+        {/* כותרת */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h2 style={{margin:0,fontSize:"var(--text-lg)",fontWeight:800}}>👤 הפרופיל שלי</h2>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"var(--color-text-secondary)"}}>✕</button>
+        </div>
+
+        {/* הודעה */}
+        {msg&&<div style={{padding:"8px 12px",borderRadius:6,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,
+          background:msgType==="error"?"var(--color-danger-subtle)":"var(--color-success-subtle)",
+          color:msgType==="error"?"var(--color-danger-fg)":"var(--color-success-fg)",
+          border:"1px solid "+(msgType==="error"?"var(--color-danger-muted)":"var(--color-success-muted)")
+        }}>{msg}</div>}
+
+        {/* פרטים אישיים */}
+        <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:12,marginBottom:16,border:"1px solid var(--color-border-muted)"}}>
+          <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:10,color:"var(--color-text-secondary)"}}>פרטי המשתמש</div>
+          <div style={{display:"grid",gridTemplateColumns:"100px 1fr",gap:6,fontSize:"var(--text-sm)"}}>
+            <span style={{color:"var(--color-text-secondary)"}}>שם:</span>
+            <span style={{fontWeight:700}}>{auth.name}</span>
+            <span style={{color:"var(--color-text-secondary)"}}>משתמש:</span>
+            <span style={{fontFamily:"monospace"}}>{auth.username}</span>
+            <span style={{color:"var(--color-text-secondary)"}}>תפקיד:</span>
+            <span>{meta.roleTitle||"—"}</span>
+            <span style={{color:"var(--color-text-secondary)"}}>דרגה:</span>
+            <span>{meta.rank||"—"}</span>
+            <span style={{color:"var(--color-text-secondary)"}}>הרשאה:</span>
+            <span style={{fontSize:"var(--text-xs)",color:"var(--color-accent-fg)"}}>{auth.role==="admin"?"🔴 מנהל ראשי":auth.role==="manager"?"🟡 מנהל":"🟢 צפייה"}</span>
+          </div>
+        </div>
+
+        {/* שינוי סיסמה */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8}}>🔑 שינוי סיסמה</div>
+          <input value={newPass} onChange={e=>setNewPass(e.target.value)} type="password"
+            placeholder="סיסמה חדשה" style={{...S.input,marginBottom:6}}/>
+          <input value={newPass2} onChange={e=>setNewPass2(e.target.value)} type="password"
+            placeholder="אימות סיסמה" style={{...S.input,marginBottom:8}}/>
+          <button onClick={savePass} style={{...S.btn("green"),width:"100%"}}>
+            💾 שמור סיסמה
+          </button>
+        </div>
+
+        {/* חתימה שמורה */}
+        <div style={{marginBottom:8}}>
+          <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8}}>✍️ החתימה שלי</div>
+          <div style={{background:"var(--color-bg-canvas)",border:"1px solid var(--color-border-muted)",borderRadius:8,padding:12,marginBottom:8,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {savedSig
+              ? <img src={savedSig} style={{maxHeight:60,maxWidth:"100%",borderRadius:4}} alt="חתימה"/>
+              : <span style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)"}}>אין חתימה שמורה</span>
+            }
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setShowPad(true)} style={{...S.btn("blue"),flex:1}}>
+              ✍️ {savedSig?"החלף חתימה":"הוסף חתימה"}
+            </button>
+            {savedSig&&<button onClick={clearSig} style={{...S.btn("red"),padding:"6px 14px"}}>
+              🗑️ מחק
+            </button>}
+          </div>
+          {showPad&&(
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:6}}>חתום כאן:</div>
+              <SignaturePad onSave={saveSig}/>
+              <button onClick={()=>setShowPad(false)} style={{...S.btn("gray"),width:"100%",marginTop:6}}>ביטול</button>
+            </div>
+          )}
+          <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:6}}>
+            💡 החתימה תשמר ותשמש אוטומטית בטפסי אישור יציאה ומסמכים אחרים
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+
 function PermissionsTab({db, setDb, auth}){
   const deletedUsers = db.deletedUsers||{};
   const staticUsers = Object.entries(USERS).filter(([k,u])=>(u.role==="manager"||u.role==="admin")&&!deletedUsers[k]);
@@ -9115,6 +9264,8 @@ function PermissionsTab({db, setDb, auth}){
   const [editPassVal, setEditPassVal] = useState("");
   const [editRankUser, setEditRankUser] = useState(null);
   const [editRankVal, setEditRankVal] = useState("");
+  const [shareUser, setShareUser] = useState(null);
+  const [sigModalUser, setSigModalUser] = useState(null); // ✍️ חתימה שמורה
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [soldiers] = useState(()=>[...Object.values(loadDB()?.customSoldiers||{}),...RAW_SOLDIERS]);
 
@@ -9140,6 +9291,8 @@ function PermissionsTab({db, setDb, auth}){
       userPerms: rolePreset ? {...(db.userPerms||{}),[newUser.username.trim()]:rolePreset} : db.userPerms
     };
     saveDB(ndb); setDb(ndb);
+    // Show share modal after creating user
+    setShareUser({username:newUser.username.trim(), name:newUser.name.trim(), pass:newUser.pass.trim()});
     setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",roleTitle:"",rank:""});
     setShowAdd(false);
   }
@@ -9289,6 +9442,14 @@ function PermissionsTab({db, setDb, auth}){
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 <button onClick={()=>{setEditRankUser(username);setEditRankVal(u.rank||"");}}
                   style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🎖️ דרגה</button>
+                <button onClick={()=>{
+                  const pass = db.userPasswords?.[username]||u.pass||"";
+                  setShareUser({username, name:u.name, pass});
+                }} style={{...S.btn("wa"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>📤 שתף</button>
+                <button onClick={()=>setSigModalUser({username, name:u.name})}
+                  style={{...S.btn(db.userSigs?.[username]?"green":"gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>
+                  {db.userSigs?.[username]?"✅ חתימה":"✍️ חתימה"}
+                </button>
                 {username!==auth?.username&&(
                   <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
                 )}
@@ -9394,6 +9555,93 @@ function PermissionsTab({db, setDb, auth}){
         );
       })}
       <ResetAssignmentsBtn auth={{soldierId:"7680832",username:"אורן"}} db={db} setDb={setDb}/>
+
+      {/* מודל חתימה שמורה */}
+      {sigModalUser&&(
+        <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{...S.card,maxWidth:460,width:"100%",border:"2px solid var(--color-accent-fg)"}}>
+            <div style={{fontWeight:800,fontSize:"var(--text-lg)",marginBottom:4}}>✍️ חתימה שמורה</div>
+            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:14}}>
+              {sigModalUser.name} — החתימה תישמר ותופיע אוטומטית בכל הטפסים
+            </div>
+
+            {db.userSigs?.[sigModalUser.username]&&(
+              <div style={{marginBottom:14,padding:10,border:"1px solid var(--color-success-fg)",borderRadius:8,background:"var(--color-success-bg)",display:"flex",alignItems:"center",gap:10}}>
+                <div>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>חתימה קיימת:</div>
+                  <img src={db.userSigs[sigModalUser.username]} style={{height:48,borderRadius:4,border:"1px solid var(--color-border-default)"}}/>
+                </div>
+                <button onClick={()=>{
+                  const ndb={...db,userSigs:{...(db.userSigs||{})}};
+                  delete ndb.userSigs[sigModalUser.username];
+                  saveDB(ndb); setDb(ndb);
+                  fbDelete("db/userSigs/"+sigModalUser.username).catch(()=>{});
+                }} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️ מחק</button>
+              </div>
+            )}
+
+            <SignaturePad onSave={d=>{
+              const ndb={...db,userSigs:{...(db.userSigs||{}),[sigModalUser.username]:d}};
+              saveDB(ndb); setDb(ndb);
+              fbSet("db/userSigs/"+sigModalUser.username, d).catch(()=>{});
+              setSigModalUser(null);
+            }}/>
+            <button onClick={()=>setSigModalUser(null)}
+              style={{...S.btn("gray"),width:"100%",marginTop:10}}>סגור</button>
+          </div>
+        </div>
+      )}
+
+      {/* מודל שיתוף פרטי כניסה */}
+      {shareUser&&(
+        <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{...S.card,maxWidth:420,width:"100%",border:"2px solid var(--color-success-fg)"}}>
+            <div style={{fontSize:28,textAlign:"center",marginBottom:8}}>📤</div>
+            <div style={{fontWeight:800,fontSize:"var(--text-lg)",textAlign:"center",marginBottom:4,color:"var(--color-success-fg)"}}>
+              שלח פרטי כניסה
+            </div>
+            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:16}}>
+              {shareUser.name}
+            </div>
+
+            {/* תצוגת פרטים */}
+            <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:12,marginBottom:14,border:"1px solid var(--color-border-default)"}}>
+              <div style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:6,fontSize:"var(--text-sm)"}}>
+                <span style={{color:"var(--color-text-secondary)"}}>🔗 כתובת:</span>
+                <span style={{fontFamily:"monospace",fontSize:11,wordBreak:"break-all"}}>https://orenh943-cell.github.io/armory-9219</span>
+                <span style={{color:"var(--color-text-secondary)"}}>👤 משתמש:</span>
+                <span style={{fontWeight:700}}>{shareUser.username}</span>
+                <span style={{color:"var(--color-text-secondary)"}}>🔑 סיסמה:</span>
+                <span style={{fontWeight:700,fontFamily:"monospace"}}>{shareUser.pass}</span>
+              </div>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {/* שלח בוואטסאפ */}
+              <button onClick={()=>{
+                const msg = "שלום " + shareUser.name + ",\n\nנוצר לך חשבון במערכת ניהול ארמון גדוד 9219 מוריה.\n\n🔗 כניסה לאתר:\nhttps://orenh943-cell.github.io/armory-9219\n\n👤 שם משתמש: " + shareUser.username + "\n🔑 סיסמה: " + shareUser.pass + "\n\nשמור פרטים אלו בצד שלך.";
+                window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+              }} style={{...S.btn("wa"),padding:"11px 0",fontWeight:800,fontSize:"var(--text-base)"}}>
+                💬 שלח בוואטסאפ
+              </button>
+
+              {/* העתק טקסט */}
+              <button onClick={()=>{
+                const msg = "כניסה למערכת ארמון 9219:\nhttps://orenh943-cell.github.io/armory-9219\nמשתמש: "+shareUser.username+"\nסיסמה: "+shareUser.pass;
+                navigator.clipboard?.writeText(msg).catch(()=>{});
+                alert("הועתק ללוח!");
+              }} style={{...S.btn("blue"),padding:"9px 0"}}>
+                📋 העתק פרטים
+              </button>
+
+              <button onClick={()=>setShareUser(null)} style={{...S.btn("gray"),padding:"8px 0"}}>
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
   );
 }
