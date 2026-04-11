@@ -576,6 +576,131 @@ canvas { touch-action: none; }
   .desktop-sidebar, .mobile-header, button { display: none !important; }
   body { background: #fff; color: #000; }
 }
+
+/* ============================================================
+   MOBILE OPTIMIZATIONS - Full responsive (added)
+   ============================================================ */
+
+/* ── Touch targets ── */
+@media (max-width: 768px) {
+  button { min-height: 40px !important; }
+  
+  /* Sidebar becomes full bottom nav on mobile */
+  .main-layout {
+    flex-direction: column !important;
+  }
+  
+  /* Tables on mobile - horizontal scroll + bigger cells */
+  table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  td, th { white-space: nowrap !important; min-width: 60px; }
+  
+  /* Modal full screen on mobile */
+  .modal-box {
+    max-width: 100vw !important;
+    width: 100vw !important;
+    max-height: 92vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Form grids → single column */
+  [style*="gridTemplateColumns:"1fr 1fr""],
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="gridTemplateColumns:"1fr 1fr 1fr""] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Progress bar labels - smaller font */
+  [style*="fontSize:9"] { font-size: 8px !important; }
+  
+  /* Buttons in header - wrap */
+  [style*="justifyContent:"space-between""] > div {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+  
+  /* Signature pad - full width */
+  canvas { max-width: 100% !important; touch-action: none; }
+  
+  /* Poll response buttons - larger touch */
+  [style*="padding:"20px 0""] { padding: 24px 16px !important; font-size: 20px !important; }
+  
+  /* Exit form questions - more spacing */
+  [style*="padding:"10px 0""] { padding: 12px 0 !important; }
+  
+  /* Reduce padding in cards on mobile */
+  [style*="padding:16"] { padding: 10px !important; }
+  
+  /* Soldier row - hide less important columns */
+  th:nth-child(4), td:nth-child(4) { display: none; } /* weapons col - hidden on mobile */
+  
+  /* Progress bar - compact on mobile */
+  [style*="minWidth:120"] { min-width: 90px !important; }
+  
+  /* Quick action buttons - min size */
+  [style*="padding:"4px 10px""] { padding: 6px 10px !important; }
+  
+  /* Sticky header for long forms */
+  [style*="position:"sticky""] { position: sticky; top: 0; z-index: 10; }
+  
+  /* Re-sign modal - full screen */
+  [style*="position:"fixed",inset:0,zIndex:2000"] { align-items: flex-end !important; }
+}
+
+@media (max-width: 480px) {
+  /* Extra small screens */
+  
+  /* Font sizes */
+  h2 { font-size: 16px !important; }
+  
+  /* Single column everything */
+  [style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; }
+  
+  /* Smaller badges */
+  [style*="padding:"2px 8px""] { padding: 2px 6px !important; font-size: 10px !important; }
+  
+  /* Stats grid 2x2 */
+  [style*="repeat(3"] { grid-template-columns: repeat(2,1fr) !important; }
+  
+  /* Tab labels - icon only on very small */
+  .sidebar-label { display: none !important; }
+  
+  /* Table cells smaller */
+  td, th { padding: 6px !important; font-size: 12px !important; }
+  
+  /* Buttons in a row wrap */
+  [style*="display:"flex",gap:6"] { flex-wrap: wrap !important; }
+  [style*="display:"flex",gap:8"] { flex-wrap: wrap !important; }
+  
+  /* Input full width */
+  input, select { width: 100% !important; }
+  
+  /* Modal padding */
+  .modal-box { padding: 16px 12px !important; }
+}
+
+/* ── Safe area for iOS notch/home bar ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .main-content, body {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+}
+
+/* ── Prevent zoom on input focus (iOS) ── */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    border-radius: 6px;
+  }
+}
+
+/* ── Improve tap highlighting ── */
+button, a, label, [onClick] {
+  -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+  tap-highlight-color: rgba(0,0,0,0.1);
+}
+
 </style>
 </head>
 <body>
@@ -610,19 +735,18 @@ function getPerms(auth, db){
   return custom ? {...base,...custom} : base;
 }
 function getUserMeta(auth, db){
-  // מחזיר דרגה ותפקיד של המשתמש הנוכחי
   const perms = db?.userPerms?.[auth.username]||{};
   const dynUser = db?.dynamicUsers?.[auth.username];
   if(dynUser) return {
-    rank: dynUser.rank||"",
+    rank: dynUser.rank || perms._rank || "",
     roleTitle: dynUser.roleTitle || perms._roleTitle || ""
   };
   const staticUser = USERS?.[auth.username];
   if(staticUser) return {
-    rank: staticUser.rank||"",
+    rank: perms._rank || staticUser.rank || "",
     roleTitle: perms._roleTitle || staticUser.roleTitle || ""
   };
-  return {rank:"", roleTitle: perms._roleTitle||""};
+  return {rank: perms._rank||"", roleTitle: perms._roleTitle||""};
 }
 function formatSigner(auth, db){
   const meta = getUserMeta(auth, db);
@@ -1112,7 +1236,7 @@ function SignaturePad({onSave}){
     <div>
       <div style={{border:"2px dashed #30363d",borderRadius:10,background:"var(--color-bg-canvas)",touchAction:"none",marginBottom:10,position:"relative"}}>
         {!hasStrokes&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--color-text-muted)",fontSize:"var(--text-base)",pointerEvents:"none"}}>✍️ חתום כאן באצבע</div>}
-        <canvas ref={canvasRef} width={500} height={150} style={{width:"100%",height:150,display:"block",borderRadius:8,cursor:"crosshair"}}
+        <canvas ref={canvasRef} width={500} height={150} style={{width:"100%",height:150,display:"block",borderRadius:8,cursor:"crosshair",touchAction:"none"}}
           onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
           onTouchStart={start} onTouchMove={move} onTouchEnd={end}/>
       </div>
@@ -9010,6 +9134,8 @@ function PermissionsTab({db, setDb, auth}){
   const [searchUser, setSearchUser] = useState("");
   const [editPassUser, setEditPassUser] = useState(null);
   const [editPassVal, setEditPassVal] = useState("");
+  const [editRankUser, setEditRankUser] = useState(null);
+  const [editRankVal, setEditRankVal] = useState("");
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [soldiers] = useState(()=>[...Object.values(loadDB()?.customSoldiers||{}),...RAW_SOLDIERS]);
 
@@ -9166,8 +9292,8 @@ function PermissionsTab({db, setDb, auth}){
                 <div style={{fontWeight:700,fontSize:"var(--text-base)"}}>{u.name}</div>
                 <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                   <span>{ROLE_LABELS[baseRole]||baseRole}{u.roleTitle&&<span style={{marginRight:6,color:"var(--color-accent-fg)",fontWeight:700}}>· {u.roleTitle}</span>}{u.rank&&<span style={{marginRight:6,color:"var(--color-warning-fg)",fontSize:10}}>{u.rank}</span>} • {username} {isDynamic&&<span style={{color:"var(--color-success-fg)",fontSize:10}}>● דינמי</span>}</span>
-                  {merged._roleTitle&&<span style={{background:"var(--btn-blue-bg)",color:"var(--color-accent-fg)",padding:"1px 7px",borderRadius:10,fontWeight:700}}>{merged._roleTitle}</span>}
-                  {u.rank&&<span style={{color:"var(--color-text-muted)"}}>{u.rank}</span>}
+                  {merged._roleTitle&&<span style={{background:"#1f6feb",color:"#ffffff",padding:"2px 8px",borderRadius:10,fontWeight:700,fontSize:"var(--text-xs)"}}>{merged._roleTitle}</span>}
+                  {(u.rank||merged._rank)&&<span style={{background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",borderRadius:8,padding:"1px 6px",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>{u.rank||merged._rank}</span>}
                 </div>
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -9182,6 +9308,8 @@ function PermissionsTab({db, setDb, auth}){
                 </span>}
                 <button onClick={()=>{setEditPassUser(username);setEditPassVal(db.userPasswords?.[username]||u.pass||"");}}
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
+                <button onClick={()=>{setEditRankUser(username);setEditRankVal(u.rank||"");}}
+                  style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🎖️ דרגה</button>
                 {username!==auth?.username&&(
                   <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
                 )}
@@ -9197,6 +9325,30 @@ function PermissionsTab({db, setDb, auth}){
                   }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
                   <button onClick={()=>{setEditPassUser(null);setEditPassVal("");}}
                     style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
+                </div>
+              )}
+              {editRankUser===username&&(
+                <div style={{marginTop:8}}>
+                  <label style={{...S.label,fontSize:"var(--text-xs)"}}>דרגה (תופיע בטפסים)</label>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <select value={editRankVal} onChange={e=>setEditRankVal(e.target.value)}
+                      style={{...S.input,flex:1,marginBottom:0}}>
+                      <option value="">— ללא דרגה —</option>
+                      {["רב-אלוף","אלוף","תת-אלוף",'אל"מ','סא"ל','רס"ן',"סרן","רב-סרן","סגן","רב-סמל","סמל ראשון","רב-טוראי","טוראי"].map(r=><option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <button onClick={()=>{
+                      let ndb=db;
+                      if(isDynamic){
+                        ndb={...db,dynamicUsers:{...db.dynamicUsers,[username]:{...db.dynamicUsers[username],rank:editRankVal}}};
+                      } else {
+                        // Static user - save rank to userPerms as _rank
+                        ndb={...db,userPerms:{...(db.userPerms||{}),[username]:{...(db.userPerms?.[username]||{}),_rank:editRankVal}}};
+                      }
+                      saveDB(ndb); setDb(ndb); setEditRankUser(null);
+                    }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
+                    <button onClick={()=>setEditRankUser(null)}
+                      style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
+                  </div>
                 </div>
               )}
             </div>
