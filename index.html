@@ -4612,7 +4612,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
       const signedIds=soldierIds.filter(id=>!g.remaining?.[id]);
       const remainingDetails=remainingIds.map(id=>{
         const sol=allSols.find(s=>s.id===id);
-        const asgn=db.assignments?.[id]??sol?.assigned??{};
+        const asgn=g.soldierAssigned?.[id]??db.assignments?.[id]??sol?.assigned??{};
         const weapons=Object.entries(asgn).filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false).map(([wepName,sr])=>{
           let serial=null;
           if(typeof sr==="string"&&sr.trim()&&sr!=="1")serial=sr.trim();
@@ -4620,7 +4620,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
           const sd=ALL_SERIALS.find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
           return {wepName,serial:serial||(sd?.serial?String(sd.serial):null),makat:sd?.makat||null,isWep:WEAPON_KEYS.includes(wepName)};
         });
-        return {id,name:sol?.name||id,unit:sol?.unit||"?",weapons};
+        return {id,name:sol?.name||id,unit:sol?.unit||"?",phone:sol?.phone||"",weapons};
       });
       const signedDetails=signedIds.map(id=>{const sol=allSols.find(s=>s.id===id);return {id,name:sol?.name||id};});
       const wepSum={};
@@ -4649,6 +4649,28 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     if(!window.confirm("למחוק?"))return;
     const ng={...(db.bulkGuarantors||{})};delete ng[key];
     const ndb={...db,bulkGuarantors:ng};saveDB(ndb);setDb(ndb);
+  }
+
+  function sendRemainingWA(rep){
+    // שלח לינק חתימה לכל הנותרים בערבות
+    const g = db.bulkGuarantors?.[rep.key];
+    if(!g) return;
+    const toSend = rep.remainingDetails.filter(s=>s.phone);
+    if(!toSend.length){ alert("אין מספרי טלפון לחיילים הנותרים"); return; }
+    const noPhone = rep.remainingDetails.filter(s=>!s.phone).map(s=>s.name);
+    if(noPhone.length) alert("ללא טלפון: "+noPhone.join(", "));
+    const link = "https://orenh943-cell.github.io/armory-9219";
+    const signLink = link+"?bulksign="+rep.key;
+    const msg = "שלום, הנציג "+rep.repName+" חתם על הציוד שלך.\nנא לאשר חתימה:\n"+signLink;
+    let idx=0;
+    function sendNext(){
+      if(idx>=toSend.length) return;
+      const sol=toSend[idx++];
+      const phone=phoneToWA(sol.phone);
+      if(phone) window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+      if(idx<toSend.length) setTimeout(sendNext,600);
+    }
+    sendNext();
   }
 
   function creditSoldier(repKey, soldierId, soldierName){
@@ -4753,6 +4775,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
             <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
               <button onClick={()=>setExpanded(isExp?null:rep.key)} style={{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>{isExp?"▲ פחות":"▼ פירוט"}</button>
               <button onClick={()=>printRepReport(rep)} style={{...S.btn("blue"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>🖨️ דוח</button>
+              {rep.remaining>0&&<button onClick={()=>sendRemainingWA(rep)} style={{...S.btn("wa"),padding:"3px 10px",fontSize:"var(--text-xs)"}}>📤 שלח ל-{rep.remaining} נותרים</button>}
               {rep.remaining>0&&<button onClick={()=>creditAll(rep.key)} style={{...S.btn("green"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>✅ זכה הכל</button>}
               {auth.role==="admin"&&<button onClick={()=>del(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
             </div>
@@ -5705,7 +5728,7 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
   // סכם כמויות לפי אמצעי
   const itemMap = {}; // {name: {qty, serials: [], makat}}
   soldiers.forEach(s => {
-    const assigned = db.assignments?.[s.id] ?? s.assigned ?? {};
+    const assigned = s.assigned ?? db.assignments?.[s.id] ?? {};
     Object.entries(assigned).forEach(([name, serial]) => {
       if(!itemMap[name]) itemMap[name] = {qty:0, serials:[], makat: NAME_TO_MAKAT[name]||""};
       itemMap[name].qty++;
@@ -10410,8 +10433,8 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
           <h2 style={{color:"var(--color-success-fg)",marginBottom:8}}>החתימה המרוכזת התקבלה!</h2>
           <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:20}}>{targetSoldiers.length} חיילים סומנו כחתומים בשם {repSearch}</p>
           <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap",marginBottom:12}}>
-            <button onClick={()=>downloadBulkForm(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("purple"),padding:"10px 20px",fontSize:"var(--text-base)"}}>⬇️ הורד שובר</button>
-            <button onClick={()=>sendBulkFormWA(repSearch,repId,selectedUnit,targetSoldiers,sigData,db)} style={{...S.btn("wa"),padding:"10px 20px",fontSize:"var(--text-base)"}}> 💬 שלח בוואטסאפ</button>
+            <button onClick={()=>downloadBulkForm(repSearch,repId,selectedUnit,targetSoldiers.map(s=>({...s,assigned:getSoldierAssigned(s)})),sigData,db)} style={{...S.btn("purple"),padding:"10px 20px",fontSize:"var(--text-base)"}}>⬇️ הורד שובר</button>
+            <button onClick={()=>sendBulkFormWA(repSearch,repId,selectedUnit,targetSoldiers.map(s=>({...s,assigned:getSoldierAssigned(s)})),sigData,db)} style={{...S.btn("wa"),padding:"10px 20px",fontSize:"var(--text-base)"}}> 💬 שלח בוואטסאפ</button>
             <button onClick={onClose} style={{...S.btn("green"),padding:"10px 20px",fontSize:"var(--text-base)"}}>סגור</button>
           </div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>
