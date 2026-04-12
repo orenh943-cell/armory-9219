@@ -10290,7 +10290,7 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
               ?<div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>אין חיילים להחתמה</div>
               :<div style={{maxHeight:260,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
                 {targetSoldiers.map(s=>{
-                  const allItems = Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(k));
+                  const allItems = Object.keys(s.assigned||{}).filter(k=>k&&String(k).trim());
                   const excluded = excludedItems[s.id]||new Set();
                   const active = allItems.filter(k=>!excluded.has(k));
                   const isExpanded = expandedSoldier===s.id;
