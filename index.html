@@ -5092,8 +5092,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off2 = fbOn("db/assignments", (assignments)=>{
       setDb(prev=>{
         const asgn = assignments||{};
-        // Mark that Firebase has responded — from now on, empty = truly empty (after reset)
-        const updated={...prev, assignments: asgn, _assignmentsLoaded: true};
+        // Only seed if completely empty (first run)
+        if(Object.keys(asgn).length === 0){
+          fbSet("db/assignments", sanitizeForFirebase(INITIAL_ASSIGNMENTS)).catch(()=>{});
+          const updated={...prev, assignments: INITIAL_ASSIGNMENTS};
+          try{localStorage.setItem(DB_KEY,JSON.stringify(updated));}catch(e){}
+          return updated;
+        }
+        const updated={...prev, assignments: asgn};
         try{localStorage.setItem(DB_KEY,JSON.stringify(updated));}catch(e){}
         return updated;
       });
@@ -5228,10 +5234,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
     return [...custom,...base].map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
-      // If Firebase has loaded assignments, use them (even if empty = reset happened)
-      // If Firebase hasn't loaded yet, fall back to built-in s.assigned
-      const soldierAssigned = db._assignmentsLoaded ? (assignments[s.id]||{}) : (assignments[s.id]??s.assigned||{});
-      return {...s,unit:normUnit(s.unit),assigned:soldierAssigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
+      return {...s,unit:normUnit(s.unit),assigned:assignments[s.id]??s.assigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
     });
   },[db]);
   const filtered=useMemo(()=>{let l=soldiers;if(filterUnit!=="הכל")l=l.filter(s=>s.unit===filterUnit);if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)||(s.squad||"").toLowerCase().includes(q));}return l;},[soldiers,filterUnit,search]);
