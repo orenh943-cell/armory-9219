@@ -1314,9 +1314,9 @@ function Login({onLogin}){
       const staticU = USERS[uTrim];
       const dynU = du[uTrim];
       const u = staticU||dynU;
-      // סיסמה: static USERS → תמיד עובדת עם הסיסמה המוגדרת
-      //         dynamic user → userPasswords מקבל עדיפות
-      const correctPass = staticU ? String(staticU.pass) : String(up[uTrim]||dynU?.pass||"");
+      // סיסמה: userPasswords מקבל עדיפות לכולם (מאפשר שינוי סיסמה)
+      //         fallback לסיסמה הסטטית אם אין ב-userPasswords
+      const correctPass = String(up[uTrim]||staticU?.pass||dynU?.pass||"");
       if(u && String(pTrim)===correctPass){
         onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null,editUnit:u.editUnit||"הכל"});
         return true;
@@ -10293,6 +10293,7 @@ function UserProfileModal({auth, db, setDb, onClose}){
     if(newPass.length<4){showMsg("סיסמה חייבת להכיל לפחות 4 תווים","error");return;}
     const ndb={...db,userPasswords:{...(db.userPasswords||{}),[auth.username]:newPass.trim()}};
     saveDB(ndb); setDb(ndb);
+    fbSet("db/userPasswords/"+auth.username, newPass.trim()).catch(()=>{});
     setNewPass(""); setNewPass2("");
     showMsg("✅ סיסמה עודכנה בהצלחה");
   }
@@ -10639,7 +10640,9 @@ function PermissionsTab({db, setDb, auth}){
                     style={{...S.input,flex:1,marginBottom:0}}/>
                   <button onClick={()=>{
                     const ndb={...db,userPasswords:{...(db.userPasswords||{}),[username]:editPassVal.trim()}};
-                    saveDB(ndb); setDb(ndb); setEditPassUser(null); setEditPassVal("");
+                    saveDB(ndb); setDb(ndb);
+                    fbSet("db/userPasswords/"+username, editPassVal.trim()).catch(()=>{});
+                    setEditPassUser(null); setEditPassVal("");
                   }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
                   <button onClick={()=>{setEditPassUser(null);setEditPassVal("");}}
                     style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
