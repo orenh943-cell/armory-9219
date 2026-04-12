@@ -4506,6 +4506,7 @@ function ResetTab({db, setDb, auth}){
         cabinets: {},
       };
       saveDB(ndb);
+      fbSet("db/unitItemsSeeded", true).catch(()=>{}); // prevent re-seed after reset
       setDb(ndb);
       setPhase("backup");
       logAction('איפוס_מלאי', 'איפוס מלאי מלא בוצע ע"י '+auth.name, auth.name);
@@ -5150,10 +5151,21 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off8 = fbOn("db/unitItems", (unitItems)=>{
       const items = unitItems||{};
+      // Only auto-seed on very first load (check if seeded flag exists)
       if(Object.keys(items).length===0 && IMPORTED_UNIT_ITEMS && Object.keys(IMPORTED_UNIT_ITEMS).length>0){
-        // Firebase empty - seed from imported data
-        fbSet("db/unitItems", IMPORTED_UNIT_ITEMS).catch(()=>{});
-        setDb(prev=>({...prev, unitItems: IMPORTED_UNIT_ITEMS}));
+        fbGet("db/unitItemsSeeded").then(seeded=>{
+          if(!seeded){
+            // First time ever - seed from imported data
+            fbSet("db/unitItems", IMPORTED_UNIT_ITEMS).catch(()=>{});
+            fbSet("db/unitItemsSeeded", true).catch(()=>{});
+            setDb(prev=>({...prev, unitItems: IMPORTED_UNIT_ITEMS}));
+          } else {
+            // Was explicitly reset - leave empty
+            setDb(prev=>({...prev, unitItems: {}}));
+          }
+        }).catch(()=>{
+          setDb(prev=>({...prev, unitItems: items}));
+        });
       } else {
         setDb(prev=>({...prev, unitItems: items}));
       }
