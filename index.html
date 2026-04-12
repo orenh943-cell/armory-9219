@@ -7078,6 +7078,24 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const totalAssigned = liveData.reduce((s,i)=>s+i.liveTotal,0);
   const totalFree = liveData.reduce((s,i)=>s+i.unassigned,0);
 
+  function deleteItem(itemName){
+    if(!window.confirm("למחוק "+itemName+" מהמלאי?")) return;
+    const master = {...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+    delete master[itemName];
+    const ndb={...db, armoryMaster:master, _armoryMasterLoaded:true};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/armoryMaster", master).catch(()=>{});
+    fbSet("db/armoryMasterSeeded", true).catch(()=>{});
+  }
+
+  function resetAllArmory(){
+    if(!window.confirm("לאפס את כל מלאי הארמון? כל הפריטים יימחקו.")) return;
+    const ndb={...db, armoryMaster:{}, _armoryMasterLoaded:true};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/armoryMaster", {}).catch(()=>{});
+    fbSet("db/armoryMasterSeeded", true).catch(()=>{});
+  }
+
   function printReport(){
     const win=window.open("","_blank");
     const unitLabel = filterUnit==="הכל"?"כל הגדוד":"פלוגה "+filterUnit;
@@ -7134,6 +7152,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setShowAddNew(true)} style={{...S.btn("blue"),padding:"7px 14px",fontSize:"var(--text-base)"}}>➕ הוסף פריט</button>
+          {auth.role==="admin"&&<button onClick={resetAllArmory} style={{...S.btn("red"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🗑️ אפס מלאי</button>}
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
         </div>
@@ -7204,6 +7223,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
               {auth.role==="admin"&&(
                 <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
+                <div onClick={e=>{e.stopPropagation();deleteItem(item.name);}}
+                  style={{marginTop:4,fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🗑️ מחק פריט</div>
               )}
             </div>
           );
