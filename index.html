@@ -2460,9 +2460,22 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     {view==="history"&&(
       <div>
         {db.signatures?.[soldier.id]&&<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-success-fg)"}}>
-          <div style={{fontWeight:700,color:"var(--color-success-fg)",marginBottom:6}}>✍️ חתימה פעילה</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontWeight:700,color:"var(--color-success-fg)"}}>✍️ חתימה פעילה</div>
+            <button onClick={()=>{
+              const sig=db.signatures[soldier.id];
+              const html=buildSignatureFormHtml({...soldier},{...sig,sigData:sig.sigData},soldier.assigned||{});
+              const blob=new Blob([html],{type:"text/html"});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+".html";
+              document.body.appendChild(a);a.click();document.body.removeChild(a);
+              setTimeout(()=>URL.revokeObjectURL(url),2000);
+            }} style={{...S.btn("blue"),padding:"2px 10px",fontSize:10,minHeight:24}}>⬇️ הורד טופס</button>
+          </div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>נחתם: {db.signatures[soldier.id].signedAt||"—"}</div>
-          {db.signatures[soldier.id].sigData&&<img src={db.signatures[soldier.id].sigData} style={{height:40,marginTop:6,borderRadius:4,border:"1px solid var(--color-border-muted)"}}/>}
+          {db.signatures[soldier.id].sigData&&<img src={db.signatures[soldier.id].sigData}
+            onClick={()=>window._showLightbox&&window._showLightbox(db.signatures[soldier.id].sigData)}
+            style={{height:48,marginTop:6,borderRadius:4,border:"1px solid var(--color-border-muted)",cursor:"zoom-in"}}/>}
         </div>}
         {(()=>{
           const hist = Object.entries(db.sigHistory?.[soldier.id]||{}).sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
@@ -2489,10 +2502,42 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           </div>;
         })()}
         {(()=>{const ts=getTestStatus(db,soldier.id);return ts.date?<div style={{...S.card,marginBottom:10,border:"1px solid var(--color-accent-fg)"}}>
-          <div style={{fontWeight:700,color:"var(--color-accent-fg)",marginBottom:6}}>📋 בוחן נשק</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontWeight:700,color:"var(--color-accent-fg)"}}>{ts.expired?"⚠️ בוחן פג תוקף":"📋 בוחן נשק פעיל"}</div>
+            {ts.img&&<button onClick={()=>{
+              const a=document.createElement("a");
+              a.href=ts.img;
+              a.download="בוחן_"+soldier.name+"_"+ts.date+".jpg";
+              a.click();
+            }} style={{...S.btn("blue"),padding:"2px 8px",fontSize:10,minHeight:24}}>⬇️ הורד</button>}
+          </div>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>ביצוע: {ts.date} | תוקף: {ts.expiry}</div>
-          {ts.img&&<img src={ts.img} onClick={()=>window._showLightbox&&window._showLightbox(ts.img)} style={{maxWidth:"100%",maxHeight:120,borderRadius:6,marginTop:6,cursor:"zoom-in"}}/>}
+          {ts.img&&<img src={ts.img} onClick={()=>window._showLightbox&&window._showLightbox(ts.img)} style={{maxWidth:"100%",maxHeight:160,borderRadius:6,marginTop:6,cursor:"zoom-in"}}/>}
         </div>:null;})()}
+        {(()=>{
+          const hist = Object.entries(db.testCertHistory?.[soldier.id]||{})
+            .sort(([,a],[,b])=>b.archivedAt>a.archivedAt?1:-1);
+          if(!hist.length) return null;
+          return <div style={{...S.card,marginBottom:10,border:"1px solid var(--color-border-muted)"}}>
+            <div style={{fontWeight:700,marginBottom:8}}>📁 בחנים קודמים ({hist.length})</div>
+            {hist.map(([key,cert])=>(
+              <div key={key} style={{padding:"8px 0",borderBottom:"1px solid var(--color-border-muted)",display:"flex",alignItems:"center",gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{cert.archivedAt||cert.date||"—"}</div>
+                </div>
+                {cert.img&&<img src={cert.img}
+                  onClick={()=>window._showLightbox&&window._showLightbox(cert.img)}
+                  style={{height:48,borderRadius:4,border:"1px solid var(--color-border-muted)",cursor:"zoom-in"}}/>}
+                {cert.img&&<button onClick={()=>{
+                  const a=document.createElement("a");
+                  a.href=cert.img;
+                  a.download="בוחן_"+soldier.name+"_"+(cert.archivedAt||"ישן")+".jpg";
+                  a.click();
+                }} style={{...S.btn("gray"),padding:"2px 8px",fontSize:10,minHeight:24}}>⬇️</button>}
+              </div>
+            ))}
+          </div>;
+        })()}
         {(()=>{
           const forms=Object.values(db.exitForms||{}).filter(f=>f.soldierId===soldier.id).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
           if(!forms.length) return null;
@@ -5096,6 +5141,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const offTest = fbOn("db/testCerts", (certs)=>{
       setDb(prev=>({...prev, testCerts: certs||{}}));
+    });
+    fbOn("db/testCertHistory", (hist)=>{
+      if(hist) setDb(prev=>({...prev, testCertHistory: hist}));
     });
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
@@ -10483,6 +10531,12 @@ function TestCertView({auth, db, setDb}){
     if(!certImg){ alert("יש להעלות תמונת אישור בוחן"); return; }
     if(!declared){ alert("יש לסמן את תיבת האישור"); return; }
     const entry = {img: certImg, date: new Date().toISOString()};
+    // ארכב את הבוחן הקודם לפני שמירת החדש
+    const prev = db.testCerts?.[auth.soldierId];
+    if(prev && prev.img){
+      const histKey = "cert_"+Date.now();
+      fbSet("db/testCertHistory/"+auth.soldierId+"/"+histKey, {...prev, archivedAt: new Date().toLocaleString("he-IL")}).catch(()=>{});
+    }
     fbSet("db/testCerts/"+auth.soldierId, entry).catch(()=>{});
     const ndb = {...db, testCerts:{...(db.testCerts||{}),[auth.soldierId]:entry}};
     try{localStorage.setItem("armory_9219_v4", JSON.stringify(ndb));}catch(e){}
