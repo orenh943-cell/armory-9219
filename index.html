@@ -759,6 +759,10 @@ function canEditUnit(auth, db, unit){
   const eu = auth?.editUnit || perms._editUnit || "הכל";
   return eu==="הכל" || !unit || eu===unit;
 }
+// מחיקות — רק אורן
+function canDelete(auth){
+  return auth?.username==="אורן" || auth?.name==="אורן חלפון";
+}
 function getUserMeta(auth, db){
   const perms = db?.userPerms?.[auth.username]||{};
   const dynUser = db?.dynamicUsers?.[auth.username];
@@ -781,7 +785,7 @@ function formatSigner(auth, db){
 const ALL_SERIALS = window.ALL_SERIALS_DATA;
 
 const NAME_TO_MAKAT = window.NAME_TO_MAKAT_DATA;
-function getMakat(name){return NAME_TO_MAKAT[name]||null;}
+function getMakat(name){return NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
 
 // שמור חתימה ישנה בהיסטוריה ואפס
 function archiveAndClearSig(db, soldierId){
@@ -2196,7 +2200,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       </div>
       {view==="profile"&&(
         <div>
-          {auth?.role==="admin"&&<div style={{display:"flex",gap:6,marginBottom:10,justifyContent:"flex-end"}}>
+          {canDelete(auth)&&<div style={{display:"flex",gap:6,marginBottom:10,justifyContent:"flex-end"}}>
             <button onClick={()=>setEditMode(p=>!p)} style={{...S.btn(editMode?"orange":"blue"),padding:"4px 12px",fontSize:"var(--text-sm)",minHeight:30}}>
               {editMode?"↩️ ביטול עריכה":"✏️ ערוך"}
             </button>
@@ -2242,7 +2246,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   return null;
                 })()}
                 <button onClick={()=>setShowDoc(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📄 טופס</button>
-                {sig&&<button onClick={clearSig} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
+                {sig&&canDelete(auth)&&<button onClick={clearSig} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
               </div>
             </div>
             {sig&&<img src={sig.sigData} style={{height:38,marginTop:10,borderRadius:4,border:"1px solid var(--color-border-default)"}} alt="חתימה"/>}
@@ -2636,6 +2640,82 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     </Modal>
   );
 }
+
+function InPersonSignModal({soldier, db, onSave, auth, onClose}){
+  const [sigData, setSigData] = React.useState(null);
+  const [done, setDone] = React.useState(false);
+  const assigned = db._assignmentsLoaded ? (db.assignments?.[soldier.id]||{}) : (db.assignments?.[soldier.id]??soldier.assigned??{});
+  const items = Object.entries(assigned);
+
+  function doSign(sig){
+    const signedAt = todayStr()+" "+nowStr();
+    const armoryUser = (()=>{
+      const allU={...(db.dynamicUsers||{}),...USERS};
+      const entry=Object.entries(allU).find(([,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[Object.keys(allU).find(k=>allU[k]===u)]?._roleTitle==="אחראי ארמון"));
+      if(!entry) return null;
+      const [uname,u]=entry;
+      const perms=db.userPerms?.[uname]||{};
+      return {name:u.name||uname, rank:u.rank||perms._rank||""};
+    })();
+    const issuerDisplay = armoryUser
+      ? [armoryUser.rank,"אחראי ארמון",armoryUser.name].filter(Boolean).join(" ")
+      : (auth?.name||"אחראי ארמון");
+    const sigEntry = {sigData:sig, signedAt, issuerName:issuerDisplay};
+    fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+    const ndb = {...db, signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+    try{localStorage.setItem("armory_9219_v4",JSON.stringify(ndb));}catch(e){}
+    onSave(ndb);
+    logAction("חתימה", soldier.name+" חתם ליד על נשק", auth?.name||"מנהל");
+    setSigData(sig);
+    setDone(true);
+  }
+
+  if(done) return (
+    <Modal title="✅ החתימה נשמרה" onClose={onClose}>
+      <div style={{textAlign:"center",padding:"20px 0"}}>
+        <div style={{fontSize:60,marginBottom:12}}>✅</div>
+        <h2 style={{color:"var(--color-success-fg)",marginBottom:8}}>{soldier.name} חתם!</h2>
+        <p style={{color:"var(--color-text-secondary)",marginBottom:20}}>החתימה נשמרה במערכת</p>
+        <button onClick={()=>{
+          const html=buildSignatureFormHtml({...soldier},{sigData,signedAt:todayStr()+" "+nowStr(),issuerName:auth?.name||"אחראי ארמון"},assigned);
+          const blob=new Blob([html],{type:"text/html"});
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+".html";
+          document.body.appendChild(a);a.click();document.body.removeChild(a);
+        }} style={{...S.btn("blue"),padding:"10px 24px",marginLeft:8}}>⬇️ הורד טופס</button>
+        <button onClick={onClose} style={{...S.btn("green"),padding:"10px 24px"}}>סגור</button>
+      </div>
+    </Modal>
+  );
+
+  return (
+    <Modal title={"✍️ חתימה ליד — "+soldier.name} onClose={onClose} wide>
+      <div style={{...S.card,marginBottom:16,background:"var(--color-bg-canvas)"}}>
+        <div style={{fontWeight:700,marginBottom:6}}>{soldier.name} • {soldier.id} • פלוגה {soldier.unit}</div>
+        {items.length===0
+          ?<div style={{color:"var(--color-text-muted)"}}>אין אמצעים משויכים</div>
+          :<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {items.map(([name,val])=>(
+              <span key={name} style={{padding:"3px 10px",borderRadius:12,fontSize:"var(--text-sm)",
+                background:WEAPON_KEYS.includes(name)?"var(--color-danger-subtle)":"var(--color-bg-subtle)",
+                border:"1px solid "+(WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-border-muted)"),
+                color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-text-primary)",
+                fontWeight:WEAPON_KEYS.includes(name)?700:400}}>
+                {name}{val&&val!==1&&val!==true?<span style={{fontFamily:"monospace",fontSize:10,marginRight:4,color:"var(--color-text-muted)"}}> {val}</span>:null}
+              </span>
+            ))}
+          </div>
+        }
+      </div>
+      <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:12,textAlign:"center"}}>
+        החייל יחתום כאן על המסך
+      </p>
+      <SignaturePad onSave={doSign}/>
+      <button onClick={onClose} style={{...S.btn("gray"),width:"100%",marginTop:8}}>ביטול</button>
+    </Modal>
+  );
+}
+
 
 function QuickModal({soldiers,db,onSave,onClose}){
   const [search,setSearch]=useState("");
@@ -4906,7 +4986,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
               <button onClick={()=>printRepReport(rep)} style={{...S.btn("blue"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>🖨️ דוח</button>
               {rep.remaining>0&&<button onClick={()=>sendRemainingWA(rep)} style={{...S.btn("wa"),padding:"3px 10px",fontSize:"var(--text-xs)"}}>📤 שלח ל-{rep.remaining} נותרים</button>}
               {rep.remaining>0&&<button onClick={()=>creditAll(rep.key)} style={{...S.btn("green"),padding:"3px 10px",fontSize:"var(--text-xs)",minHeight:26}}>✅ זכה הכל</button>}
-              {auth.role==="admin"&&<button onClick={()=>del(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
+              {canDelete(auth)&&<button onClick={()=>del(rep.key)} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:26}}>🗑️</button>}
             </div>
             {isExp&&<div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
               {rep.remainingDetails.map(sol=><div key={sol.id} style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
@@ -5243,6 +5323,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         // Already seeded V2 — use Firebase data
         fbGet("db/armoryMaster").then(master=>{
           if(master && Object.keys(master).length>0){
+            // Sync makat cache for getMakat() to use
+            if(master) Object.entries(master).forEach(([name,v])=>{ if(v.makat) { window._makatCache=window._makatCache||{}; window._makatCache[name]=String(v.makat); } });
             setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
           } else {
             setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
@@ -5290,6 +5372,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [filterUnit,setFilterUnit]=useState("הכל");
   const [filterSquad,setFilterSquad]=useState("הכל");
   const [selSoldier,setSelSoldier]=useState(null);
+  const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
   const [dailyType,setDailyType]=useState(null);
   const [quickModal,setQuickModal]=useState(false);
   const [bulkModal,setBulkModal]=useState(false);
@@ -5622,6 +5705,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
                       {!sig&&s.guarantee&&<Badge color="purple" small>🛡️ ערב: {s.guarantee.repName}</Badge>}
                       {!sig&&perms.canSign&&<button onClick={()=>sendWhatsApp(s)} style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
+                      {!sig&&perms.canSign&&<button onClick={()=>setSignInPersonSoldier(s)} style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>✍️ חתום ליד</button>}
                       {sig&&perms.canEdit&&<button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
                       <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>פרופיל</button>
                     </div>
@@ -5770,6 +5854,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth}/>}
+      {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
@@ -7080,7 +7165,7 @@ function CabinetsTab({db, setDb, auth}){
                     <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>({total} פריטים)</span>
                     {editMode&&<button onClick={()=>{setEditingCabName({unit:selectedUnit,idx:cabIdx});setCabNameVal(cabName);}}
                       style={{...S.btn("gray"),padding:"2px 7px",fontSize:10}}>✎</button>}
-                    {editMode&&<button onClick={()=>removeCabinet(selectedUnit,cabIdx)}
+                    {editMode&&canDelete(auth)&&<button onClick={()=>removeCabinet(selectedUnit,cabIdx)}
                       style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>🗑</button>}
                   </div>
                 )}
@@ -7360,6 +7445,20 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [newQty, setNewQty] = React.useState("1");
   const [newName, setNewName] = React.useState("");
   const [newMakat, setNewMakat] = React.useState("");
+  const [newUnit, setNewUnit] = React.useState("גדודי");
+  const [newAssignType, setNewAssignType] = React.useState("unit");
+  const [newNameSearch, setNewNameSearch] = React.useState("");
+  // All known item names from armoryMaster + ARMORY_MASTER for search
+  const allItemSuggestions = React.useMemo(()=>{
+    const master = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
+    return Object.entries(master).map(([name,v])=>({name, makat:String(v.makat||"")}))
+      .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  },[db.armoryMaster]);
+  const filteredItemSugg = React.useMemo(()=>{
+    if(!newNameSearch.trim()) return allItemSuggestions.slice(0,8);
+    const q = newNameSearch.toLowerCase();
+    return allItemSuggestions.filter(x=>x.name.toLowerCase().includes(q)||x.makat.includes(q)).slice(0,10);
+  },[newNameSearch, allItemSuggestions]);
   const [showSummary, setShowSummary] = React.useState(false);
   const [expandedAddItem, setExpandedAddItem] = React.useState(null);
 
@@ -7506,7 +7605,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setShowAddNew(true)} style={{...S.btn("blue"),padding:"7px 14px",fontSize:"var(--text-base)"}}>➕ הוסף פריט</button>
-          {auth.role==="admin"&&<button onClick={resetAllArmory} style={{...S.btn("red"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🗑️ אפס מלאי</button>}
+          {canDelete(auth)&&<button onClick={resetAllArmory} style={{...S.btn("red"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🗑️ אפס מלאי</button>}
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
         </div>
@@ -7602,7 +7701,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   ))}
                 </div>
               )}
-              {auth.role==="admin"&&(
+              {canDelete(auth)&&(
                 <div style={{display:"flex",gap:8,marginTop:4}} onClick={e=>e.stopPropagation()}>
                   <div onClick={()=>{setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
@@ -7668,7 +7767,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         padding:"2px 8px",borderRadius:10,color:isSoldier?"var(--color-accent-fg)":"var(--color-warning-fg)",fontWeight:600}}>
                         פלוגה {unit}
                       </span>
-                      {auth.role==="admin"&&<button onClick={()=>{
+                      {canDelete(auth)&&<button onClick={()=>{
                         const ndb={...db,unitItems:{...db.unitItems}};
                         delete ndb.unitItems[id];
                         const nItems={...db.unitItems}; delete nItems[id];
@@ -7943,35 +8042,71 @@ function MyStockTab({db, setDb, soldiers, auth}){
       {/* Modal הוספת פריט חדש */}
       {showAddNew&&(
         <Modal title="➕ הוספת פריט חדש למלאי ארמון" onClose={()=>{setShowAddNew(false);setNewName("");setNewMakat("");setNewSerial("");setNewQty("1");}}>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
 
-            <div>
-              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>📦 שם פריט <span style={{color:"var(--color-danger-fg)"}}>*</span></label>
-              <input value={newName} onChange={e=>setNewName(e.target.value)}
-                placeholder="לדוגמה: נגב 556"
-                autoFocus
-                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}}/>
+            {/* שורת חיפוש פריט */}
+            <div style={{position:"relative"}}>
+              <label style={{...S.label,fontWeight:700}}>🔍 שם פריט — חפש או הקלד חדש *</label>
+              <input value={newNameSearch||newName}
+                onChange={e=>{const v=e.target.value;setNewNameSearch(v);if(v!==newName){setNewName("");setNewMakat("");}}}
+                placeholder="הקלד שם אמצעי או מק&quot;ט..."
+                autoFocus style={{...S.input,padding:"10px 14px",fontSize:"var(--text-base)"}}/>
+              {filteredItemSugg.length>0&&!(newName&&newNameSearch===newName)&&(
+                <div style={{position:"absolute",top:"100%",right:0,left:0,
+                  background:"var(--color-bg-default)",border:"1px solid var(--color-accent-fg)",
+                  borderRadius:8,zIndex:200,maxHeight:220,overflowY:"auto",
+                  boxShadow:"0 6px 20px rgba(0,0,0,.4)"}}>
+                  {filteredItemSugg.map(x=>(
+                    <div key={x.name} onClick={()=>{setNewName(x.name);setNewMakat(x.makat||"");setNewNameSearch(x.name);}}
+                      style={{padding:"9px 14px",cursor:"pointer",display:"flex",
+                        justifyContent:"space-between",alignItems:"center",
+                        borderBottom:"1px solid var(--color-border-muted)"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=""}>
+                      <span style={{fontWeight:600}}>{x.name}</span>
+                      {x.makat&&<span style={{fontSize:11,color:"var(--color-text-muted)",fontFamily:"monospace"}}>מק"ט {x.makat}</span>}
+                    </div>
+                  ))}
+                  <div style={{padding:"7px 14px",fontSize:11,color:"var(--color-text-muted)",
+                    borderTop:"1px solid var(--color-border-muted)"}}>
+                    לא מוצא? המשך להקליד לפריט חדש
+                  </div>
+                </div>
+              )}
+              {newName&&<div style={{fontSize:11,color:"var(--color-success-fg)",marginTop:2}}>✅ {newName}</div>}
             </div>
 
+            {/* מקט — אוטומטי אם קיים, ניתן לשינוי */}
             <div>
-              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>🔢 מק"ט</label>
+              <label style={{...S.label,fontWeight:700}}>🔢 מק"ט {newMakat?"(אוטומטי, ניתן לשינוי)":""}</label>
               <input value={newMakat} onChange={e=>setNewMakat(e.target.value)}
-                placeholder="לדוגמה: 100012066"
-                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
+                placeholder="100012066" inputMode="numeric"
+                style={{...S.input,padding:"10px 14px",fontFamily:"monospace"}}/>
             </div>
 
+            {/* סידורי */}
             <div>
-              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>🔖 מספר סידורי <span style={{color:"var(--color-text-muted)",fontWeight:400}}>(אם יש)</span></label>
+              <label style={{...S.label,fontWeight:700}}>🔖 מספר סידורי / צ (אופציונלי)</label>
               <input value={newSerial} onChange={e=>setNewSerial(e.target.value)}
-                placeholder="לדוגמה: 923456"
-                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
+                placeholder="923456" inputMode="numeric"
+                style={{...S.input,padding:"10px 14px",fontFamily:"monospace"}}/>
             </div>
 
-            <div>
-              <label style={{...S.label,fontSize:"var(--text-base)",fontWeight:700}}>📊 כמות</label>
-              <input value={newQty} onChange={e=>setNewQty(e.target.value.replace(/[^0-9]/g,""))}
-                placeholder="1"
-                style={{...S.input,fontSize:"var(--text-base)",padding:"10px 14px"}} inputMode="numeric"/>
+            {/* פלוגה + כמות */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={{...S.label,fontWeight:700}}>🏢 פלוגה / יחידה</label>
+                <select value={newUnit} onChange={e=>setNewUnit(e.target.value)} style={{...S.input,padding:"10px 14px"}}>
+                  <option value="גדודי">🏛️ ארמון גדודי</option>
+                  {["א","ב","ג","מסייעת","אגמ","פלסמ"].map(u=><option key={u} value={u}>פלוגה {u}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{...S.label,fontWeight:700}}>📊 כמות</label>
+                <input value={newQty} onChange={e=>setNewQty(e.target.value.replace(/[^0-9]/g,""))}
+                  placeholder="1" inputMode="numeric"
+                  style={{...S.input,padding:"10px 14px"}}/>
+              </div>
             </div>
 
             {newName.trim()&&(
@@ -8006,6 +8141,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 // 2. Update NAME_TO_MAKAT if new
                 if(makat && !NAME_TO_MAKAT[name]){
                   NAME_TO_MAKAT[name] = parseInt(makat)||makat;
+                  window._makatCache=window._makatCache||{}; window._makatCache[name]=String(makat);
                 }
 
                 // 3. Update EQ_COLS if new
@@ -8026,7 +8162,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   newUnitItems[key] = {
                     n: name,
                     s: qty===1 ? serial||null : null,
-                    u: "פנוי",
+                    u: newUnit,
                     t: "unit",
                     addedAt: new Date().toLocaleDateString("he-IL"),
                     ...(makat ? {makat: parseInt(makat)||makat} : {})
@@ -8037,7 +8173,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 saveDB(ndb); setDb(ndb);
                 logAction("הוספת_פריט", "נוסף "+qty+" x "+name+(serial?" סידורי:"+serial:"")+(makat?" מקט:"+makat:""), auth?.name||"מערכת");
                 setShowAddNew(false);
-                setNewName(""); setNewMakat(""); setNewSerial(""); setNewQty("1");
+                setNewName(""); setNewMakat(""); setNewSerial(""); setNewQty("1"); setNewUnit("גדודי");
               }} style={{...S.btn("blue"),flex:1}}>
                 ✅ הוסף למלאי
               </button>
@@ -10493,7 +10629,7 @@ function PermissionsTab({db, setDb, auth}){
                   {db.userSigs?.[username]?"✅ חתימה":"✍️ חתימה"}
                 </button>
                 {username!==auth?.username&&(
-                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
+                  {canDelete(auth)&&<button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
                 )}
               </div>
               {editPassUser===username&&(
