@@ -4783,7 +4783,15 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
               {rep.remainingDetails.map(sol=><div key={sol.id} style={{marginBottom:5,padding:"6px 8px",background:"var(--color-bg-subtle)",borderRadius:"var(--radius-md)",border:"1px solid var(--color-border-muted)"}}>
                 <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span>{sol.name} <span style={{fontWeight:400,color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>פלוגה {sol.unit}</span></span>
-                  <button onClick={()=>creditSoldier(rep.key,sol.id,sol.name)} style={{...S.btn("green"),padding:"2px 10px",fontSize:"var(--text-xs)",minHeight:24}}>✅ זכה</button>
+                  <div style={{display:"flex",gap:4}}>
+                    {sol.phone&&<button onClick={()=>{
+                      const phone=phoneToWA(sol.phone);
+                      const link="https://orenh943-cell.github.io/armory-9219?bulksign="+rep.key;
+                      const msg="שלום "+sol.name+",\nנא לאשר חתימת "+rep.repName+" על הציוד שלך:\n"+link;
+                      window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+                    }} style={{...S.btn("wa"),padding:"2px 8px",fontSize:"var(--text-xs)",minHeight:24}}>📤 שלח</button>}
+                    <button onClick={()=>creditSoldier(rep.key,sol.id,sol.name)} style={{...S.btn("green"),padding:"2px 10px",fontSize:"var(--text-xs)",minHeight:24}}>✅ זכה</button>
+                  </div>
                 </div>
                 {sol.weapons.length>0
                   ?<div>{sol.weapons.map((w,wi)=><div key={wi} style={{display:"flex",gap:5,fontSize:"var(--text-xs)",padding:"1px 0"}}>
