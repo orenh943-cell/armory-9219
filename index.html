@@ -5159,29 +5159,27 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         setDb(prev=>({...prev, unitItems: items}));
       }
     });
-    const off9 = fbOn("db/armoryMaster", (master)=>{
+    // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
+    fbGet("db/armoryMaster").then(master=>{
       if(master && Object.keys(master).length>0){
         setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
       } else {
-        // Empty — check if this is first load or post-reset
         fbGet("db/armoryMasterSeeded").then(seeded=>{
           if(!seeded){
-            // First time ever - seed
             fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
             fbSet("db/armoryMasterSeeded", true).catch(()=>{});
-            setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
+            setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
           } else {
-            // Was reset intentionally - keep empty
             setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
           }
         }).catch(()=>{
-          // fbGet failed - seed to be safe only if first load
-          setDb(prev=>prev.armoryMaster&&Object.keys(prev.armoryMaster).length>0
-            ? prev
-            : {...prev, armoryMaster: ARMORY_MASTER});
+          setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
         });
       }
+    }).catch(()=>{
+      setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
     });
+    const off9 = ()=>{}; // placeholder (no listener needed for armoryMaster)
     const off10 = fbOn("db/weaponLocations", (locs)=>{
       setDb(prev=>({...prev, weaponLocations: locs||{}}));
     });
@@ -7079,20 +7077,22 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const totalFree = liveData.reduce((s,i)=>s+i.unassigned,0);
 
   function deleteItem(itemName){
-    if(!window.confirm("למחוק "+itemName+" מהמלאי?")) return;
+    if(!window.confirm("לאפס כמות עבור "+itemName+"?")) return;
     const master = {...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
-    delete master[itemName];
+    master[itemName] = {...(master[itemName]||{}), total:0};
     const ndb={...db, armoryMaster:master, _armoryMasterLoaded:true};
     saveDB(ndb); setDb(ndb);
-    fbSet("db/armoryMaster", master).catch(()=>{});
+    fbSet("db/armoryMaster/"+itemName, master[itemName]).catch(()=>{});
     fbSet("db/armoryMasterSeeded", true).catch(()=>{});
   }
 
   function resetAllArmory(){
-    if(!window.confirm("לאפס את כל מלאי הארמון? כל הפריטים יימחקו.")) return;
-    const ndb={...db, armoryMaster:{}, _armoryMasterLoaded:true};
+    if(!window.confirm("לאפס כמויות של כל הפריטים? שמות ומקטים נשמרים.")) return;
+    const base = db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER;
+    const zeroed = Object.fromEntries(Object.entries(base).map(([k,v])=>[k,{...v,total:0}]));
+    const ndb={...db, armoryMaster:zeroed, _armoryMasterLoaded:true};
     saveDB(ndb); setDb(ndb);
-    fbSet("db/armoryMaster", {}).catch(()=>{});
+    fbSet("db/armoryMaster", zeroed).catch(()=>{});
     fbSet("db/armoryMasterSeeded", true).catch(()=>{});
   }
 
@@ -7225,7 +7225,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   <div onClick={()=>{setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
                   <div onClick={()=>deleteItem(item.name)}
-                    style={{fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🗑️ מחק פריט</div>
+                    style={{fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🔄 אפס כמות</div>
                 </div>
               )}
             </div>
