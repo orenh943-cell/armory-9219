@@ -5160,15 +5160,17 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       }
     });
     // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
-    fbGet("db/armoryMaster").then(master=>{
-      if(master && Object.keys(master).length>0){
-        setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
+    fbGet("db/armoryMasterSeededV2").then(seededV2=>{
+      if(!seededV2){
+        // First load with V2 — force zero all totals in Firebase
+        fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
+        fbSet("db/armoryMasterSeededV2", true).catch(()=>{});
+        setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
       } else {
-        fbGet("db/armoryMasterSeededV2").then(seeded=>{
-          if(!seeded){
-            fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
-            fbSet("db/armoryMasterSeededV2", true).catch(()=>{});
-            setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
+        // Already seeded V2 — use Firebase data
+        fbGet("db/armoryMaster").then(master=>{
+          if(master && Object.keys(master).length>0){
+            setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
           } else {
             setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
           }
@@ -5176,8 +5178,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
         });
       }
-    }).catch(()=>{
-      setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
     });
     const off9 = ()=>{}; // placeholder (no listener needed for armoryMaster)
     const off10 = fbOn("db/weaponLocations", (locs)=>{
