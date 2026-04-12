@@ -1310,10 +1310,10 @@ function Login({onLogin}){
       const staticU = USERS[uTrim];
       const dynU = du[uTrim];
       const u = staticU||dynU;
-      // סיסמה סטטית (USERS) תמיד עובדת; dynamicUser יכול לקבל סיסמה מ-userPasswords
-      const effectivePass = staticU ? (String(pTrim)===String(staticU.pass) ? pTrim : up[uTrim]||staticU.pass)
-                                    : (up[uTrim]||dynU?.pass);
-      if(u && String(pTrim)===String(staticU?.pass||effectivePass)){
+      // סיסמה: static USERS → תמיד עובדת עם הסיסמה המוגדרת
+      //         dynamic user → userPasswords מקבל עדיפות
+      const correctPass = staticU ? String(staticU.pass) : String(up[uTrim]||dynU?.pass||"");
+      if(u && String(pTrim)===correctPass){
         onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null,editUnit:u.editUnit||"הכל"});
         return true;
       }
@@ -9820,7 +9820,12 @@ function PermissionsTab({db, setDb, auth}){
   },[]);
   const staticUsers = Object.entries(USERS).filter(([k,u])=>u.role==="manager"||u.role==="admin"); // static admins always shown
   const dynamicUsers = Object.entries(db.dynamicUsers||{});
-  const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
+  // Merge userPerms phone into static users so phone displays correctly
+  const staticUsersWithPhone = staticUsers.map(([k,u])=>[k,{
+    ...u,
+    phone: db.userPerms?.[k]?.phone || db.userPerms?.[k]?._phone || u.phone || ""
+  }]);
+  const allUsers = [...staticUsersWithPhone, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
   const [showAdd, setShowAdd] = useState(false);
   const [newUser, setNewUser] = useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",editUnit:"הכל",soldierId:"",phone:""});
@@ -10089,7 +10094,7 @@ function PermissionsTab({db, setDb, auth}){
                       if(isDynamic){
                         ndb={...db,dynamicUsers:{...db.dynamicUsers,[username]:{...db.dynamicUsers[username],phone:editPhoneVal.trim()}}};
                       } else {
-                        ndb={...db,userPerms:{...(db.userPerms||{}),[username]:{...(db.userPerms?.[username]||{}),_phone:editPhoneVal.trim()}}};
+                        ndb={...db,userPerms:{...(db.userPerms||{}),[username]:{...(db.userPerms?.[username]||{}),phone:editPhoneVal.trim(),_phone:editPhoneVal.trim()}}};
                       }
                       saveDB(ndb); setDb(ndb); setEditPhoneUser(null);
                     }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
