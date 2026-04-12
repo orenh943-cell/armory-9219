@@ -5161,7 +5161,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off9 = fbOn("db/armoryMaster", (master)=>{
       if(master && Object.keys(master).length>0){
-        setDb(prev=>({...prev, armoryMaster: master}));
+        setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
       } else {
         // Empty — check if this is first load or post-reset
         fbGet("db/armoryMasterSeeded").then(seeded=>{
@@ -5172,7 +5172,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
           } else {
             // Was reset intentionally - keep empty
-            setDb(prev=>({...prev, armoryMaster: {}}));
+            setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
           }
         }).catch(()=>{
           // fbGet failed - seed to be safe only if first load
@@ -7051,7 +7051,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
       });
     });
 
-    const masterData = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : ARMORY_MASTER;
+    // Only fall back to ARMORY_MASTER on first load (before Firebase responds)
+    // If armoryMaster is {} after Firebase loaded → it was reset intentionally → show empty
+    const masterData = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : (db._armoryMasterLoaded ? {} : ARMORY_MASTER);
     return Object.entries(masterData).map(([name, info])=>{
       const liveByUnit = assigned[name]||{};
       const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
