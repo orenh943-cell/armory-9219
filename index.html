@@ -4465,7 +4465,7 @@ function ExternalSignTab({db, setDb, auth}){
 }
 
 // =================== RESET TAB ===================
-const RESET_PASSWORD = "9219reset";
+const RESET_PASSWORD = "7680832";
 
 function ResetTab({db, setDb, auth}){
   const [phase, setPhase] = React.useState("menu"); // menu | confirm | backup | restore
@@ -5712,7 +5712,7 @@ function ViewerApp({auth, onLogout, db}){
     const custom=Object.values(db.customSoldiers||{});
     const all=[...custom,...RAW_SOLDIERS];
     return all.map(s=>{
-      const assigned=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+      const assigned=db.assignments?db.assignments[s.id]??{}:s.assigned||{};
       const sig=db.signatures?.[s.id];
       return {...s,assigned,signature:!!sig};
     });
