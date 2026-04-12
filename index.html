@@ -10131,6 +10131,22 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const [manualMode,setManualMode]=React.useState(false);
   const [selectedIds,setSelectedIds]=React.useState({});
   const [soldierSearch,setSoldierSearch]=React.useState("");
+  // excludedItems: {soldierId: Set of item names to exclude}
+  const [excludedItems,setExcludedItems]=React.useState({});
+  const [expandedSoldier,setExpandedSoldier]=React.useState(null);
+
+  function toggleExclude(soldierId, itemName){
+    setExcludedItems(prev=>{
+      const cur = new Set(prev[soldierId]||[]);
+      if(cur.has(itemName)) cur.delete(itemName); else cur.add(itemName);
+      return {...prev, [soldierId]: cur};
+    });
+  }
+  function getSoldierAssigned(s){
+    const excluded = excludedItems[s.id]||new Set();
+    const all = s.assigned||{};
+    return Object.fromEntries(Object.entries(all).filter(([k])=>!excluded.has(k)));
+  }
 
   const units=["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
   const autoSoldiers=React.useMemo(()=>{
@@ -10159,14 +10175,19 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
     const signedAt=todayStr()+" "+nowStr();
     const guarantorKey=repId||("bulk_"+Date.now());
     // המר מערכים לאובייקטים (Firebase לא אוהב מערכים)
-    const soldiersObj={}; targetSoldiers.forEach(s=>{soldiersObj[s.id]=true;});
-    const remainingObj={}; targetSoldiers.forEach(s=>{remainingObj[s.id]=true;});
+    const activeSoldiers = targetSoldiers.filter(s=>Object.keys(getSoldierAssigned(s)).length>0);
+    const soldiersObj={}; activeSoldiers.forEach(s=>{soldiersObj[s.id]=true;});
+    const remainingObj={}; activeSoldiers.forEach(s=>{remainingObj[s.id]=true;});
+    // שמור גם assigned הפילטרי לכל חייל
+    const soldierAssignedObj={};
+    activeSoldiers.forEach(s=>{soldierAssignedObj[s.id]=getSoldierAssigned(s);});
     const newGuarantors={...(db.bulkGuarantors||{})};
     newGuarantors[guarantorKey]={
       repId,repName:repSearch,sigData:sig,signedAt,
       unit:selectedUnit,
       soldiers:soldiersObj,
       remaining:remainingObj,
+      soldierAssigned:soldierAssignedObj,
     };
     const ndb={...db,bulkGuarantors:newGuarantors};
     saveDB(ndb);
@@ -10266,17 +10287,55 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
           <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:12,marginBottom:16}}>
             <div style={{fontWeight:700,marginBottom:8,fontSize:"var(--text-base)"}}>⚠️ חיילים שיחתמו ({targetSoldiers.length})</div>
             {targetSoldiers.length===0
-              ?<div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>אין חיילים ממתינים בפלוגה זו</div>
-              :<div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
-                {targetSoldiers.map(s=>(
-                  <div key={s.id} style={{fontSize:"var(--text-sm)",color:"var(--color-text-primary)",display:"flex",justifyContent:"space-between"}}>
-                    <span>{s.name}</span>
-                    <span style={{color:"var(--color-text-secondary)"}}>{Object.keys(s.assigned).filter(k=>WEAPON_KEYS.includes(k)).join(", ")}</span>
-                  </div>
-                ))}
+              ?<div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>אין חיילים להחתמה</div>
+              :<div style={{maxHeight:260,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+                {targetSoldiers.map(s=>{
+                  const allItems = Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(k));
+                  const excluded = excludedItems[s.id]||new Set();
+                  const active = allItems.filter(k=>!excluded.has(k));
+                  const isExpanded = expandedSoldier===s.id;
+                  return (
+                    <div key={s.id} style={{border:"1px solid var(--color-border-muted)",borderRadius:6,overflow:"hidden"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                        background:"var(--color-bg-canvas)",cursor:"pointer"}}
+                        onClick={()=>setExpandedSoldier(isExpanded?null:s.id)}>
+                        <span style={{fontWeight:700,fontSize:"var(--text-sm)",flex:1}}>{s.name}</span>
+                        <span style={{fontSize:"var(--text-xs)",color:excluded.size>0?"var(--color-warning-fg)":"var(--color-text-muted)"}}>
+                          {active.length}/{allItems.length} אמצעים
+                          {excluded.size>0&&<span style={{marginRight:4,color:"var(--color-warning-fg)"}}>⚠️</span>}
+                        </span>
+                        <span style={{fontSize:11,color:"var(--color-text-muted)"}}>{isExpanded?"▲":"▼"}</span>
+                      </div>
+                      {isExpanded&&(
+                        <div style={{padding:"6px 10px",background:"var(--color-bg-default)",borderTop:"1px solid var(--color-border-muted)"}}>
+                          <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginBottom:4}}>
+                            בטל סימון = יוסר מהחתמה
+                          </div>
+                          {allItems.map(item=>{
+                            const isActive = !excluded.has(item);
+                            return (
+                              <div key={item} onClick={()=>toggleExclude(s.id,item)}
+                                style={{display:"flex",alignItems:"center",gap:8,padding:"4px 6px",cursor:"pointer",borderRadius:4,
+                                  background:isActive?"transparent":"var(--color-danger-subtle)"}}>
+                                <div style={{width:16,height:16,borderRadius:3,border:"2px solid "+(isActive?"var(--color-accent-fg)":"var(--color-border-muted)"),
+                                  background:isActive?"var(--color-accent-fg)":"transparent",
+                                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                  {isActive&&<span style={{color:"#fff",fontSize:10,fontWeight:900}}>✓</span>}
+                                </div>
+                                <span style={{fontSize:"var(--text-sm)",color:isActive?"var(--color-text-primary)":"var(--color-text-muted)",
+                                  textDecoration:isActive?"none":"line-through"}}>
+                                  {item}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            }
-          </div>
+            }          </div>
 
           {/* Phone input for sending link */}
           <div style={{marginBottom:12}}>
@@ -10297,12 +10356,15 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
                 // Create bulk guarantor entry first (pending signature)
                 const guarantorKey = repId||("bulk_"+Date.now());
                 const signedAt = todayStr()+" "+nowStr();
-                const soldiersObj={}; targetSoldiers.forEach(s=>{soldiersObj[s.id]=true;});
-                const remainingObj={}; targetSoldiers.forEach(s=>{remainingObj[s.id]=true;});
+                const activeSols = targetSoldiers.filter(s=>Object.keys(getSoldierAssigned(s)).length>0);
+                const soldiersObj={}; activeSols.forEach(s=>{soldiersObj[s.id]=true;});
+                const remainingObj={}; activeSols.forEach(s=>{remainingObj[s.id]=true;});
+                const soldierAssignedObj={}; activeSols.forEach(s=>{soldierAssignedObj[s.id]=getSoldierAssigned(s);});
                 const newGuarantors={...(db.bulkGuarantors||{})};
                 newGuarantors[guarantorKey]={
                   repId,repName:repSearch,sigData:null,signedAt,
                   unit:selectedUnit,soldiers:soldiersObj,remaining:remainingObj,pendingSign:true,
+                  soldierAssigned:soldierAssignedObj,
                 };
                 const ndb={...db,bulkGuarantors:newGuarantors};
                 saveDB(ndb); onSave(ndb);
@@ -10466,9 +10528,28 @@ function TestCertView({auth, db, setDb}){
 function BulkRepSignView({auth, db, setDb}){
   const [showPad, setShowPad] = React.useState(false);
   const [done, setDone] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
 
   const guarantorKey = auth.bulkSignKey;
+
+  // Listen to Firebase directly for this guaranty key
+  React.useEffect(()=>{
+    const off = fbOn("db/bulkGuarantors/"+guarantorKey, (val)=>{
+      if(val){
+        setDb(prev=>({...prev, bulkGuarantors:{...(prev.bulkGuarantors||{}), [guarantorKey]:val}}));
+      }
+      setLoading(false);
+    });
+    setTimeout(()=>setLoading(false), 6000);
+    return ()=>off();
+  },[]);
+
   const g = db.bulkGuarantors?.[guarantorKey];
+
+  if(loading && !g) return <div style={{textAlign:"center",padding:60}}>
+    <div style={{fontSize:36,marginBottom:12}}>⏳</div>
+    <div style={{fontWeight:700,fontSize:"var(--text-lg)"}}>טוען...</div>
+  </div>;
 
   if(!g) return <div style={{textAlign:"center",padding:40}}>
     <div style={{fontSize:40,marginBottom:12}}>❌</div>
@@ -10752,6 +10833,11 @@ function App(){
       try{localStorage.removeItem("armory_auth");}catch(e){}
       try{sessionStorage.removeItem("armory_session");}catch(e){}
     }
+    // שמור context של לינק ייעודי לsession - כדי שרענון לא יאבד את הדף
+    if(signId) try{sessionStorage.setItem("link_sign", signId);}catch(e){}
+    if(testCertId) try{sessionStorage.setItem("link_testcert", testCertId);}catch(e){}
+    if(bulkSignId) try{sessionStorage.setItem("link_bulksign", bulkSignId);}catch(e){}
+    if(exitId) try{sessionStorage.setItem("link_exit", exitId);}catch(e){}
     // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
     function findSoldier(id){
       const raw=RAW_SOLDIERS.find(x=>x.id===id);
@@ -10803,6 +10889,28 @@ function App(){
       if(s) return{role:"soldier",name:s.name,soldierId:signId,autoSign:true,assignedFromLink};
       return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink};
     }
+    // בדוק אם יש context של לינק ייעודי מרענון
+    try{
+      const savedSign = sessionStorage.getItem("link_sign");
+      const savedTest = sessionStorage.getItem("link_testcert");
+      const savedBulk = sessionStorage.getItem("link_bulksign");
+      const savedExit = sessionStorage.getItem("link_exit");
+      if(savedSign){
+        const s2=RAW_SOLDIERS.find(x=>x.id===savedSign);
+        if(s2) return{role:"soldier",name:s2.name,soldierId:savedSign,autoSign:true,assignedFromLink:{}};
+      }
+      if(savedTest){
+        const ts2=RAW_SOLDIERS.find(x=>x.id===savedTest);
+        return{role:"testcert",name:ts2?.name||"חייל",soldierId:savedTest,autoTestCert:true};
+      }
+      if(savedBulk){
+        return{role:"bulkrep",name:"נציג",bulkSignKey:savedBulk,autoBulkSign:true};
+      }
+      if(savedExit){
+        const se=RAW_SOLDIERS.find(x=>x.id===savedExit);
+        return{role:"soldier",name:se?.name||"חייל",soldierId:savedExit,autoExitForm:true};
+      }
+    }catch(e){}
     // שחזר session שמור — רק מנהלים, לא חיילים
     const SESSION_VERSION = "v4"; // שנה כדי לאפס את כל הסשנים
     try{
@@ -10846,6 +10954,7 @@ function App(){
   }
   function handleLogout(){
     try{sessionStorage.removeItem("armory_session");}catch(e){}
+    try{["link_sign","link_testcert","link_bulksign","link_exit"].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
     setAuth(null);
   }
 
