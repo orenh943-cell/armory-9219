@@ -5230,7 +5230,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
       // If Firebase has loaded assignments, use them (even if empty = reset happened)
       // If Firebase hasn't loaded yet, fall back to built-in s.assigned
-      const soldierAssigned = db._assignmentsLoaded ? (assignments[s.id]||{}) : (assignments[s.id]??s.assigned||{});
+      const soldierAssigned = db._assignmentsLoaded ? (assignments[s.id]||{}) : (assignments[s.id]!==undefined ? assignments[s.id] : (s.assigned||{}));
       return {...s,unit:normUnit(s.unit),assigned:soldierAssigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
     });
   },[db]);
