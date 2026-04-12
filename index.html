@@ -1307,9 +1307,13 @@ function Login({onLogin}){
 
     function tryLogin(du, up){
       // מנפק/מנהל
-      const u = USERS[uTrim]||du[uTrim];
-      const effectivePass = up[uTrim]||u?.pass;
-      if(u && String(pTrim)===String(effectivePass)){
+      const staticU = USERS[uTrim];
+      const dynU = du[uTrim];
+      const u = staticU||dynU;
+      // סיסמה סטטית (USERS) תמיד עובדת; dynamicUser יכול לקבל סיסמה מ-userPasswords
+      const effectivePass = staticU ? (String(pTrim)===String(staticU.pass) ? pTrim : up[uTrim]||staticU.pass)
+                                    : (up[uTrim]||dynU?.pass);
+      if(u && String(pTrim)===String(staticU?.pass||effectivePass)){
         onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null,editUnit:u.editUnit||"הכל"});
         return true;
       }
@@ -4496,11 +4500,14 @@ function ResetTab({db, setDb, auth}){
         }
       });
       // מחק assignments+signatures בלבד — שומר מלאי, ארונות, חיילים
-      const ndb={...db,assignments:{},signatures:{},bulkGuarantors:{},exitForms:{},actLog:{},loginLog:{}};
+      const ndb={...db,assignments:{},signatures:{},bulkGuarantors:{},exitForms:{},actLog:{},loginLog:{},armoryMaster:{}};
       saveDB(ndb);
       fbSet("db/assignments",{}).catch(()=>{});
       fbSet("db/signatures",{}).catch(()=>{});
       fbSet("db/bulkGuarantors",{}).catch(()=>{});
+      fbSet("db/armoryMaster",{}).catch(()=>{});
+      fbSet("db/armoryMasterSeeded", true).catch(()=>{});
+      fbSet("db/unitItemsSeeded", true).catch(()=>{});
       setDb(ndb);
       setPhase("backup");
       logAction("איפוס","איפוס שיוכים וחתימות ע\"י "+auth.name, auth.name);    });
@@ -5157,18 +5164,18 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off9 = fbOn("db/armoryMaster", (master)=>{
       if(master && Object.keys(master).length>0){
-        // Check if data is valid (M4 should have total>0)
-        const m4 = master["M4"];
-        if(!m4 || !m4.total || m4.total===0){
-          // Re-seed from code
-          fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
-          setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
-        } else {
-          setDb(prev=>({...prev, armoryMaster: master}));
-        }
+        setDb(prev=>({...prev, armoryMaster: master}));
       } else {
-        fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
-        setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
+        // Only seed on very first load
+        fbGet("db/armoryMasterSeeded").then(seeded=>{
+          if(!seeded){
+            fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
+            fbSet("db/armoryMasterSeeded", true).catch(()=>{});
+            setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
+          } else {
+            setDb(prev=>({...prev, armoryMaster: {}}));
+          }
+        }).catch(()=>{ setDb(prev=>({...prev, armoryMaster: master||{}})); });
       }
     });
     const off10 = fbOn("db/weaponLocations", (locs)=>{
@@ -7023,6 +7030,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [newQty, setNewQty] = React.useState("1");
   const [newName, setNewName] = React.useState("");
   const [newMakat, setNewMakat] = React.useState("");
+  const [showSummary, setShowSummary] = React.useState(false);
 
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
   const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
@@ -7121,6 +7129,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setShowAddNew(true)} style={{...S.btn("blue"),padding:"7px 14px",fontSize:"var(--text-base)"}}>➕ הוסף פריט</button>
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
+          <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
         </div>
       </div>
 
@@ -7560,9 +7569,269 @@ function MyStockTab({db, setDb, soldiers, auth}){
           </div>
         </Modal>
       )}
+      {/* Summary Tables Modal */}
+      {showSummary&&(
+        <div style={{position:"fixed",inset:0,background:"var(--color-bg-overlay)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={e=>e.target===e.currentTarget&&setShowSummary(false)}>
+          <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",borderRadius:"var(--radius-xl)",width:"100%",maxWidth:820,maxHeight:"92vh",overflowY:"auto",boxShadow:"var(--shadow-lg)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"15px 20px",borderBottom:"1px solid var(--color-border-muted)"}}>
+              <h3 style={{margin:0,fontWeight:700,fontSize:"var(--text-lg)"}}>📊 טבלאות סיכום מלאי</h3>
+              <button onClick={()=>setShowSummary(false)} style={{background:"none",border:"none",color:"var(--color-text-secondary)",fontSize:20,cursor:"pointer",lineHeight:1}}>✕</button>
+            </div>
+            <div style={{padding:20}}>
+              <SummaryTables db={db} soldiers={soldiers}/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+function SummaryTables({db, soldiers}){
+  const [activeTab, setActiveTab] = React.useState("qty"); // qty | serials
+
+  const allSols = React.useMemo(()=>[
+    ...Object.values(db.customSoldiers||{}),
+    ...soldiers
+  ],[db,soldiers]);
+
+  // ====== TABLE 1: כמויות לפי פריט ======
+  const qtyData = React.useMemo(()=>{
+    const map = {}; // name → {makat, total, byUnit:{unit→qty}, serials:[]}
+    // From unitItems (מלאי ארמון)
+    Object.values(db.unitItems||{}).forEach(item=>{
+      const name = item.n||item.name||"";
+      const makat = item.s||item.makat||NAME_TO_MAKAT[name]||"";
+      const unit = item.unit||"גדודי";
+      if(!map[name]) map[name]={makat,total:0,byUnit:{},serials:[]};
+      map[name].total++;
+      map[name].byUnit[unit]=(map[name].byUnit[unit]||0)+1;
+      if(item.serial&&item.serial!=="1"&&item.serial!==1){
+        map[name].serials.push({serial:String(item.serial),unit,source:"מלאי"});
+      }
+    });
+    // From armoryMaster
+    Object.entries(db.armoryMaster||ARMORY_MASTER||{}).forEach(([name,info])=>{
+      if(!map[name]) map[name]={makat:info.makat||NAME_TO_MAKAT[name]||"",total:0,byUnit:{},serials:[]};
+      if(info.total>0&&map[name].total===0) map[name].total=info.total;
+    });
+    // From assignments (assigned to soldiers)
+    allSols.forEach(s=>{
+      const asgn = db._assignmentsLoaded?(db.assignments?.[s.id]||{}):(db.assignments?.[s.id]??s.assigned??{});
+      Object.entries(asgn).forEach(([name,val])=>{
+        if(!map[name]) map[name]={makat:NAME_TO_MAKAT[name]||"",total:0,byUnit:{},serials:[]};
+        // Don't add to total (already counted in unitItems/armoryMaster)
+        // But add serial if present
+        if(val&&val!==1&&val!==true&&String(val).length>1){
+          const exists = map[name].serials.some(x=>x.serial===String(val));
+          if(!exists) map[name].serials.push({serial:String(val),unit:s.unit||"",soldierName:s.name,source:"חייל"});
+        }
+      });
+    });
+    return Object.entries(map)
+      .filter(([,v])=>v.total>0)
+      .sort(([a],[b])=>{
+        const aw=WEAPON_KEYS.includes(a),bw=WEAPON_KEYS.includes(b);
+        if(aw!==bw) return bw?1:-1;
+        return a.localeCompare(b,"he");
+      });
+  },[db,allSols]);
+
+  // All serials from all sources
+  const allSerials = React.useMemo(()=>{
+    const list = [];
+    // From unitItems
+    Object.values(db.unitItems||{}).forEach(item=>{
+      if(item.serial&&item.serial!=="1"&&item.serial!==1){
+        list.push({
+          name:item.n||item.name||"",
+          makat:item.s||item.makat||NAME_TO_MAKAT[item.n||item.name||""]||"",
+          serial:String(item.serial),
+          unit:item.unit||"גדודי",
+          source:"מלאי",
+          soldierName:"",
+        });
+      }
+    });
+    // From assignments
+    allSols.forEach(s=>{
+      const asgn = db._assignmentsLoaded?(db.assignments?.[s.id]||{}):(db.assignments?.[s.id]??s.assigned??{});
+      Object.entries(asgn).forEach(([name,val])=>{
+        if(val&&val!==1&&val!==true&&String(val).length>1){
+          list.push({
+            name,
+            makat:NAME_TO_MAKAT[name]||"",
+            serial:String(val),
+            unit:s.unit||"",
+            source:"חייל",
+            soldierName:s.name||"",
+          });
+        }
+      });
+    });
+    return list.sort((a,b)=>a.name.localeCompare(b.name,"he")||a.serial.localeCompare(b.serial));
+  },[db,allSols]);
+
+  const units = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+
+  function printQty(){
+    const win=window.open("","_blank");
+    const unitCols = units.map(u=>`<th style="min-width:40px">${u}</th>`).join("");
+    const rows = qtyData.map(([name,v])=>{
+      const cols = units.map(u=>`<td style="text-align:center">${v.byUnit[u]||""}</td>`).join("");
+      return `<tr><td style="font-family:monospace;font-size:10px">${v.makat||"—"}</td>
+        <td style="font-weight:${WEAPON_KEYS.includes(name)?"bold":"normal"}">${name}</td>
+        <td style="text-align:center;font-weight:bold">${v.total}</td>${cols}</tr>`;
+    }).join("");
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>סיכום כמויות</title>
+    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 7px;text-align:right}
+    th{background:#1a1a2e;color:#fff}tr:nth-child(even){background:#f9f9f9}
+    @media print{button{display:none}}</style></head>
+    <body><h2>📊 סיכום כמויות מלאי — גדוד 9219</h2>
+    <p>הופק: ${new Date().toLocaleDateString("he-IL")}</p>
+    <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>סהכ</th>${unitCols}</tr></thead>
+    <tbody>${rows}</tbody></table>
+    <button onclick="window.print()" style="margin-top:12px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
+    </body></html>`);
+    win.document.close();
+  }
+
+  function printSerials(){
+    const win=window.open("","_blank");
+    const rows = allSerials.map(x=>`<tr>
+      <td style="font-family:monospace;font-size:10px">${x.makat||"—"}</td>
+      <td>${x.name}</td>
+      <td style="font-family:monospace;font-weight:bold">${x.serial}</td>
+      <td>${x.unit}</td>
+      <td>${x.soldierName||"—"}</td>
+      <td>${x.source}</td>
+    </tr>`).join("");
+    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>רשימת סידוריים</title>
+    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 7px;text-align:right}
+    th{background:#1a1a2e;color:#fff}tr:nth-child(even){background:#f9f9f9}
+    @media print{button{display:none}}</style></head>
+    <body><h2>📋 רשימת מספרי סידורי/צ — גדוד 9219</h2>
+    <p>סהכ: ${allSerials.length} פריטים | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
+    <table><thead><tr><th>מק"ט</th><th>אמצעי</th><th>מספר סידורי/צ</th><th>פלוגה</th><th>חייל</th><th>מקור</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <button onclick="window.print()" style="margin-top:12px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
+    </body></html>`);
+    win.document.close();
+  }
+
+  return (
+    <React.Fragment>
+      {/* Tab buttons */}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        {[["qty","📊 כמויות לפי פריט"],["serials","🔢 מספרי סידורי/צ"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setActiveTab(id)}
+            style={{flex:1,padding:"10px 0",borderRadius:8,border:"2px solid",cursor:"pointer",
+              fontWeight:700,fontSize:"var(--text-base)",
+              borderColor:activeTab===id?"var(--color-accent-fg)":"var(--color-border-muted)",
+              background:activeTab===id?"var(--btn-blue-bg)":"transparent",
+              color:activeTab===id?"var(--color-accent-fg)":"var(--color-text-secondary)"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* TABLE 1: כמויות */}
+      {activeTab==="qty"&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>
+              {qtyData.length} סוגי אמצעים · {qtyData.reduce((s,[,v])=>s+v.total,0)} יחידות סהכ
+            </div>
+            <button onClick={printQty} style={{...S.btn("green"),padding:"6px 14px",fontSize:"var(--text-sm)"}}>
+              🖨️ הדפס טבלה
+            </button>
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)"}}>
+              <thead>
+                <tr style={{background:"var(--color-bg-canvas)"}}>
+                  <th style={S.th}>מק"ט</th>
+                  <th style={S.th}>אמצעי</th>
+                  <th style={{...S.th,textAlign:"center",fontWeight:800}}>סהכ</th>
+                  {units.map(u=><th key={u} style={{...S.th,textAlign:"center",fontSize:11}}>{u}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {qtyData.map(([name,v],idx)=>(
+                  <tr key={name} style={{background:idx%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)"}}>
+                    <td style={{...S.td,fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{v.makat||"—"}</td>
+                    <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(name)?700:400,color:WEAPON_KEYS.includes(name)?"var(--color-accent-fg)":"var(--color-text-primary)"}}>{name}</td>
+                    <td style={{...S.td,textAlign:"center",fontWeight:800,fontSize:"var(--text-base)"}}>{v.total}</td>
+                    {units.map(u=>(
+                      <td key={u} style={{...S.td,textAlign:"center",color:v.byUnit[u]?"var(--color-text-primary)":"var(--color-text-muted)"}}>
+                        {v.byUnit[u]||""}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TABLE 2: סידוריים */}
+      {activeTab==="serials"&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>
+              {allSerials.length} מספרי סידורי/צ
+            </div>
+            <button onClick={printSerials} style={{...S.btn("green"),padding:"6px 14px",fontSize:"var(--text-sm)"}}>
+              🖨️ הדפס רשימה
+            </button>
+          </div>
+          {allSerials.length===0?(
+            <div style={{textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
+              אין מספרי סידורי/צ רשומים במערכת
+            </div>
+          ):(
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)"}}>
+                <thead>
+                  <tr style={{background:"var(--color-bg-canvas)"}}>
+                    <th style={S.th}>מק"ט</th>
+                    <th style={S.th}>אמצעי</th>
+                    <th style={{...S.th,fontFamily:"monospace"}}>מספר סידורי/צ</th>
+                    <th style={S.th}>פלוגה</th>
+                    <th style={S.th}>חייל</th>
+                    <th style={S.th}>מקור</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allSerials.map((x,idx)=>(
+                    <tr key={idx} style={{background:idx%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)"}}>
+                      <td style={{...S.td,fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{x.makat||"—"}</td>
+                      <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(x.name)?700:400,color:WEAPON_KEYS.includes(x.name)?"var(--color-accent-fg)":"var(--color-text-primary)"}}>{x.name}</td>
+                      <td style={{...S.td,fontFamily:"monospace",fontWeight:700,color:"var(--color-accent-fg)"}}>{x.serial}</td>
+                      <td style={S.td}>{x.unit||"—"}</td>
+                      <td style={{...S.td,color:"var(--color-text-secondary)"}}>{x.soldierName||"—"}</td>
+                      <td style={{...S.td,fontSize:10}}>
+                        <span style={{background:x.source==="חייל"?"var(--color-accent-subtle)":"var(--color-warning-subtle)",
+                          padding:"1px 6px",borderRadius:8,fontSize:10}}>
+                          {x.source}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
 
 // =================== DASH DETAIL MODAL ===================
 function DashDetailModal({type, soldiers, db, onClose}){
