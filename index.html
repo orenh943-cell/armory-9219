@@ -2404,7 +2404,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
               {Object.entries(assigned).map(([name,val])=>(
-                <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"#1a2f4a":"#0d1117",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"var(--color-accent-fg)":"var(--color-border-muted)"}`}}>
+                <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"var(--btn-blue-bg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"var(--color-accent-fg)":"var(--color-border-muted)"}`}}>
                   <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
                   <div style={{flex:1}}><span style={{fontSize:"var(--text-base)",fontWeight:600,color:WEAPON_KEYS.includes(name)?"#e6edf3":"var(--color-accent-fg)"}}>{name}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div>{isSerial(val)&&<span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{val}</span>}
                 </label>
@@ -5147,17 +5147,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(Object.keys(items).length===0 && IMPORTED_UNIT_ITEMS && Object.keys(IMPORTED_UNIT_ITEMS).length>0){
         fbGet("db/unitItemsSeeded").then(seeded=>{
           if(!seeded){
-            // First time ever - seed from imported data
+            // First time ever - seed
             fbSet("db/unitItems", IMPORTED_UNIT_ITEMS).catch(()=>{});
             fbSet("db/unitItemsSeeded", true).catch(()=>{});
             setDb(prev=>({...prev, unitItems: IMPORTED_UNIT_ITEMS}));
           } else {
-            // Was explicitly reset - leave empty
             setDb(prev=>({...prev, unitItems: {}}));
           }
-        }).catch(()=>{
-          setDb(prev=>({...prev, unitItems: items}));
-        });
+        }).catch(()=>{ setDb(prev=>({...prev, unitItems: {}})); });
       } else {
         setDb(prev=>({...prev, unitItems: items}));
       }
@@ -5166,16 +5163,23 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(master && Object.keys(master).length>0){
         setDb(prev=>({...prev, armoryMaster: master}));
       } else {
-        // Only seed on very first load
+        // Empty — check if this is first load or post-reset
         fbGet("db/armoryMasterSeeded").then(seeded=>{
           if(!seeded){
+            // First time ever - seed
             fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
             fbSet("db/armoryMasterSeeded", true).catch(()=>{});
             setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER}));
           } else {
+            // Was reset intentionally - keep empty
             setDb(prev=>({...prev, armoryMaster: {}}));
           }
-        }).catch(()=>{ setDb(prev=>({...prev, armoryMaster: master||{}})); });
+        }).catch(()=>{
+          // fbGet failed - seed to be safe only if first load
+          setDb(prev=>prev.armoryMaster&&Object.keys(prev.armoryMaster).length>0
+            ? prev
+            : {...prev, armoryMaster: ARMORY_MASTER});
+        });
       }
     });
     const off10 = fbOn("db/weaponLocations", (locs)=>{
@@ -9780,7 +9784,16 @@ function UserProfileModal({auth, db, setDb, onClose}){
 
 function PermissionsTab({db, setDb, auth}){
   const deletedUsers = db.deletedUsers||{};
-  const staticUsers = Object.entries(USERS).filter(([k,u])=>(u.role==="manager"||u.role==="admin")&&!deletedUsers[k]);
+  // Ensure static admins are never blocked
+  React.useEffect(()=>{
+    const blocked = Object.keys(USERS).filter(k=>deletedUsers[k]);
+    if(blocked.length>0){
+      const nd={...db,deletedUsers:{...deletedUsers}};
+      blocked.forEach(k=>delete nd.deletedUsers[k]);
+      saveDB(nd); setDb(nd);
+    }
+  },[]);
+  const staticUsers = Object.entries(USERS).filter(([k,u])=>u.role==="manager"||u.role==="admin"); // static admins always shown
   const dynamicUsers = Object.entries(db.dynamicUsers||{});
   const allUsers = [...staticUsers, ...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];
 
@@ -9813,7 +9826,8 @@ function PermissionsTab({db, setDb, auth}){
   function addUser(){
     setErr("");
     if(!newUser.username.trim()||!newUser.name.trim()||!newUser.pass.trim()){setErr("יש למלא את כל השדות");return;}
-    if(USERS[newUser.username]||db.dynamicUsers?.[newUser.username]){setErr("שם משתמש כבר קיים");return;}
+    if(USERS[newUser.username]){setErr("משתמש זה הוא מנהל מובנה — ניתן לערוך הרשאותיו ישירות ברשימה");return;}
+    if(db.dynamicUsers?.[newUser.username]){setErr("שם משתמש כבר קיים");return;}
     const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",phone:newUser.phone||"",viewUnit:newUser.viewUnit,editUnit:newUser.editUnit||"הכל",roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
     const rolePreset = newUser.roleTitle ? ROLE_TITLE_PRESETS[newUser.roleTitle] : null;
     const ndb = {...db,
