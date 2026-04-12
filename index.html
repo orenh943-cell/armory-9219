@@ -10628,8 +10628,8 @@ function PermissionsTab({db, setDb, auth}){
                   style={{...S.btn(db.userSigs?.[username]?"green":"gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>
                   {db.userSigs?.[username]?"✅ חתימה":"✍️ חתימה"}
                 </button>
-                {username!==auth?.username&&(
-                  {canDelete(auth)&&<button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
+                {username!==auth?.username&&canDelete(auth)&&(
+                  <button onClick={()=>deleteUser(username)} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
                 )}
               </div>
               {editPassUser===username&&(
