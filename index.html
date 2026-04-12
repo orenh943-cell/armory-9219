@@ -4487,30 +4487,23 @@ function ResetTab({db, setDb, auth}){
       const backup = JSON.stringify(db, null, 2);
       setBackupData(backup);
 
-      // Keep only makats/names from armoryMaster & ALL_SERIALS structure
-      // Reset: assignments, signatures, bulkGuarantors, exitForms, actLog
-      // Keep: customSoldiers, armoryMaster, unitItems, cabinets, weaponLocations, userPerms, dynamicUsers, inspectionFamilies
-      const ndb = {
-        ...db,
-        assignments: {},
-        signatures: {},
-        bulkGuarantors: {},
-        exitForms: {},
-        actLog: {},
-        brokenItems: [],
-        inspections: {},
-        loginLog: {},
-        unitItems: {},
-        armoryMaster: {},
-        weaponLocations: {},
-        cabinets: {},
-      };
+      // ארכב חתימות להיסטוריה
+      const archiveTime = new Date().toLocaleString("he-IL");
+      Object.entries(db.signatures||{}).forEach(([solId, sig])=>{
+        if(sig&&sig.sigData){
+          fbSet("db/sigHistory/"+solId+"/sig_"+Date.now()+"_r",
+            {...sig, archivedAt:archiveTime+" (איפוס)"}).catch(()=>{});
+        }
+      });
+      // מחק assignments+signatures בלבד — שומר מלאי, ארונות, חיילים
+      const ndb={...db,assignments:{},signatures:{},bulkGuarantors:{},exitForms:{},actLog:{},loginLog:{}};
       saveDB(ndb);
-      fbSet("db/unitItemsSeeded", true).catch(()=>{}); // prevent re-seed after reset
+      fbSet("db/assignments",{}).catch(()=>{});
+      fbSet("db/signatures",{}).catch(()=>{});
+      fbSet("db/bulkGuarantors",{}).catch(()=>{});
       setDb(ndb);
       setPhase("backup");
-      logAction('איפוס_מלאי', 'איפוס מלאי מלא בוצע ע"י '+auth.name, auth.name);
-    });
+      logAction("איפוס","איפוס שיוכים וחתימות ע\"י "+auth.name, auth.name);    });
   }
 
   function downloadBackup(){
@@ -4577,8 +4570,8 @@ function ResetTab({db, setDb, auth}){
       <div style={{...S.card,border:"1px solid var(--color-danger-fg)",background:"var(--color-danger-bg)"}}>
         <div style={{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-danger-fg)",marginBottom:8}}>🔄 איפוס מלאי מלא</div>
         <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:12}}>
-          מאפס: שיוכי נשק, חתימות, ערבויות, טפסי יציאה, לוג, <b>מלאי + כמויות + סידוריים + ארונות</b><br/>
-          <b>שומר:</b> רשימת חיילים, שמות מק"טים סטטיים, הרשאות
+          מאפס: שיוכי נשק, חתימות (→ נשמרות בהיסטוריה), ערבויות, טפסי יציאה, לוג<br/>
+          <b>שומר:</b> מלאי, ארונות, רשימת חיילים, בחנים, הרשאות, היסטוריית חתימות
         </div>
         <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
       </div>
@@ -4598,13 +4591,11 @@ function ResetTab({db, setDb, auth}){
       <div style={{background:"rgba(248,81,73,.1)",padding:12,borderRadius:"var(--radius-md)",marginBottom:16,fontSize:"var(--text-sm)"}}>
         <div style={{fontWeight:700,marginBottom:6}}>הפעולה הבאה תמחק לצמיתות:</div>
         <div>❌ כל שיוכי הנשק לחיילים</div>
-        <div>❌ כל החתימות</div>
-        <div>❌ כל הערבויות המרוכזות</div>
-        <div>❌ כל טפסי היציאה הביתה</div>
-        <div>❌ לוג הפעולות</div>
-        <div>❌ מלאי — כמויות וסידוריים</div>
-        <div>❌ מלאי ארמון + מיקומי נשק + ארונות</div>
-        <div style={{marginTop:8,color:"var(--color-success-fg)",fontWeight:700}}>✅ שומר: רשימת חיילים, שמות מק"טים סטטיים, הרשאות</div>
+        <div>❌ חתימות פעילות (→ עוברות להיסטוריה אוטומטית)</div>
+        <div>❌ ערבויות מרוכזות</div>
+        <div>❌ טפסי יציאה הביתה</div>
+        <div>❌ לוג פעולות</div>
+        <div style={{marginTop:8,color:"var(--color-success-fg)",fontWeight:700}}>✅ שומר: מלאי, ארונות, חיילים, מק"טים סטטיים, הרשאות</div>
       </div>
       <div style={{marginBottom:12}}>
         <label style={{...S.label}}>סיסמת איפוס:</label>
