@@ -907,25 +907,36 @@ function cleanSigs(sigs){
   return out;
 }
 
+// Collections that are safe to bulk-overwrite (won't lose data from race conditions)
+const SAFE_BULK_COLLECTIONS = ["assignments","customSoldiers","brokenItems","bulkGuarantors",
+  "userPerms","userPasswords","dynamicUsers","unitItems","armoryMaster","weaponLocations",
+  "cabinets","cabinetNames","exitForms","actLog","polls","externalSigns"];
+
+// Collections that must NEVER be bulk-overwritten (only written individually)
+// because a race condition could wipe data: signatures, testCerts, userSigs, sigHistory, deletedUsers
+
 function saveDB(db){
   const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
+  // Only write bulk-safe collections
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
-  if(safe.signatures && Object.keys(safe.signatures).length) fbSet("db/signatures", cleanSigs(safe.signatures)).catch(e=>console.warn("FB err:",e));
   fbSet("db/customSoldiers", safe.customSoldiers).catch(e=>console.warn("FB err:",e));
   fbSet("db/brokenItems", safe.brokenItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPerms", safe.userPerms).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPasswords", safe.userPasswords).catch(e=>console.warn("FB err:",e));
-  if(safe.testCerts && Object.keys(safe.testCerts).length) fbSet("db/testCerts", safe.testCerts).catch(e=>console.warn("FB err:",e));
   fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
   fbSet("db/unitItems", safe.unitItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/armoryMaster", safe.armoryMaster).catch(e=>console.warn("FB err:",e));
   fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
   fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
   if(safe.cabinetNames && Object.keys(safe.cabinetNames).length) fbSet("db/cabinetNames", safe.cabinetNames).catch(e=>console.warn("FB err:",e));
-  if(safe.userSigs && Object.keys(safe.userSigs).length) fbSet("db/userSigs", safe.userSigs).catch(e=>console.warn("FB err:",e));
-  if(safe.deletedUsers && Object.keys(safe.deletedUsers).length) fbSet("db/deletedUsers", safe.deletedUsers).catch(e=>console.warn("FB err:",e));
+  // NEVER bulk-overwrite these — written individually via fbSet on each change:
+  // signatures → written in doSign, archiveAndClearSig
+  // testCerts  → written in TestCertView.save()
+  // userSigs   → written in saveSig()
+  // sigHistory → written in archiveAndClearSig
+  // deletedUsers → written in deleteUser
 }
 
 function initDB(){
