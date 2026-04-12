@@ -7221,10 +7221,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 </div>
               )}
               {auth.role==="admin"&&(
-                <div onClick={e=>{e.stopPropagation();setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
+                <div style={{display:"flex",gap:8,marginTop:4}} onClick={e=>e.stopPropagation()}>
+                  <div onClick={()=>{setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
-                <div onClick={e=>{e.stopPropagation();deleteItem(item.name);}}
-                  style={{marginTop:4,fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🗑️ מחק פריט</div>
+                  <div onClick={()=>deleteItem(item.name)}
+                    style={{fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🗑️ מחק פריט</div>
+                </div>
               )}
             </div>
           );
