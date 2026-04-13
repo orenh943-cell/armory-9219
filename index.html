@@ -7513,7 +7513,13 @@ function MyStockTab({db, setDb, soldiers, auth}){
       // "פנוי" = מה שיושב בגדודי (לא מוקצה) + מה שה-armoryMaster הצהיר אבל לא נכנס ל-unitItems
       const declaredFree = Math.max(0, total - liveTotal); // מה ש-armoryMaster הצהיר אבל לא מוקצה בכלל
       const unassigned = gadudi + declaredFree;
-      return { name, ...info, total, liveByUnit, liveTotal, assignedToUnits, gadudi, unassigned };
+      // Count: items assigned to soldiers vs items assigned to units (no soldier)
+      const toUnits = Object.values(db.unitItems||{}).filter(v=>{
+        const n=v.n||v.name||""; const u=v.u||v.unit||""; const t=v.t||v.assignedType||"unit";
+        return n===name && t==="unit" && u!=="גדודי";
+      }).length;
+      const toSoldiers = Math.max(0, assignedToUnits - toUnits);
+      return { name, ...info, total, liveByUnit, liveTotal, assignedToUnits, gadudi, toSoldiers, toUnits, unassigned };
     }).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
       if(showFreeOnly && item.unassigned===0) return false;
@@ -7732,11 +7738,35 @@ function MyStockTab({db, setDb, soldiers, auth}){
               <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{displayCount}</div>
               <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginTop:4,color:"var(--color-text-primary)",lineHeight:1.3}}>{item.name}</div>
               <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:2}}>מק"ט {item.makat||"—"}</div>
-              {freeCount>0&&<div style={{fontSize:10,marginTop:4,display:"flex",alignItems:"center",gap:4}}>
-                <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:10,padding:"1px 7px",fontWeight:700}}>{freeCount}</span>
-                <span style={{color:"var(--color-success-fg)",fontWeight:600}}>פנוי</span>
-              </div>}
-              {displayCount>0&&freeCount===0&&<div style={{fontSize:9,color:"var(--color-warning-fg)",marginTop:3}}>● מוקצה במלואו</div>}
+              {/* פירוט: לחיילים | לפלוגה | פנוי */}
+              {filterUnit==="הכל"&&item.total>0&&(
+                <div style={{marginTop:5,display:"flex",flexDirection:"column",gap:2}}>
+                  {item.toSoldiers>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                    <span style={{background:"var(--color-accent-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{item.toSoldiers}</span>
+                    <span style={{color:"var(--color-accent-fg)",fontSize:9}}>👤 חיילים</span>
+                  </div>}
+                  {item.toUnits>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                    <span style={{background:"var(--color-warning-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{item.toUnits}</span>
+                    <span style={{color:"var(--color-warning-fg)",fontSize:9}}>🏢 לפלוגה</span>
+                  </div>}
+                  {freeCount>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                    <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{freeCount}</span>
+                    <span style={{color:"var(--color-success-fg)",fontSize:9}}>🟢 פנוי</span>
+                  </div>}
+                </div>
+              )}
+              {filterUnit!=="הכל"&&displayCount>0&&(
+                <div style={{marginTop:4,fontSize:9,color:"var(--color-text-muted)"}}>
+                  {(()=>{
+                    const soldInUnit = displayCount - Object.values(db.unitItems||{}).filter(v=>(v.n||v.name)===item.name&&(v.t||v.assignedType)==="unit"&&(v.u||v.unit)===filterUnit).length;
+                    const unitInUnit = Object.values(db.unitItems||{}).filter(v=>(v.n||v.name)===item.name&&(v.t||v.assignedType)==="unit"&&(v.u||v.unit)===filterUnit).length;
+                    return (<>
+                      {soldInUnit>0&&<span style={{marginLeft:4}}>👤 {soldInUnit}</span>}
+                      {unitInUnit>0&&<span style={{color:"var(--color-warning-fg)"}}>🏢 {unitInUnit} פנוי בפלוגה</span>}
+                    </>);
+                  })()}
+                </div>
+              )}
 
               {canDelete(auth)&&(
                 <div style={{display:"flex",gap:8,marginTop:4}} onClick={e=>e.stopPropagation()}>
@@ -8042,7 +8072,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:10,color:"var(--color-accent-fg)"}}>
               {item.name} — פירוט לפי פלוגה
               <span style={{fontWeight:400,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginRight:8}}>
-                סהכ: {item.total} | מוקצה: {item.liveTotal} | פנוי: {item.unassigned}
+                סהכ: {item.total} | 👤 לחיילים: {item.toSoldiers} | 🏢 לפלוגה: {item.toUnits} | 🟢 פנוי: {item.unassigned}
               </span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8,marginBottom:10}}>
@@ -8055,7 +8085,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                     border:"1px solid var(--color-border-muted)"}}>
                     <div style={{fontWeight:700,color:"var(--color-accent-fg)",fontSize:"var(--text-lg)"}}>{liveCount}</div>
                     <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>פלוגה {u}</div>
-                    <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:2}}>ויסות: {allocCount}</div>
+
                   </div>
                 );
               })}
