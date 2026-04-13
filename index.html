@@ -3239,7 +3239,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
   const stats = React.useMemo(()=>{
     const map = {}; // wepName -> {total, inspected, soldiers:[]}
     allSoldiers.forEach(s=>{
-      const assigned = db.assignments?.[s.id]??s.assigned??{};
+      const assigned = db.assignments?.[s.id]||{};
       Object.entries(assigned).forEach(([wepName,val])=>{
         if(!inspectionFamilies.includes(wepName)) return; // רק משפחות שנדרשת בהן בחינה
         if(!map[wepName]) map[wepName]={total:0,inspected:0,soldiers:[]};
@@ -3265,7 +3265,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
     const ql=q.toLowerCase();
     const res=[];
     allSoldiers.forEach(s=>{
-      const assigned=db.assignments?.[s.id]??s.assigned??{};
+      const assigned=db._assignmentsLoaded?(db.assignments?.[s.id]||{}):(db.assignments?.[s.id]||{});
       Object.entries(assigned).forEach(([wepName,val])=>{
         if(!inspectionFamilies.includes(wepName)) return;
         if(filterWep!=="הכל" && wepName!==filterWep) return;
@@ -3598,8 +3598,8 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
                   border:`1px solid ${active?"var(--color-accent-fg)":"var(--color-border-default)"}`,
                   background:active?"var(--btn-blue-bg)":"var(--color-bg-canvas)"
                 }}>
-                  <div style={{width:18,height:18,borderRadius:3,background:active?"var(--color-accent-fg)":"var(--color-bg-inset)",border:"1px solid "+(active?"var(--color-accent-fg)":"var(--color-border-default)"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700}}>{active?"✓":""}</div>
-                  <span style={{fontSize:"var(--text-sm)",color:active?"var(--color-accent-fg)":"var(--color-text-secondary)"}}>{name}</span>
+                  <div style={{width:18,height:18,borderRadius:3,background:active?"#1a7fd4":"var(--color-bg-inset)",border:"1px solid "+(active?"var(--color-accent-fg)":"var(--color-border-default)"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700}}>{active?"✓":""}</div>
+                  <span style={{fontSize:"var(--text-sm)",fontWeight:active?700:400,color:active?"#fff":"var(--color-text-secondary)"}}>{name}</span>
                 </div>
               );
             })}
