@@ -7497,14 +7497,23 @@ function MyStockTab({db, setDb, soldiers, auth}){
     // Only fall back to ARMORY_MASTER on first load (before Firebase responds)
     // If armoryMaster is {} after Firebase loaded → it was reset intentionally → show empty
     const masterData = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : (db._armoryMasterLoaded ? {} : ARMORY_MASTER);
+    // Count unitItems per name
+    const unitItemCounts = {}; // name -> total count in unitItems
+    Object.values(db.unitItems||{}).forEach(item=>{
+      const name=item.n||item.name||"";
+      if(name) unitItemCounts[name]=(unitItemCounts[name]||0)+1;
+    });
+
     return Object.entries(masterData).map(([name, info])=>{
       const liveByUnit = assigned[name]||{};
       const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
-      // Count גדודי separately — those are "in armory, not assigned to unit"
-      const gadudi = assigned[name]?.["גדודי"]||0;
-      const assignedToUnits = liveTotal - gadudi;
-      const unassigned = Math.max(0, info.total - assignedToUnits);
-      return { name, ...info, liveByUnit, liveTotal, unassigned };
+      const gadudi = assigned[name]?.["גדודי"]||0; // בארמון גדודי = "פנוי" = לא מוקצה לפלוגה
+      const assignedToUnits = liveTotal - gadudi;   // מוקצה לפלוגה כלשהי
+      const total = Math.max(info.total||0, unitItemCounts[name]||0, liveTotal);
+      // "פנוי" = מה שיושב בגדודי (לא מוקצה) + מה שה-armoryMaster הצהיר אבל לא נכנס ל-unitItems
+      const declaredFree = Math.max(0, total - liveTotal); // מה ש-armoryMaster הצהיר אבל לא מוקצה בכלל
+      const unassigned = gadudi + declaredFree;
+      return { name, ...info, total, liveByUnit, liveTotal, assignedToUnits, gadudi, unassigned };
     }).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
       if(showFreeOnly && item.unassigned===0) return false;
@@ -7710,7 +7719,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
         {liveData.map(item=>{
           const isExp = expandedItem===item.name;
           const displayCount = filterUnit==="הכל" ? item.total : (item.liveByUnit[filterUnit]||0);
-          const freeCount = filterUnit==="הכל" ? item.unassigned : Math.max(0,(item.byUnit?.[filterUnit]||0)-(item.liveByUnit[filterUnit]||0));
+          // פנוי = בגדודי + לא נכנס בכלל ל-unitItems
+          const freeCount = filterUnit==="הכל" ? item.unassigned : Math.max(0,(item.liveByUnit["גדודי"]||0));
           const isWeapon = WEAPON_KEYS.includes(item.name);
           return (
             <div key={item.name} onClick={()=>setExpandedItem(isExp?null:item.name)}
