@@ -1079,7 +1079,6 @@ function Badge({color="gray",children,small=false}){
   );
 }
 
-
 function Modal({title,onClose,children,wide=false}){
   React.useEffect(()=>{
     const onKey=e=>{if(e.key==="Escape")onClose();};
@@ -1101,7 +1100,6 @@ function Modal({title,onClose,children,wide=false}){
     </div>
   );
 }
-
 
 // ===== AllSerialPicker — כל הסידוריים כולל מה שמשויך לחיילים =====
 function AllSerialPicker({itemName, value, onChange}){
@@ -1761,7 +1759,7 @@ function DailyModal({db,onClose,type,auth}){
     const win = window.open("","_blank");
     win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
     <title>ספירת מחסן ארמון 9219</title>
-    
+
   <style>
       body{font-family:Arial,sans-serif;direction:rtl;padding:10px;font-size:11px}
       .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a1a2e;padding-bottom:6px;margin-bottom:10px}
@@ -2724,7 +2722,6 @@ function InPersonSignModal({soldier, db, onSave, auth, onClose}){
   );
 }
 
-
 function QuickModal({soldiers,db,onSave,onClose}){
   const [search,setSearch]=useState("");
   const [sid,setSid]=useState("");
@@ -2835,7 +2832,6 @@ function QuickModal({soldiers,db,onSave,onClose}){
     </Modal>
   );
 }
-
 
 function AddSoldierModal({db, onSave, onClose}){
   const [form, setForm] = useState({firstName:"",lastName:"",id:"",unit:"א",squad:"",phone:""});
@@ -2962,8 +2958,6 @@ function AddSoldierModal({db, onSave, onClose}){
     </Modal>
   );
 }
-
-
 
 function GroupSignModal({db, soldiers, onClose}){
   const [groupName, setGroupName] = useState("");
@@ -4076,7 +4070,6 @@ function buildGuarantorReport(repList, totDone, totRem, totSig){
   else{ alert("הדפדפן חסם פתיחת חלון - אפשר בהגדרות."); }
 }
 
-
 // =================== POLL RESPONSE VIEW ===================
 function PollResponseView({pollId, soldierId, db, setDb}){
   const [poll, setPoll] = React.useState(null);
@@ -4814,7 +4807,6 @@ function ResetTab({db, setDb, auth}){
   </div>;
 }
 
-
 // =================== GUARANTORS TAB ===================
 function GuarantorsTab({db,setDb,soldiers,auth}){
   const [search,setSearch]=React.useState("");
@@ -5230,7 +5222,6 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
     </div>
   );
 }
-
 
 function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [db,setDb]=useState(()=>initDB());
@@ -5874,7 +5865,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   );
 }
 
-
 // =================== VIEWER APP ===================
 function ViewerApp({auth, onLogout, db}){
   const [search,setSearch]=React.useState("");
@@ -6060,8 +6050,8 @@ function downloadBulkForm(repName, repId, unit, soldiers, sigData, db){
 </div>
 
 <div class="disclaimer">
-  <strong>⚠️ הצהרת הנציג:</strong> אני החתום מטה מצהיר כי קיבלתי על עצמי את האחריות המלאה לכלל האמצעים המפורטים ברשימה זו, עבור אנשי ${unitLabel}. 
-  אני מתחייב לוודא כי כל חייל יחתום בנפרד על טופס 1008 האישי שלו. 
+  <strong>⚠️ הצהרת הנציג:</strong> אני החתום מטה מצהיר כי קיבלתי על עצמי את האחריות המלאה לכלל האמצעים המפורטים ברשימה זו, עבור אנשי ${unitLabel}.
+  אני מתחייב לוודא כי כל חייל יחתום בנפרד על טופס 1008 האישי שלו.
   כל עוד לא חתם חייל חתימה אישית — אני נושא באחריות המלאה על האמצעים הרשומים על שמו.
 </div>
 
@@ -6196,7 +6186,7 @@ function sendBulkFormWA(repName, repId, unit, soldiers, sigData, db){
   // Try Web Share API first (works on mobile - shares to ANY app including WA)
   const blob = new Blob([html], {type:"text/html;charset=utf-8"});
   const fileName = "ערבות_" + repName + "_" + dateStr.replace(/\//g,"-") + ".html";
-  
+
   if(navigator.share && navigator.canShare){
     const file = new File([blob], fileName, {type:"text/html"});
     if(navigator.canShare({files:[file]})){
@@ -6217,10 +6207,6 @@ function sendBulkFormWA(repName, repId, unit, soldiers, sigData, db){
   document.body.removeChild(a); URL.revokeObjectURL(url);
   alert("הקובץ הורד — שלח אותו בוואטסאפ לנציג " + repName);
 }
-
-
-
-
 
 function AssignToSoldierPanel({item, itemId, soldiers, db, onAssign, onClose}){
   const [search, setSearch] = React.useState("");
@@ -6261,6 +6247,8 @@ const UNIT_COLORS = {
   "חטיבה 6":"#ff6b6b","פנוי":"var(--color-success-fg)"
 };
 
+</script>
+<script type="text/babel">
 function AddUnitItemForm({db, setDb, onDone}){
   const [name, setName] = React.useState("");
   const [serial, setSerial] = React.useState("");
@@ -6325,7 +6313,7 @@ function AddUnitItemForm({db, setDb, onDone}){
   return (
     <div style={{...S.card, border:"1px solid var(--color-accent-fg)", marginBottom:16}}>
       <div style={{fontWeight:700, fontSize:"var(--text-base)", marginBottom:12}}>➕ הוספת פריט למלאי</div>
-      
+
       {/* Item name */}
       <div style={{marginBottom:10, position:"relative"}}>
         <label style={S.label}>שם האמצעי *</label>
@@ -6420,7 +6408,6 @@ function AddUnitItemForm({db, setDb, onDone}){
     </div>
   );
 }
-
 
 function InventoryTab({db, setDb, soldiers, auth}){
   const perms = getPerms(auth, db);
@@ -7338,7 +7325,6 @@ function CabinetsTab({db, setDb, auth}){
   );
 }
 
-
 // =================== MY STOCK TAB (מלאי ארמון) ===================
 function AddSerialInline({itemName, db, setDb, onDone}){
   const [serial, setSerial] = React.useState("");
@@ -7432,7 +7418,6 @@ function AddSerialInline({itemName, db, setDb, onDone}){
     </div>
   );
 }
-
 
 function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDone}){
   const [search, setSearch] = React.useState("");
@@ -7696,8 +7681,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
         <div>
           <h2 style={{fontSize:17,fontWeight:800,margin:0}}>📋 מלאי ארמון</h2>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>
-            {liveData.length} סוגים · <span style={{color:"var(--color-accent-fg)"}}>{totalItems} סהכ</span> · 
-            <span style={{color:"var(--color-warning-fg)"}}> {totalAssigned} מוקצה</span> · 
+            {liveData.length} סוגים · <span style={{color:"var(--color-accent-fg)"}}>{totalItems} סהכ</span> ·
+            <span style={{color:"var(--color-warning-fg)"}}> {totalAssigned} מוקצה</span> ·
             <span style={{color:"var(--color-success-fg)"}}> {totalFree} פנוי</span>
           </div>
         </div>
@@ -7949,7 +7934,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
             {/* הוספת פריט עם אמצעי + סידורי */}
             <div style={{marginBottom:12,padding:"10px 12px",background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-success-fg)"}}>
               <div style={{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-success-fg)",marginBottom:8}}>➕ הוסף לארמון</div>
-              
+
               {/* בחירה: קיים ברשימה או חדש לגמרי */}
               <div style={{display:"flex",gap:6,marginBottom:8}}>
                 <button onClick={()=>setAddIsNew(false)}
@@ -7994,11 +7979,11 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   const itemName = addIsNew ? newItemCustomName.trim() : (addItemName||editItem);
                   const makat = addIsNew ? newItemMakat.trim() : (NAME_TO_MAKAT[itemName]||null);
                   if(!itemName) return;
-                  
+
                   const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
                   if(!master2[itemName]) master2[itemName]={total:0,makat:makat||null,byUnit:{},unassigned:0};
                   master2[itemName]={...master2[itemName],total:(master2[itemName].total||0)+1};
-                  
+
                   // Add to NAME_TO_MAKAT dynamically if new
                   if(addIsNew && makat && !NAME_TO_MAKAT[itemName]){
                     NAME_TO_MAKAT[itemName]=parseInt(makat)||makat;
@@ -8014,7 +7999,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                       ALL_SERIALS.push({name:itemName, serial:parseInt(addSerial)||addSerial, unit:"פנוי", assignedToSoldier:false});
                     }
                   }
-                  
+
                   const newKey="inv_add_"+Date.now();
                   const newUnitItems={...db.unitItems,[newKey]:{
                     n:itemName, s:addSerial||null, u:"פנוי", t:"unit",
@@ -8599,7 +8584,6 @@ function SummaryTables({db, soldiers}){
   );
 }
 
-
 // =================== DASH DETAIL MODAL ===================
 function DashDetailModal({type, soldiers, db, onClose}){
   const [unitFilter, setUnitFilter] = React.useState("הכל");
@@ -9128,14 +9112,14 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
 
   const visibleForms = eligibleForms.filter(([,f])=>filterUnit==="הכל"||f.unit===filterUnit);
 
-  function toggleAll(){ 
+  function toggleAll(){
     if(selected.size===visibleForms.length) setSelected(new Set());
     else setSelected(new Set(visibleForms.map(([id])=>id)));
   }
-  function toggle(id){ 
-    const s=new Set(selected); 
-    s.has(id)?s.delete(id):s.add(id); 
-    setSelected(s); 
+  function toggle(id){
+    const s=new Set(selected);
+    s.has(id)?s.delete(id):s.add(id);
+    setSelected(s);
   }
 
   function save(){
@@ -10073,8 +10057,6 @@ function buildSignatureFormHtml(s, sig, assigned){
 </body></html>`;
 }
 
-
-
 function downloadAllFormsZip(db, soldiers){
   if(typeof fflate==="undefined"){ alert("ספריית ZIP לא נטענה, נסה שוב"); return; }
 
@@ -10107,7 +10089,7 @@ function downloadAllFormsZip(db, soldiers){
     const exitForms = Object.values(db.exitForms||{}).filter(f=>f.soldierId===sid);
 
     // Check if soldier has ANY data worth including
-    const hasAny = sig?.sigData || cert?.img || exitForms.length || 
+    const hasAny = sig?.sigData || cert?.img || exitForms.length ||
                    Object.keys(history||{}).length;
     if(!hasAny) return;
 
@@ -10206,7 +10188,6 @@ ${formsHtml}
   });
 }
 
-
 function buildFormHtml(form){
   const statusLabel = {ממתין_חייל:"ממתין לחייל",ממתין_מפ:'ממתין למ"פ',ממתין_מגד:"ממתין למגד",אושר:"אושר ✓",נדחה:"נדחה ✗"}[form.status]||form.status;
   const questionsHtml = EXIT_QUESTIONS.map((q,i)=>`
@@ -10248,7 +10229,7 @@ th{background:#e8edf5;font-weight:bold}
 <div class="section">
   <div class="section-title">סעיף 2 — הצהרת החייל</div>
   <p>כתובת: ${form.address||"—"}${form.city?" | "+form.city:""}</p>
-  ${form.soldierSig?`<img src="${form.soldierSig}" style="height:40px;border:1px solid #ccc"/>`:""} 
+  ${form.soldierSig?`<img src="${form.soldierSig}" style="height:40px;border:1px solid #ccc"/>`:""}
   <span style="font-size:11px;color:#666">${form.createdAt}</span>
 </div>
 <div class="section">
@@ -10320,16 +10301,16 @@ function ResetAssignmentsBtn({auth, db, setDb}){
   const [showConfirm, setShowConfirm] = React.useState(false);
   const [password, setPassword] = React.useState("");
   const [err, setErr] = React.useState("");
-  
+
   if(auth.soldierId !== "7680832" && auth.username !== "אורן") return null;
-  
+
   function doReset(){
     if(password !== auth.soldierId){
       setErr("סיסמה שגויה — הכנס את המספר האישי שלך");
       return;
     }
     if(!window.confirm("האם אתה בטוח? פעולה זו תמחק את כל השיוכים של חיילים ואת כל החתימות. המלאי, הסידוריים והנתוני הבסיס יישמרו.")) return;
-    
+
     const ndb={...db,
       assignments:{},
       signatures:{},
@@ -10339,7 +10320,7 @@ function ResetAssignmentsBtn({auth, db, setDb}){
     setShowConfirm(false); setPassword(""); setErr("");
     alert("✅ כל השיוכים והחתימות נמחקו. המלאי והנתוני הבסיס נשמרו.");
   }
-  
+
   return (
     <div style={{marginTop:16,borderTop:"1px solid var(--color-border-muted)",paddingTop:12}}>
       {!showConfirm
@@ -10544,7 +10525,6 @@ function UserProfileModal({auth, db, setDb, onClose}){
     </div>
   );
 }
-
 
 function PermissionsTab({db, setDb, auth}){
   const deletedUsers = db.deletedUsers||{};
@@ -11647,7 +11627,7 @@ function TestCertView({auth, db, setDb}){
                     <input type="checkbox" checked={declared} onChange={e=>setDeclared(e.target.checked)}
                       style={{width:20,height:20,marginTop:2,cursor:"pointer",flexShrink:0,accentColor:"var(--color-success-fg)"}}/>
                     <span style={{fontSize:"var(--text-sm)",lineHeight:"1.6",color:"var(--color-text-primary)",fontWeight:500}}>
-                      אני מצהיר כי ביצעתי בוחן נשק ועברתי אותו בהצלחה, 
+                      אני מצהיר כי ביצעתי בוחן נשק ועברתי אותו בהצלחה,
                       והתמונה שהעליתי היא אישור הבוחן האישי שלי
                     </span>
                   </label>
@@ -11867,7 +11847,6 @@ function ExitFormDirectView({auth, onLogout, db, setDb, onDone}){
           <input value={city} onChange={e=>setCity(e.target.value)} placeholder="יישוב / עיר *" style={{...S.input,flex:1,minWidth:90}}/>
         </div>
       </div>
-
 
       {/* שאלון */}
       <div style={{...S.card,marginBottom:12}}>
