@@ -1693,8 +1693,16 @@ function DailyModal({db,onClose,type,auth}){
 
   // חישוב מלאי — מתוך unitItems (מה שהוזן) + armoryMaster
   const loansMap = {};
+  // Count from soldier assignments
   Object.entries(db.assignments||{}).forEach(([,asgn])=>{
     Object.keys(asgn||{}).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;});
+  });
+  // Count from unitItems assigned to soldiers
+  Object.values(db.unitItems||{}).forEach(item=>{
+    if((item.t||item.assignedType)==="soldier"){
+      const name=item.n||item.name||"";
+      if(name) loansMap[name]=(loansMap[name]||0)+1;
+    }
   });
   // ספירת כמויות לפי שם מלא מ-unitItems
   const unitTotals = {};
@@ -1707,7 +1715,7 @@ function DailyModal({db,onClose,type,auth}){
   function calcItem(item){
     const alias = item.alias||item.name;
     // Priority: unitItems count → armoryMaster → DAILY_LEFT hardcoded
-    const total = unitTotals[alias] ?? (master?.[alias]?.total) ?? (db._armoryMasterLoaded ? 0 : (item.total ?? 0));
+    const total = (master?.[alias]?.total) ?? unitTotals[alias] ?? (db._armoryMasterLoaded ? 0 : (item.total ?? 0));
     const loans = loansMap[alias]||0;
     const stock = total - loans;
     return {...item, alias, total, loans, stock, ok:stock>=0};
@@ -7468,7 +7476,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
   // Merge ARMORY_MASTER with live assignments
   const liveData = React.useMemo(()=>{
-    // Count assigned per item per unit from live DB
+    // Count assigned per item per unit — from soldier assignments AND unitItems
     const assigned = {}; // name -> {unit -> count}
     allSols.forEach(s=>{
       const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
@@ -7477,6 +7485,14 @@ function MyStockTab({db, setDb, soldiers, auth}){
         assigned[name][s.unit] = (assigned[name][s.unit]||0)+1;
       });
     });
+    // Also count unitItems (items assigned to units without specific soldier)
+    Object.values(db.unitItems||{}).forEach(item=>{
+      const name = item.n||item.name||"";
+      const unit = item.u||item.unit||"";
+      if(!name||!unit) return;
+      if(!assigned[name]) assigned[name]={};
+      assigned[name][unit] = (assigned[name][unit]||0)+1;
+    });
 
     // Only fall back to ARMORY_MASTER on first load (before Firebase responds)
     // If armoryMaster is {} after Firebase loaded → it was reset intentionally → show empty
@@ -7484,7 +7500,10 @@ function MyStockTab({db, setDb, soldiers, auth}){
     return Object.entries(masterData).map(([name, info])=>{
       const liveByUnit = assigned[name]||{};
       const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
-      const unassigned = Math.max(0, info.total - liveTotal);
+      // Count גדודי separately — those are "in armory, not assigned to unit"
+      const gadudi = assigned[name]?.["גדודי"]||0;
+      const assignedToUnits = liveTotal - gadudi;
+      const unassigned = Math.max(0, info.total - assignedToUnits);
       return { name, ...info, liveByUnit, liveTotal, unassigned };
     }).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
