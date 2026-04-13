@@ -7436,55 +7436,10 @@ function CabinetsTab({db, setDb, auth}){
                           placeholder="מק״ט" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}/>
                       </div>
                       <div style={{gridColumn:"1 / -1"}}>
-                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:4}}>מספר סידורי / צ — בחר מהרשימה או הכנס ידנית</div>
-                        {/* Serials from ALL_SERIALS for this item */}
-                        {(()=>{
-                          // Collect serials from assignments + unitItems + ALL_SERIALS
-                          const itemSerials = [];
-                          const seenSers = new Set();
-                          const allSolsForCab=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
-                          allSolsForCab.forEach(sol=>{
-                            const asgn=db.assignments?.[sol.id]||sol.assigned||{};
-                            Object.entries(asgn).forEach(([nm,val])=>{
-                              if((!addForm.alias||nm===addForm.alias)&&val&&val!==1&&val!==true){
-                                const ser=String(val);
-                                if(!seenSers.has(ser)){seenSers.add(ser);itemSerials.push({serial:ser,name:nm,assignedToSoldier:sol.name,unit:sol.unit});}
-                              }
-                            });
-                          });
-                          Object.values(db.unitItems||{}).forEach(v=>{
-                            const nm=v.n||v.name||""; const ser=v.s||v.serial||"";
-                            if((!addForm.alias||nm===addForm.alias)&&ser&&!seenSers.has(String(ser))){
-                              seenSers.add(String(ser));itemSerials.push({serial:String(ser),name:nm,assignedToSoldier:null,unit:v.u||v.unit});
-                            }
-                          });
-                          ALL_SERIALS.filter(x=>!addForm.alias||x.name===addForm.alias).forEach(x=>{
-                            if(!seenSers.has(String(x.serial))){seenSers.add(String(x.serial));itemSerials.push(x);}
-                          });
-                          return itemSerials.length>0 ? (
-                            <div style={{marginBottom:6}}>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:80,overflowY:"auto",
-                                padding:4,background:"var(--color-bg-canvas)",borderRadius:6,
-                                border:"1px solid var(--color-border-muted)"}}>
-                                {itemSerials.map(x=>(
-                                  <button key={x.serial} onClick={()=>setAddForm(p=>({...p,serial:String(x.serial)}))}
-                                    style={{padding:"2px 8px",borderRadius:12,fontSize:11,fontFamily:"monospace",
-                                      cursor:"pointer",
-                                      background:addForm.serial===String(x.serial)?"var(--btn-blue-bg)":"var(--color-bg-subtle)",
-                                      border:`1px solid ${addForm.serial===String(x.serial)?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
-                                      color:addForm.serial===String(x.serial)?"var(--color-accent-fg)":"var(--color-text-primary)"}}>
-                                    {x.serial}
-                                    {x.assignedToSoldier&&<span style={{fontSize:9,color:"var(--color-warning-fg)",marginRight:3}}>●</span>}
-                                  </button>
-                                ))}
-                              </div>
-                              <div style={{fontSize:9,color:"var(--color-text-muted)",marginTop:2}}>● = משויך לחייל</div>
-                            </div>
-                          ) : null;
-                        })()}
+                        <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:4}}>🔢 מספר סידורי / צ (אופציונלי)</div>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
                           <input value={addForm.serial} onChange={e=>setAddForm(p=>({...p,serial:e.target.value}))}
-                            placeholder="הכנסה ידנית / בחר למעלה" style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}}/>
+                            placeholder="הכנס מספר סידורי..." style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}}/>
                           {addForm.serial&&<button onClick={()=>setAddForm(p=>({...p,serial:""}))}
                             style={{...S.btn("gray"),padding:"4px 8px",fontSize:11,minHeight:32}}>✕ נקה</button>}
                         </div>
@@ -12465,23 +12420,4 @@ function ImageLightbox({src, onClose}){
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
-</html                           // Collect serials ONLY from live Firebase data
-                           const itemSerials = [];
-                           const seenSers = new Set();
-                           // From live assignments only (no static sol.assigned)
-                           Object.entries(db.assignments||{}).forEach(([,asgn])=>{
-                             Object.entries(asgn||{}).forEach(([nm,val])=>{
-                               if((!addForm.alias||nm===addForm.alias)&&val&&val!==1&&val!==true){
-                                 const ser=String(val);
-                                 if(!seenSers.has(ser)){seenSers.add(ser);itemSerials.push({serial:ser,name:nm,fromSoldier:true});}
-                               }
-                             });
-                           });
-                           // From unitItems
-                           Object.values(db.unitItems||{}).forEach(v=>{
-                             const nm=v.n||v.name||""; const ser=v.s||v.serial||"";
-                             if((!addForm.alias||nm===addForm.alias)&&ser&&!seenSers.has(String(ser))){
-                               seenSers.add(String(ser));itemSerials.push({serial:String(ser),name:nm});
-                             }
-                           });
->
+</html>
