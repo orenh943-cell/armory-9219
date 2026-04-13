@@ -1689,34 +1689,38 @@ function DailyModal({db,onClose,type,auth}){
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
-  // חישוב מלאי — מתוך unitItems (מה שהוזן) + armoryMaster
-  const loansMap = {};
-  // Count from soldier assignments
-  Object.entries(db.assignments||{}).forEach(([,asgn])=>{
-    Object.keys(asgn||{}).forEach(name=>{loansMap[name]=(loansMap[name]||0)+1;});
+  // חישוב מלאי יומי
+  // מלאי כולל = כל מה שב-assignments + unitItems
+  const totalMap = {};  // name -> total count
+  const loansMap = {};  // name -> השאלות (אצל חיילים חתומים)
+  const stockMap = {};  // name -> מצאי (לא חתומים + בארמון)
+
+  const signedIds = new Set(Object.keys(db.signatures||{}));
+
+  // מ-assignments
+  Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+    Object.keys(asgn||{}).forEach(name=>{
+      totalMap[name]=(totalMap[name]||0)+1;
+      if(signedIds.has(solId)){
+        loansMap[name]=(loansMap[name]||0)+1;
+      } else {
+        stockMap[name]=(stockMap[name]||0)+1;
+      }
+    });
   });
-  // Count from unitItems assigned to soldiers
+  // מ-unitItems
   Object.values(db.unitItems||{}).forEach(item=>{
-    if((item.t||item.assignedType)==="soldier"){
-      const name=item.n||item.name||"";
-      if(name) loansMap[name]=(loansMap[name]||0)+1;
-    }
+    const name=item.n||item.name||""; if(!name) return;
+    totalMap[name]=(totalMap[name]||0)+1;
+    stockMap[name]=(stockMap[name]||0)+1;
   });
-  // ספירת כמויות לפי שם מלא מ-unitItems
-  const unitTotals = {};
-  Object.values(db.unitItems||{}).forEach(item=>{
-    const name = item.n||item.name||"";
-    if(name) unitTotals[name]=(unitTotals[name]||0)+1;
-  });
-  const master = db._armoryMasterLoaded ? (db.armoryMaster||{}) : null;
 
   function calcItem(item){
     const alias = item.alias||item.name;
-    // Priority: unitItems count → armoryMaster → DAILY_LEFT hardcoded
-    const total = (master?.[alias]?.total) ?? unitTotals[alias] ?? (db._armoryMasterLoaded ? 0 : (item.total ?? 0));
+    const total = totalMap[alias]||0;
     const loans = loansMap[alias]||0;
-    const stock = total - loans;
-    return {...item, alias, total, loans, stock, ok:stock>=0};
+    const stock = stockMap[alias]||0;
+    return {...item, alias, total, loans, stock, ok:true};
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
@@ -7642,9 +7646,10 @@ function MyStockTab({db, setDb, soldiers, auth}){
   },[newNameSearch, allItemSuggestions]);
   const [showSummary, setShowSummary] = React.useState(false);
   const [expandedAddItem, setExpandedAddItem] = React.useState(null);
+  const [expandedUnit, setExpandedUnit] = React.useState(null); // "itemName_unit"
 
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
-  const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
+  const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
 
   // Merge ARMORY_MASTER with live assignments
   const liveData = React.useMemo(()=>{
@@ -8272,21 +8277,51 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 const toSoldiersInUnit = liveCount - unitItemsHere.length;
                 return (
                   <div key={u} style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
-                    border:`1px solid ${unitItemsHere.length>0?"var(--color-warning-fg)":"var(--color-border-muted)"}`}}>
+                    cursor:"pointer",
+                    border:`1px solid ${expandedUnit===expandedItem+"_"+u?"var(--color-accent-fg)":unitItemsHere.length>0?"var(--color-warning-fg)":"var(--color-border-muted)"}`}}
+                    onClick={e=>{e.stopPropagation();setExpandedUnit(expandedUnit===expandedItem+"_"+u?null:expandedItem+"_"+u);}}>
                     <div style={{fontWeight:700,color:"var(--color-accent-fg)",fontSize:"var(--text-lg)"}}>{liveCount}</div>
                     <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>פלוגה {u}</div>
-                    {toSoldiersInUnit>0&&<div style={{fontSize:9,color:"var(--color-accent-fg)"}}>👤 {toSoldiersInUnit}</div>}
-                    {unitItemsHere.map(([uid,v])=>(
-                      <div key={uid} style={{marginTop:4,padding:"3px 6px",background:"var(--color-warning-subtle)",
-                        borderRadius:5,display:"flex",alignItems:"center",gap:4,justifyContent:"space-between"}}>
-                        <span style={{fontSize:9,fontFamily:"monospace",color:"var(--color-warning-fg)"}}>{v.s||v.serial||"ללא סידורי"}</span>
-                        <button onClick={e=>{e.stopPropagation();setExpandedAddItem("assign_"+uid+"_"+item.name+"_"+u);}}
-                          style={{...S.btn("blue"),padding:"1px 6px",fontSize:8,minHeight:16}}>
-                          שייך לחייל
-                        </button>
-                      </div>
-                    ))}
+                    {toSoldiersInUnit>0&&<div style={{fontSize:9,color:"var(--color-accent-fg)"}}>👤 {toSoldiersInUnit} לחיילים</div>}
+                    {unitItemsHere.length>0&&<div style={{fontSize:9,color:"var(--color-warning-fg)"}}>🏢 {unitItemsHere.length} לפלוגה</div>}
+                    <div style={{fontSize:9,color:"var(--color-text-muted)",marginTop:2}}>{expandedUnit===expandedItem+"_"+u?"▲ סגור":"▼ פרט"}</div>
                   </div>
+                  {/* רשימת חיילים בפלוגה */}
+                  {expandedUnit===expandedItem+"_"+u&&(
+                    <div style={{gridColumn:"1/-1",background:"var(--color-bg-subtle)",borderRadius:8,padding:"10px 12px",
+                      border:"1px solid var(--color-accent-fg)",marginTop:4}}>
+                      <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8,color:"var(--color-accent-fg)"}}>
+                        {item.name} — פלוגה {u}
+                      </div>
+                      {/* חיילים עם פריט זה */}
+                      {soldiers.filter(s=>s.unit===u&&((db.assignments?.[s.id]||s.assigned||{})[item.name]!==undefined)).map(s=>{
+                        const serial=(db.assignments?.[s.id]||s.assigned||{})[item.name];
+                        const sig=db.signatures?.[s.id];
+                        return (
+                          <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                            background:"var(--color-bg-default)",borderRadius:6,marginBottom:3}}>
+                            <span style={{fontWeight:600,flex:1,fontSize:"var(--text-sm)"}}>{s.name}</span>
+                            <span style={{fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{isSerial(serial)?serial:""}</span>
+                            {sig?<span style={{fontSize:9,color:"var(--color-success-fg)"}}>✅ חתום</span>
+                              :<span style={{fontSize:9,color:"var(--color-warning-fg)"}}>⏳ לא חתום</span>}
+                          </div>
+                        );
+                      })}
+                      {/* פריטים מוקצי פלוגה (ללא חייל) */}
+                      {unitItemsHere.map(([uid,v])=>(
+                        <div key={uid} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                          background:"var(--color-warning-subtle)",borderRadius:6,marginBottom:3,
+                          border:"1px solid var(--color-warning-fg)"}}>
+                          <span style={{flex:1,fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>🏢 מוקצה לפלוגה</span>
+                          <span style={{fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{v.s||v.serial||"—"}</span>
+                          <button onClick={e=>{e.stopPropagation();setExpandedAddItem("assign_"+uid+"_"+item.name+"_"+u);}}
+                            style={{...S.btn("blue"),padding:"2px 8px",fontSize:9,minHeight:20}}>
+                            שייך לחייל
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 );
               })}
               <div style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
