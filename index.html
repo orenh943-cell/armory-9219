@@ -7431,6 +7431,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [filterName, setFilterName] = React.useState("");
   const [expandedItem, setExpandedItem] = React.useState(null);
   const [showWeaponsOnly, setShowWeaponsOnly] = React.useState(false);
+  const [showFreeOnly, setShowFreeOnly] = React.useState(false);
   const [editItem, setEditItem] = React.useState(null);
   const [editQty, setEditQty] = React.useState("");
   const [editName, setEditName] = React.useState("");
@@ -7487,6 +7488,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
       return { name, ...info, liveByUnit, liveTotal, unassigned };
     }).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
+      if(showFreeOnly && item.unassigned===0) return false;
       if(filterName.trim() && !item.name.includes(filterName.trim())) return false;
       if(filterUnit!=="הכל"){
         const inUnit = (item.liveByUnit[filterUnit]||0) + (item.byUnit?.[filterUnit]||0);
@@ -7672,6 +7674,14 @@ function MyStockTab({db, setDb, soldiers, auth}){
             cursor:"pointer",fontSize:"var(--text-sm)"}}>
           🔫 נשק בלבד
         </button>
+        <button onClick={()=>setShowFreeOnly(p=>!p)}
+          style={{padding:"4px 12px",borderRadius:20,minHeight:32,
+            border:`1px solid ${showFreeOnly?"var(--color-success-fg)":"var(--color-border-default)"}`,
+            background:showFreeOnly?"rgba(63,185,80,.15)":"transparent",
+            color:showFreeOnly?"var(--color-success-fg)":"var(--color-text-secondary)",
+            cursor:"pointer",fontSize:"var(--text-sm)"}}>
+          🟢 לא מוקצה בלבד
+        </button>
       </div>
       <input value={filterName} onChange={e=>setFilterName(e.target.value)}
         placeholder="🔍 חפש אמצעי..." style={{...S.input,marginBottom:12}}/>
@@ -7687,20 +7697,18 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <div key={item.name} onClick={()=>setExpandedItem(isExp?null:item.name)}
               style={{background:isExp?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:9,
                 padding:"10px 12px",cursor:"pointer",
-                border:`1px solid ${isExp?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
-                borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)"}`,
+                border:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                 transition:"all var(--transition)"}}>
               <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{displayCount}</div>
               <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginTop:4,color:"var(--color-text-primary)",lineHeight:1.3}}>{item.name}</div>
               <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:2}}>מק"ט {item.makat||"—"}</div>
-              {freeCount>0&&<div style={{fontSize:10,color:"var(--color-success-fg)",marginTop:2}}>✓ {freeCount} לא מוקצה לפלוגה</div>}
-              {filterUnit==="הכל"&&(
-                <div style={{marginTop:4,display:"flex",flexWrap:"wrap",gap:2}}>
-                  {Object.entries(item.liveByUnit).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([u,c])=>(
-                    <span key={u} style={{fontSize:9,color:"var(--color-text-muted)",background:"var(--color-bg-canvas)",borderRadius:3,padding:"1px 4px"}}>{u}:{c}</span>
-                  ))}
-                </div>
-              )}
+              {freeCount>0&&<div style={{fontSize:10,marginTop:4,display:"flex",alignItems:"center",gap:4}}>
+                <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:10,padding:"1px 7px",fontWeight:700}}>{freeCount}</span>
+                <span style={{color:"var(--color-success-fg)",fontWeight:600}}>פנוי</span>
+              </div>}
+              {displayCount>0&&freeCount===0&&<div style={{fontSize:9,color:"var(--color-warning-fg)",marginTop:3}}>● מוקצה במלואו</div>}
+
               {canDelete(auth)&&(
                 <div style={{display:"flex",gap:8,marginTop:4}} onClick={e=>e.stopPropagation()}>
                   <div onClick={()=>{setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
