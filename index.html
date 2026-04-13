@@ -2205,6 +2205,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   }
   function clearSig(){
     const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
+    fbDelete("db/signatures/"+soldier.id).catch(()=>{});
     logAction("ביטול_חתימה", `בוטלה חתימה של ${soldier.name} (${soldier.id})`, auth?.name);
   }
 
@@ -2830,13 +2831,13 @@ function QuickModal({soldiers,db,onSave,onClose}){
     const valid=items.filter(i=>i.name);if(!valid.length||!soldier)return;
     const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);onClose();
+    delete ndb.signatures[soldier.id];fbDelete("db/signatures/"+soldier.id).catch(()=>{});saveDB(ndb);onSave(ndb);onClose();
   }
   function doReturn(){
     if(!retSel.length||!soldier)return;
     const na={...assigned};retSel.forEach(n=>delete na[n]);
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
-    delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);onClose();
+    delete ndb.signatures[soldier.id];fbDelete("db/signatures/"+soldier.id).catch(()=>{});saveDB(ndb);onSave(ndb);onClose();
   }
 
   return (
@@ -5792,7 +5793,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                       {!sig&&s.guarantee&&<Badge color="purple" small>🛡️ ערב: {s.guarantee.repName}</Badge>}
                       {!sig&&perms.canSign&&<button onClick={()=>sendWhatsApp(s)} style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
                       {!sig&&perms.canSign&&<button onClick={()=>setSignInPersonSoldier(s)} style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>✍️ חתום ליד</button>}
-                      {sig&&perms.canEdit&&<button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
+                      {sig&&perms.canEdit&&<button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];fbDelete("db/signatures/"+s.id).catch(()=>{});saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
                       <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>פרופיל</button>
                     </div>
                   </div>
@@ -5878,7 +5879,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={S.td}>
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>פרופיל</button>
-                              <button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>זכה</button>
+                              <button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];fbDelete("db/signatures/"+s.id).catch(()=>{});saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>זכה</button>
                             </div>
                           </td>
                         </tr>
