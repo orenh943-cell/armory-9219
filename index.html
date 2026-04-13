@@ -7110,7 +7110,12 @@ function CabinetsTab({db, setDb, auth}){
   const itemSuggestions = React.useMemo(()=>{
     const seen = new Set();
     const list = [];
-    // From ARMORY_MASTER
+    // From live armoryMaster (Firebase) — PRIMARY source
+    Object.entries(db.armoryMaster||{}).forEach(([name,v])=>{
+      const key = name+"|"+(v.makat||"");
+      if(!seen.has(key)){ seen.add(key); list.push({alias:name, makat:String(v.makat||""), fullname:name}); }
+    });
+    // From static ARMORY_MASTER fallback
     Object.entries(ARMORY_MASTER||{}).forEach(([name,v])=>{
       const key = name+"|"+(v.makat||"");
       if(!seen.has(key)){ seen.add(key); list.push({alias:name, makat:String(v.makat||""), fullname:name}); }
@@ -7118,15 +7123,27 @@ function CabinetsTab({db, setDb, auth}){
     // From unitItems
     Object.values(db.unitItems||{}).forEach(item=>{
       const nm = item.n||item.name||"";
-      const mk = String(item.s||item.serial||"");
-      if(nm && !seen.has(nm+"|")){ seen.add(nm+"|"); list.push({alias:nm, makat:"", fullname:nm}); }
+      const mk = String(item.makat||getMakat(nm)||"");
+      if(nm && !seen.has(nm+"|")){ seen.add(nm+"|"); list.push({alias:nm, makat:mk, fullname:nm}); }
+    });
+    // From assignments (items soldiers have)
+    Object.values(db.assignments||{}).forEach(asgn=>{
+      Object.keys(asgn||{}).forEach(name=>{
+        if(!seen.has(name+"|")){
+          seen.add(name+"|");
+          const mk=String(getMakat(name)||"");
+          list.push({alias:name, makat:mk, fullname:name});
+        }
+      });
     });
     return list.sort((a,b)=>a.alias.localeCompare(b.alias,"he"));
-  },[db.unitItems]);
+  },[db.armoryMaster, db.unitItems, db.assignments]);
 
-  const filteredSuggestions = search.length>0
-    ? itemSuggestions.filter(x=>x.alias.includes(search)||x.makat.includes(search))
-    : [];
+  const filteredSuggestions = React.useMemo(()=>{
+    if(!search.trim()) return itemSuggestions.slice(0,12); // show top 12 when empty
+    const q = search.toLowerCase();
+    return itemSuggestions.filter(x=>x.alias.toLowerCase().includes(q)||x.makat.includes(q)).slice(0,12);
+  },[search, itemSuggestions]);
 
   function renameCabinet(unit, idx, newName){
     const names = [...getCabNames(unit)];
@@ -7348,23 +7365,37 @@ function CabinetsTab({db, setDb, auth}){
                 addingTo===cabName ? (
                   <div style={{marginTop:8,padding:"10px",background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}}>
                     <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginBottom:8}}>➕ הוספת פריט</div>
-                    {/* חיפוש מרשימה קיימת */}
-                    <input value={search} onChange={e=>setSearch(e.target.value)}
-                      placeholder="🔍 חיפוש פריט מהמלאי..." style={{...S.input,marginBottom:4}}/>
-                    {filteredSuggestions.length>0&&(
-                      <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-muted)",
-                        borderRadius:6,maxHeight:120,overflowY:"auto",marginBottom:6}}>
-                        {filteredSuggestions.slice(0,8).map((s,i)=>(
-                          <div key={i} onClick={()=>{setAddForm(p=>({...p,alias:s.alias,makat:s.makat}));setSearch("");}}
-                            style={{padding:"6px 10px",cursor:"pointer",fontSize:"var(--text-sm)",
-                              borderBottom:"1px solid var(--color-border-muted)"}}
-                            onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
-                            onMouseLeave={e=>e.currentTarget.style.background=""}>
-                            {s.alias} {s.makat&&<span style={{color:"var(--color-text-muted)",fontSize:10,fontFamily:"monospace"}}>{s.makat}</span>}
+                    {/* חיפוש פריט — שם או מקט */}
+                    <div style={{position:"relative",marginBottom:6}}>
+                      <input value={search} onChange={e=>{setSearch(e.target.value);setAddForm(p=>({...p,alias:"",makat:""}));}}
+                        onFocus={()=>setSearch(p=>p)}
+                        placeholder="🔍 חפש לפי שם או מקט..." style={{...S.input,marginBottom:0}}/>
+                      {filteredSuggestions.length>0&&(
+                        <div style={{position:"absolute",top:"100%",right:0,left:0,zIndex:100,
+                          background:"var(--color-bg-default)",border:"1px solid var(--color-accent-fg)",
+                          borderRadius:6,maxHeight:200,overflowY:"auto",
+                          boxShadow:"0 4px 16px rgba(0,0,0,.3)"}}>
+                          {filteredSuggestions.map((s,i)=>(
+                            <div key={i} onClick={()=>{
+                              setAddForm(p=>({...p,alias:s.alias,makat:s.makat||""}));
+                              setSearch(s.alias);
+                            }}
+                              style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
+                                display:"flex",justifyContent:"space-between",alignItems:"center",
+                                borderBottom:"1px solid var(--color-border-muted)"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                              onMouseLeave={e=>e.currentTarget.style.background=""}>
+                              <span style={{fontWeight:600}}>{s.alias}</span>
+                              {s.makat&&<span style={{color:"var(--color-text-muted)",fontSize:10,fontFamily:"monospace"}}>מקט {s.makat}</span>}
+                            </div>
+                          ))}
+                          <div style={{padding:"6px 12px",fontSize:10,color:"var(--color-text-muted)",borderTop:"1px solid var(--color-border-muted)"}}>
+                            לא מוצא? הקלד שם חדש ↓
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      )}
+                      {addForm.alias&&<div style={{fontSize:11,color:"var(--color-success-fg)",marginTop:3}}>✅ {addForm.alias}</div>}
+                    </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                       <div>
                         <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:2}}>שם אמצעי *</div>
