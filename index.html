@@ -7074,17 +7074,31 @@ function CabinetsTab({db, setDb, auth}){
 
   // Cabinet items stored in db.cabinets[cabName]
   function getItems(cabName){
+    // כנה = auto-populated from assignments (weapons of unsigned soldiers in this unit)
+    if(cabName.startsWith("כנה ")){
+      const unit = cabName.replace("כנה ","");
+      const allSolsHere = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS]
+        .filter(s=>s.unit===unit||s.unit===(unit==="אגמ"?"אגמ":unit));
+      const signedIds = new Set(Object.keys(db.signatures||{}));
+      const items = [];
+      allSolsHere.forEach(sol=>{
+        const asgn = db.assignments?.[sol.id]??sol.assigned??{};
+        Object.entries(asgn).forEach(([name,val])=>{
+          if(WEAPON_KEYS.includes(name)){
+            items.push({
+              alias:name, fullname:name, qty:1,
+              serial:val&&val!==1?String(val):null,
+              makat:getMakat(name)||null,
+              soldierName:sol.name, soldierId:sol.id,
+              signed:signedIds.has(sol.id),
+            });
+          }
+        });
+      });
+      return items;
+    }
     const custom = db.cabinets?.[cabName];
     if(custom) return custom;
-    const CAB_DATA_MAP = {
-      "כנה א":"כנה א","ארון א 1":"ארון א","כנה ב":"כנה ב","ארון ב 1":"ארון ב",
-      "כנה ג":"כנה ג","ארון ג 1":"ארון ג","כנה מסייעת":"ארון מסייעת",
-      "ארון מסייעת 1":"מסייעת 1","ארון מסייעת 2":"מסייעת 2","ארון מסייעת 3":"מסייעת 3",
-      "כנה אגמ":"ארון אגמ-פלסמ","ארון אגמ 1":"אגמ-פלסמ",
-      "ארון גדודי":"ארון גדודי","ארמון 2":"ארמון 2","ארמון 3":"ארמון 3","ארמון 4":"ארמון 4",
-    };
-    const key = CAB_DATA_MAP[cabName];
-    if(key && CABINETS_DATA[key]) return CABINETS_DATA[key];
     return [];
   }
   function saveItems(cabName, items){
@@ -7306,12 +7320,16 @@ function CabinetsTab({db, setDb, auth}){
                       <>
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{item.alias||item.fullname}</div>
-                          <div style={{display:"flex",gap:8,fontSize:10,color:"var(--color-text-muted)",marginTop:2}}>
-                            {item.makat&&<span style={{fontFamily:"monospace"}}>מק״ט: {item.makat}</span>}
-                            {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>סידורי: {item.serial}</span>}
+                          <div style={{display:"flex",gap:8,fontSize:10,color:"var(--color-text-muted)",flexWrap:"wrap"}}>
+                            {item.makat&&<span style={{fontFamily:"monospace"}}>מק"ט: {item.makat}</span>}
+                            {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>צ: {item.serial}</span>}
+                            {item.soldierName&&<span style={{color:"var(--color-text-secondary)"}}>👤 {item.soldierName}</span>}
+                            {item.signed!==undefined&&(item.signed
+                              ?<span style={{color:"var(--color-success-fg)"}}>✅ חתום</span>
+                              :<span style={{color:"var(--color-warning-fg)"}}>⏳ לא חתום — בכנה</span>)}
                           </div>
                         </div>
-                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
+                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAli                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
                         {editMode&&(
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={()=>setEditingItem({cabName,idx})}
@@ -7647,6 +7665,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [showSummary, setShowSummary] = React.useState(false);
   const [expandedAddItem, setExpandedAddItem] = React.useState(null);
   const [expandedUnit, setExpandedUnit] = React.useState(null); // "itemName_unit"
+  const [serialSearch, setSerialSearch] = React.useState(""); // חיפוש סידורי בפאנל
+  const [serialUnitFilter, setSerialUnitFilter] = React.useState("הכל"); // סינון פלוגה בסידוריים
 
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
   const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
@@ -7708,7 +7728,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
       if(showFreeOnly && item.unassigned===0) return false;
       if(filterName.trim() && !item.name.includes(filterName.trim())) return false;
       if(filterUnit!=="הכל"){
-        const inUnit = (item.liveByUnit[filterUnit]||0) + (item.byUnit?.[filterUnit]||0);
+        const inUnit = filterUnit==="גדודי"
+          ? (item.gadudi||0) // ארמון גדודי = פנוי/לא מוקצה
+          : (item.liveByUnit[filterUnit]||0) + (item.byUnit?.[filterUnit]||0);
         return inUnit > 0;
       }
       return true;
@@ -7880,7 +7902,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
               background:filterUnit===u?"var(--btn-blue-bg)":"transparent",
               color:filterUnit===u?"var(--color-accent-fg)":"var(--color-text-secondary)",
               cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:filterUnit===u?700:400,minHeight:32}}>
-            {u==="הכל"?"כולם":"פלוגה "+u}
+            {u==="הכל"?"כולם":u==="גדודי"?"🏛️ ארמון":"פלוגה "+u}
           </button>
         ))}
         <button onClick={()=>setShowWeaponsOnly(p=>!p)}
@@ -7970,7 +7992,15 @@ function MyStockTab({db, setDb, soldiers, auth}){
       {expandedItem&&(()=>{
         const item = liveData.find(x=>x.name===expandedItem);
         if(!item) return null;
-        const relatedItems = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name||"")=== expandedItem);
+        const allRelated = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name||"")=== expandedItem);
+        const relatedItems = allRelated.filter(([,v])=>{
+          const unit=v.u||v.unit||"";
+          const serial=String(v.s||v.serial||"");
+          const unitOk = serialUnitFilter==="הכל" || unit===serialUnitFilter;
+          const searchOk = !serialSearch.trim() || serial.toLowerCase().includes(serialSearch.toLowerCase()) ||
+            (v.sn||v.assignedSoldierName||"").includes(serialSearch);
+          return unitOk && searchOk;
+        });
         const allSolsList=[...Object.values(db.customSoldiers||{}),...soldiers];
         return (
           <div style={{...S.card,marginBottom:16,border:"2px solid var(--color-accent-fg)"}}>
@@ -7988,6 +8018,26 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 <button onClick={()=>{setExpandedItem(null);setExpandedAddItem(null);}}
                   style={{...S.btn("gray"),padding:"5px 10px",fontSize:"var(--text-xs)"}}>✕ סגור</button>
               </div>
+            </div>
+
+            {/* חיפוש + סינון פלוגה */}
+            <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+              <input value={serialSearch} onChange={e=>setSerialSearch(e.target.value)}
+                placeholder="🔍 חפש סידורי / שם חייל..."
+                style={{...S.input,marginBottom:0,flex:1,minWidth:120}}/>
+              <select value={serialUnitFilter} onChange={e=>setSerialUnitFilter(e.target.value)}
+                style={{...S.input,marginBottom:0,minWidth:100}}>
+                {["הכל","א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].map(u=>(
+                  <option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>
+                ))}
+              </select>
+              {(serialSearch||serialUnitFilter!=="הכל")&&(
+                <button onClick={()=>{setSerialSearch("");setSerialUnitFilter("הכל");}}
+                  style={{...S.btn("gray"),padding:"4px 10px",fontSize:"var(--text-xs)"}}>✕ נקה</button>
+              )}
+            </div>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginBottom:8}}>
+              מציג {relatedItems.length} מתוך {allRelated.length} רשומות
             </div>
 
             {/* טופס הוספה */}
@@ -8026,6 +8076,26 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         padding:"2px 8px",borderRadius:10,color:isSoldier?"var(--color-accent-fg)":"var(--color-warning-fg)",fontWeight:600}}>
                         פלוגה {unit}
                       </span>
+                      {/* העברה לפלוגה */}
+                      {!isSoldier&&auth.role==="admin"&&(
+                        <select value="" onChange={e=>{
+                          if(!e.target.value) return;
+                          const newU=e.target.value;
+                          const nItems={...db.unitItems,[id]:{...db.unitItems[id],u:newU}};
+                          const ndb={...db,unitItems:nItems};
+                          saveDB(ndb); setDb(ndb);
+                          fbSet("db/unitItems/"+id+"/u", newU).catch(()=>{});
+                          e.target.value="";
+                        }} style={{...S.input,marginBottom:0,fontSize:9,padding:"1px 4px",minWidth:70,minHeight:22}}>
+                          <option value="">🔄 העבר</option>
+                          {["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].filter(u2=>u2!==unit).map(u2=>(
+                            <option key={u2} value={u2}>{u2}</option>
+                          ))}
+                        </select>
+                      )}
+                      {/* שיוך לחייל */}
+                      {!isSoldier&&<button onClick={()=>setExpandedAddItem("assign_"+id+"_"+expandedItem+"_"+unit)}
+                        style={{...S.btn("blue"),padding:"2px 7px",fontSize:9,minHeight:22}}>👤</button>}
                       {canDelete(auth)&&<button onClick={()=>{
                         const ndb={...db,unitItems:{...db.unitItems}};
                         delete ndb.unitItems[id];
