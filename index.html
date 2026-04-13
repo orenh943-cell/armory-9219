@@ -7434,6 +7434,68 @@ function AddSerialInline({itemName, db, setDb, onDone}){
 }
 
 
+function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDone}){
+  const [search, setSearch] = React.useState("");
+  const [soldierId, setSoldierId] = React.useState("");
+  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const matched = React.useMemo(()=>{
+    if(!search.trim()) return [];
+    const q=search.toLowerCase();
+    return allSols.filter(s=>s.unit===unit&&(s.name.toLowerCase().includes(q)||s.id.includes(q))).slice(0,6);
+  },[search,allSols,unit]);
+  const selectedSol = allSols.find(s=>s.id===soldierId);
+
+  function assign(){
+    if(!soldierId) return;
+    const item = db.unitItems?.[uid];
+    if(!item) return;
+    // Move from unitItems (unit assignment) to assignments (soldier assignment)
+    const nUnitItems = {...db.unitItems};
+    delete nUnitItems[uid];
+    const prevAssigned = db.assignments?.[soldierId]||{};
+    const nAssignments = {...(db.assignments||{}),[soldierId]:{...prevAssigned,[itemName]:item.s||item.serial||1}};
+    const ndb={...db, unitItems:nUnitItems, assignments:nAssignments};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/unitItems/"+uid, null).catch(()=>{});
+    fbSet("db/assignments/"+soldierId, sanitizeForFirebase(nAssignments[soldierId])).catch(()=>{});
+    logAction("שיוך_אמצעי", itemName+" שויך לחייל "+selectedSol?.name, "מערכת");
+    onDone();
+  }
+
+  return (
+    <div style={{background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-fg)",
+      borderRadius:8,padding:"10px 12px",marginTop:8}}>
+      <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8,color:"var(--color-warning-fg)"}}>
+        🔗 שייך {itemName} לחייל בפלוגה {unit}
+      </div>
+      <div style={{position:"relative",marginBottom:8}}>
+        <input value={search} onChange={e=>{setSearch(e.target.value);setSoldierId("");}}
+          placeholder="חפש חייל בפלוגה..." style={{...S.input,marginBottom:0}}/>
+        {search&&!soldierId&&matched.length>0&&(
+          <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-default)",
+            border:"1px solid var(--color-accent-fg)",borderRadius:6,zIndex:100,maxHeight:150,overflowY:"auto"}}>
+            {matched.map(s=>(
+              <div key={s.id} onClick={()=>{setSoldierId(s.id);setSearch(s.name);}}
+                style={{padding:"7px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
+                  borderBottom:"1px solid var(--color-border-muted)"}}
+                onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                <strong>{s.name}</strong> <span style={{color:"var(--color-text-muted)",fontSize:10}}>{s.id}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {search&&matched.length===0&&!soldierId&&<div style={{fontSize:11,color:"var(--color-danger-fg)",marginTop:2}}>לא נמצאו חיילים בפלוגה {unit}</div>}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={assign} disabled={!soldierId}
+          style={{...S.btn("green"),flex:1,padding:"7px 0",opacity:soldierId?1:0.5}}>✅ שייך לחייל</button>
+        <button onClick={onDone} style={{...S.btn("gray"),padding:"7px 14px"}}>ביטול</button>
+      </div>
+    </div>
+  );
+}
+
 function MyStockTab({db, setDb, soldiers, auth}){
   const [filterUnit, setFilterUnit] = React.useState("הכל");
   const [filterName, setFilterName] = React.useState("");
@@ -7810,6 +7872,15 @@ function MyStockTab({db, setDb, soldiers, auth}){
             {/* טופס הוספה */}
             {expandedAddItem===expandedItem&&<AddSerialInline itemName={expandedItem} db={db} setDb={setDb} onDone={()=>setExpandedAddItem(null)}/>}
 
+            {/* שיוך פריט לחייל */}
+            {expandedAddItem&&expandedAddItem.startsWith("assign_")&&(()=>{
+              const parts = expandedAddItem.split("_");
+              const uid=parts[1], itemName=parts[2], unit=parts[3];
+              return <AssignUnitItemToSoldier uid={uid} itemName={itemName} unit={unit}
+                db={db} setDb={setDb} soldiers={soldiers}
+                onDone={()=>setExpandedAddItem(null)}/>;
+            })()}
+
             {/* רשימת סידוריים */}
             {relatedItems.length===0
               ?<div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)",textAlign:"center",padding:"12px 0"}}>
@@ -8076,23 +8147,36 @@ function MyStockTab({db, setDb, soldiers, auth}){
               </span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8,marginBottom:10}}>
+              {/* Unit mini cards with breakdown */}
               {unitList.map(u=>{
                 const liveCount = item.liveByUnit[u]||0;
-                const allocCount = item.byUnit?.[u]||0;
-                if(liveCount===0&&allocCount===0) return null;
+                if(liveCount===0) return null;
+                // Count unit items (no soldier) in this unit
+                const unitItemsHere = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name)===item.name&&(v.t||v.assignedType)==="unit"&&(v.u||v.unit)===u);
+                const toSoldiersInUnit = liveCount - unitItemsHere.length;
                 return (
                   <div key={u} style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
-                    border:"1px solid var(--color-border-muted)"}}>
+                    border:`1px solid ${unitItemsHere.length>0?"var(--color-warning-fg)":"var(--color-border-muted)"}`}}>
                     <div style={{fontWeight:700,color:"var(--color-accent-fg)",fontSize:"var(--text-lg)"}}>{liveCount}</div>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>פלוגה {u}</div>
-
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>פלוגה {u}</div>
+                    {toSoldiersInUnit>0&&<div style={{fontSize:9,color:"var(--color-accent-fg)"}}>👤 {toSoldiersInUnit}</div>}
+                    {unitItemsHere.map(([uid,v])=>(
+                      <div key={uid} style={{marginTop:4,padding:"3px 6px",background:"var(--color-warning-subtle)",
+                        borderRadius:5,display:"flex",alignItems:"center",gap:4,justifyContent:"space-between"}}>
+                        <span style={{fontSize:9,fontFamily:"monospace",color:"var(--color-warning-fg)"}}>{v.s||v.serial||"ללא סידורי"}</span>
+                        <button onClick={e=>{e.stopPropagation();setExpandedAddItem("assign_"+uid+"_"+item.name+"_"+u);}}
+                          style={{...S.btn("blue"),padding:"1px 6px",fontSize:8,minHeight:16}}>
+                          שייך לחייל
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 );
               })}
               <div style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
                 border:`1px solid ${item.unassigned>0?"var(--color-success-fg)":"var(--color-border-muted)"}`}}>
                 <div style={{fontWeight:700,color:item.unassigned>0?"var(--color-success-fg)":"var(--color-text-muted)",fontSize:"var(--text-lg)"}}>{item.unassigned}</div>
-                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>פנוי</div>
+                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>🟢 פנוי בארמון</div>
               </div>
             </div>
 
