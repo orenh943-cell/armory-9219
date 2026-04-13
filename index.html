@@ -7218,7 +7218,7 @@ function CabinetsTab({db, setDb, auth}){
     <body><h2>🗄️ ${cabName}</h2>
     <p style="color:#666">סהכ: ${total} יחידות | הופק: ${new Date().toLocaleDateString("he-IL")}</p>
     <table><thead><tr><th>מק"ט</th><th>שם אמצעי</th><th>כמות</th><th>סידורי/צ</th></tr></thead>
-    <tbody>${items.map(i=>`<tr><td style='font-size:10px;font-family:monospace'>${i.makat||"—"}</td><td>${i.alias||i.fullname}</td><td style='text-align:center'>${i.qty||1}</td><td style='font-family:monospace;font-size:10px'>${i.serial||"—"}</td></tr>`).join("")}
+    <tbody>${items.map(i=>"<tr><td style='font-size:10px;font-family:monospace'>${i.makat||"-"}</td><td>${i.alias||i.fullname}</td><td style='text-align:center'>${i.qty||1}</td><td style='font-family:monospace;font-size:10px'>${i.serial||"-"}</td></tr>").join("")}
     <tr class="total"><td colspan="2">סהכ</td><td style="text-align:center">${total}</td><td></td></tr>
     </tbody></table>
     <button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;margin-top:10px">🖨️ הדפס</button>
@@ -7321,15 +7321,14 @@ function CabinetsTab({db, setDb, auth}){
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{item.alias||item.fullname}</div>
                           <div style={{display:"flex",gap:8,fontSize:10,color:"var(--color-text-muted)",flexWrap:"wrap"}}>
-                            {item.makat&&<span style={{fontFamily:"monospace"}}>מק"ט: {item.makat}</span>}
+                            {item.makat&&<span style={{fontFamily:"monospace"}}>מקט: {item.makat}</span>}
                             {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>צ: {item.serial}</span>}
                             {item.soldierName&&<span style={{color:"var(--color-text-secondary)"}}>👤 {item.soldierName}</span>}
-                            {item.signed!==undefined&&(item.signed
-                              ?<span style={{color:"var(--color-success-fg)"}}>✅ חתום</span>
-                              :<span style={{color:"var(--color-warning-fg)"}}>⏳ לא חתום — בכנה</span>)}
+                            {item.signed===true&&<span style={{color:"var(--color-success-fg)"}}>✅ חתום</span>}
+                            {item.signed===false&&<span style={{color:"var(--color-warning-fg)"}}>⏳ לא חתום</span>}
                           </div>
                         </div>
-                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAli                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
+                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
                         {editMode&&(
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={()=>setEditingItem({cabName,idx})}
@@ -8346,7 +8345,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 const unitItemsHere = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name)===item.name&&(v.t||v.assignedType)==="unit"&&(v.u||v.unit)===u);
                 const toSoldiersInUnit = liveCount - unitItemsHere.length;
                 return (
-                  <div key={u} style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
+                  <React.Fragment key={u}>
+                  <div style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
                     cursor:"pointer",
                     border:`1px solid ${expandedUnit===expandedItem+"_"+u?"var(--color-accent-fg)":unitItemsHere.length>0?"var(--color-warning-fg)":"var(--color-border-muted)"}`}}
                     onClick={e=>{e.stopPropagation();setExpandedUnit(expandedUnit===expandedItem+"_"+u?null:expandedItem+"_"+u);}}>
@@ -8392,6 +8392,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                       ))}
                     </div>
                   )}
+                  </React.Fragment>
                 );
               })}
               <div style={{background:"var(--color-bg-canvas)",borderRadius:7,padding:"8px 10px",
