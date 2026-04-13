@@ -7047,6 +7047,7 @@ function CabinetsTab({db, setDb, auth}){
   const [editingCabName, setEditingCabName] = React.useState(null); // {unit, idx}
   const [cabNameVal, setCabNameVal] = React.useState("");
   const [editingItem, setEditingItem] = React.useState(null); // {cabName, idx}
+  const [expandedCabItem, setExpandedCabItem] = React.useState(null); // "cabName_alias"
   const [addingTo, setAddingTo] = React.useState(null);
   const [addForm, setAddForm] = React.useState({alias:"",makat:"",qty:1,serial:""});
   const [showSugg, setShowSugg] = React.useState(false);
@@ -7312,56 +7313,78 @@ function CabinetsTab({db, setDb, auth}){
                   style={{...S.btn(""),padding:"4px 8px",fontSize:"var(--text-xs)",marginRight:4}}>🖨️</button>
               </div>
 
-              {/* רשימת פריטים */}
-              <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:editMode?10:0}}>
-                {items.length===0&&<div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)",textAlign:"center",padding:"8px 0"}}>ריק</div>}
-                {items.map((item,idx)=>(
-                  <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
-                    background:"var(--color-bg-canvas)",borderRadius:6,
-                    border:"1px solid var(--color-border-muted)"}}>
-                    {editingItem?.cabName===cabName && editingItem?.idx===idx ? (
-                      <div style={{display:"flex",gap:4,flex:1,flexWrap:"wrap"}}>
-                        <input value={item.alias||item.fullname} onChange={e=>updateItem(cabName,idx,"alias",e.target.value)}
-                          placeholder="שם אמצעי" style={{...S.input,flex:2,marginBottom:0,fontSize:11,minWidth:80}}/>
-                        <input value={item.makat||""} onChange={e=>updateItem(cabName,idx,"makat",e.target.value)}
-                          placeholder="מק״ט" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
-                        <div style={{position:"relative",display:"flex",gap:3,alignItems:"center"}}>
-                          <input value={item.serial||""} onChange={e=>updateItem(cabName,idx,"serial",e.target.value)}
-                            placeholder="סידורי/צ" style={{...S.input,width:90,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
-                          {item.serial&&<button onClick={()=>updateItem(cabName,idx,"serial","")}
-                            style={{...S.btn("red"),padding:"2px 5px",fontSize:9,minHeight:22}}>✕</button>}
-                        </div>
-                        <input value={item.qty||1} onChange={e=>updateItem(cabName,idx,"qty",e.target.value)}
-                          type="number" min="0" placeholder="כמות" style={{...S.input,width:55,marginBottom:0,fontSize:11}}/>
-                        <button onClick={()=>setEditingItem(null)}
-                          style={{...S.btn("green"),padding:"3px 8px",fontSize:10}}>✓ שמור</button>
-                      </div>
-                    ):(
-                      <>
+              {/* רשימת פריטים — מקובצת לפי שם */}
+              {items.length===0&&<div style={{color:"var(--color-text-muted)",fontSize:"var(--text-sm)",textAlign:"center",padding:"8px 0"}}>ריק</div>}
+              {(()=>{
+                // Group by alias
+                const groups = {};
+                items.forEach((item,idx)=>{
+                  const key = item.alias||item.fullname||"?";
+                  if(!groups[key]) groups[key]={alias:key,makat:item.makat,items:[]};
+                  groups[key].items.push({...item,_idx:idx});
+                });
+                return Object.entries(groups).map(([alias,grp])=>{
+                  const expKey = cabName+"_"+alias;
+                  const isExp = expandedCabItem===expKey;
+                  const total = grp.items.reduce((s,i)=>s+(i.qty||1),0);
+                  return (
+                    <React.Fragment key={alias}>
+                      {/* שורת כותרת */}
+                      <div onClick={()=>setExpandedCabItem(isExp?null:expKey)}
+                        style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",
+                          background:isExp?"var(--color-accent-subtle)":"var(--color-bg-canvas)",
+                          borderRadius:6,cursor:"pointer",marginBottom:2,
+                          border:`1px solid ${isExp?"var(--color-accent-fg)":"var(--color-border-muted)"}`}}>
                         <div style={{flex:1}}>
-                          <div style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{item.alias||item.fullname}</div>
-                          <div style={{display:"flex",gap:8,fontSize:10,color:"var(--color-text-muted)",flexWrap:"wrap"}}>
-                            {item.makat&&<span style={{fontFamily:"monospace"}}>מקט: {item.makat}</span>}
-                            {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>צ: {item.serial}</span>}
-                            {item.soldierName&&<span style={{color:"var(--color-text-secondary)"}}>👤 {item.soldierName}</span>}
-                            {item.signed===true&&<span style={{color:"var(--color-success-fg)"}}>✅ חתום</span>}
-                            {item.signed===false&&<span style={{color:"var(--color-warning-fg)"}}>⏳ לא חתום</span>}
-                          </div>
+                          <span style={{fontWeight:700,fontSize:"var(--text-sm)"}}>{alias}</span>
+                          {grp.makat&&<span style={{fontSize:10,color:"var(--color-text-muted)",marginRight:6,fontFamily:"monospace"}}> מקט {grp.makat}</span>}
                         </div>
-                        <span style={{fontWeight:700,fontSize:"var(--text-base)",minWidth:24,textAlign:"center"}}>{item.qty||1}</span>
-                        {editMode&&(
-                          <div style={{display:"flex",gap:4}}>
-                            <button onClick={()=>setEditingItem({cabName,idx})}
-                              style={{...S.btn("blue"),padding:"2px 7px",fontSize:10}}>✎</button>
-                            <button onClick={()=>removeItem(cabName,idx)}
-                              style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>✕</button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+                        <span style={{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-accent-fg)",minWidth:28,textAlign:"center"}}>{total}</span>
+                        <span style={{fontSize:10,color:"var(--color-text-muted)"}}>{isExp?"▲":"▼"}</span>
+                      </div>
+                      {/* רשימה נפתחת */}
+                      {isExp&&(
+                        <div style={{marginBottom:6,paddingRight:8,borderRight:"2px solid var(--color-accent-fg)"}}>
+                          {grp.items.map((item,i)=>{
+                            const idx=item._idx;
+                            return (
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",
+                                background:"var(--color-bg-default)",borderRadius:5,marginBottom:2,
+                                border:"1px solid var(--color-border-muted)"}}>
+                                {editingItem?.cabName===cabName && editingItem?.idx===idx ? (
+                                  <div style={{display:"flex",gap:4,flex:1,flexWrap:"wrap"}}>
+                                    <input value={item.serial||""} onChange={e=>updateItem(cabName,idx,"serial",e.target.value)}
+                                      placeholder="סידורי/צ" style={{...S.input,width:100,marginBottom:0,fontSize:11,fontFamily:"monospace"}}/>
+                                    <input value={item.qty||1} onChange={e=>updateItem(cabName,idx,"qty",e.target.value)}
+                                      type="number" min="0" placeholder="כמות" style={{...S.input,width:55,marginBottom:0,fontSize:11}}/>
+                                    <button onClick={()=>setEditingItem(null)} style={{...S.btn("green"),padding:"3px 8px",fontSize:10}}>✓</button>
+                                  </div>
+                                ):(
+                                  <>
+                                    <div style={{flex:1}}>
+                                      {item.serial&&<span style={{fontFamily:"monospace",color:"var(--color-accent-fg)",fontSize:"var(--text-sm)",fontWeight:600}}>צ: {item.serial}</span>}
+                                      {item.soldierName&&<span style={{fontSize:10,color:"var(--color-text-secondary)",marginRight:6}}>👤 {item.soldierName}</span>}
+                                      {item.signed===true&&<span style={{fontSize:10,color:"var(--color-success-fg)"}}>✅ חתום</span>}
+                                      {item.signed===false&&<span style={{fontSize:10,color:"var(--color-warning-fg)"}}>⏳ לא חתום</span>}
+                                      {!item.serial&&!item.soldierName&&<span style={{fontSize:10,color:"var(--color-text-muted)"}}>כמות: {item.qty||1}</span>}
+                                    </div>
+                                    {editMode&&(
+                                      <div style={{display:"flex",gap:4}}>
+                                        <button onClick={()=>setEditingItem({cabName,idx})} style={{...S.btn("blue"),padding:"2px 7px",fontSize:10}}>✎</button>
+                                        <button onClick={()=>removeItem(cabName,idx)} style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>✕</button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                });
+              })()}
 
               {/* הוספת פריט */}
               {editMode&&(
@@ -12442,4 +12465,23 @@ function ImageLightbox({src, onClose}){
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
-</html>
+</html                           // Collect serials ONLY from live Firebase data
+                           const itemSerials = [];
+                           const seenSers = new Set();
+                           // From live assignments only (no static sol.assigned)
+                           Object.entries(db.assignments||{}).forEach(([,asgn])=>{
+                             Object.entries(asgn||{}).forEach(([nm,val])=>{
+                               if((!addForm.alias||nm===addForm.alias)&&val&&val!==1&&val!==true){
+                                 const ser=String(val);
+                                 if(!seenSers.has(ser)){seenSers.add(ser);itemSerials.push({serial:ser,name:nm,fromSoldier:true});}
+                               }
+                             });
+                           });
+                           // From unitItems
+                           Object.values(db.unitItems||{}).forEach(v=>{
+                             const nm=v.n||v.name||""; const ser=v.s||v.serial||"";
+                             if((!addForm.alias||nm===addForm.alias)&&ser&&!seenSers.has(String(ser))){
+                               seenSers.add(String(ser));itemSerials.push({serial:String(ser),name:nm});
+                             }
+                           });
+>
