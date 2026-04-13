@@ -7049,6 +7049,7 @@ function CabinetsTab({db, setDb, auth}){
   const [editingItem, setEditingItem] = React.useState(null); // {cabName, idx}
   const [addingTo, setAddingTo] = React.useState(null);
   const [addForm, setAddForm] = React.useState({alias:"",makat:"",qty:1,serial:""});
+  const [showSugg, setShowSugg] = React.useState(false);
   const [search, setSearch] = React.useState("");
 
   const UNIT_CABINETS_DEFAULT = {
@@ -7369,10 +7370,11 @@ function CabinetsTab({db, setDb, auth}){
                     <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginBottom:8}}>➕ הוספת פריט</div>
                     {/* חיפוש פריט — שם או מקט */}
                     <div style={{position:"relative",marginBottom:6}}>
-                      <input value={search} onChange={e=>{setSearch(e.target.value);setAddForm(p=>({...p,alias:"",makat:""}));}}
-                        onFocus={()=>setSearch(p=>p)}
+                      <input value={search} onChange={e=>{setSearch(e.target.value);setAddForm(p=>({...p,alias:"",makat:""}));setShowSugg(true);}}
+                        onFocus={()=>setShowSugg(true)}
+                        onBlur={()=>setTimeout(()=>setShowSugg(false),200)}
                         placeholder="🔍 חפש לפי שם או מקט..." style={{...S.input,marginBottom:0}}/>
-                      {filteredSuggestions.length>0&&(
+                      {showSugg&&filteredSuggestions.length>0&&(
                         <div style={{position:"absolute",top:"100%",right:0,left:0,zIndex:100,
                           background:"var(--color-bg-default)",border:"1px solid var(--color-accent-fg)",
                           borderRadius:6,maxHeight:200,overflowY:"auto",
@@ -7381,6 +7383,7 @@ function CabinetsTab({db, setDb, auth}){
                             <div key={i} onClick={()=>{
                               setAddForm(p=>({...p,alias:s.alias,makat:s.makat||""}));
                               setSearch("");
+                              setShowSugg(false);
                             }}
                               style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
                                 display:"flex",justifyContent:"space-between",alignItems:"center",
