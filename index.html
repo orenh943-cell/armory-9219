@@ -7078,11 +7078,13 @@ function CabinetsTab({db, setDb, auth}){
     if(cabName.startsWith("כנה ")){
       const unit = cabName.replace("כנה ","");
       const allSolsHere = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS]
-        .filter(s=>s.unit===unit||s.unit===(unit==="אגמ"?"אגמ":unit));
+        .filter(s=>s.unit===unit);
       const signedIds = new Set(Object.keys(db.signatures||{}));
       const items = [];
       allSolsHere.forEach(sol=>{
-        const asgn = db.assignments?.[sol.id]??sol.assigned??{};
+        // Only use live Firebase assignments - NOT static RAW_SOLDIERS data
+        const asgn = db._assignmentsLoaded ? (db.assignments?.[sol.id]||{}) : (db.assignments?.[sol.id]||{});
+        if(Object.keys(asgn).length===0) return; // skip if no live assignment
         Object.entries(asgn).forEach(([name,val])=>{
           if(WEAPON_KEYS.includes(name)){
             items.push({
@@ -7378,7 +7380,7 @@ function CabinetsTab({db, setDb, auth}){
                           {filteredSuggestions.map((s,i)=>(
                             <div key={i} onClick={()=>{
                               setAddForm(p=>({...p,alias:s.alias,makat:s.makat||""}));
-                              setSearch(s.alias);
+                              setSearch("");
                             }}
                               style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
                                 display:"flex",justifyContent:"space-between",alignItems:"center",
