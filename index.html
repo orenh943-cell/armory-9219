@@ -3577,7 +3577,13 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
             בחר את סוגי האמצעים שנדרשת להם בחינה. רק הם יופיעו בדשבורד ובחיפוש.
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:400,overflowY:"auto",marginBottom:12}}>
-            {[...new Set(ALL_SERIALS.map(s=>s.name))].sort().map(name=>{
+            {(()=>{
+              // Build list from: DEFAULT_INSPECTION_FAMILIES + armoryMaster + assignments
+              const nameSet = new Set(DEFAULT_INSPECTION_FAMILIES);
+              Object.keys(db.armoryMaster||{}).forEach(n=>{if(n) nameSet.add(n);});
+              Object.values(db.assignments||{}).forEach(asgn=>Object.keys(asgn||{}).forEach(n=>{if(n) nameSet.add(n);}));
+              return [...nameSet].filter(n=>n&&n.trim()).sort((a,b)=>a.localeCompare(b,"he"));
+            })().map(name=>{
               const active = inspectionFamilies.includes(name);
               return (
                 <div key={name} onClick={()=>{
