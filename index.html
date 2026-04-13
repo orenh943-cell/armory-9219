@@ -2122,7 +2122,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
   const [reSignNeeded,setReSignNeeded]=useState(null); // {soldier, newAssigned} for re-sign prompt
-  const [newItems,setNewItems]=useState([{name:"",serial:""}]);
+  const [newItems,setNewItems]=useState([{name:"",serial:"",inCabinet:false,cabName:""}]);
+  const [showCabQ,setShowCabQ]=useState(false); // after checkout show cabinet questions
   const [soldierItemSearches,setSoldierItemSearches]=useState({});
   const allSoldierItemNames=React.useMemo(()=>{
     const fromUnit=[...new Set(Object.values(db.unitItems||{}).map(x=>x.n||x.name||"").filter(Boolean))];
@@ -2130,6 +2131,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     return [...fromUnit,...fromEq].sort((a,b)=>a.localeCompare(b,"he"));
   },[db.unitItems]);
   const [retSel,setRetSel]=useState([]);
+  const [retCabinet,setRetCabinet]=useState({}); // name -> {inCabinet:bool, cabName:str}
   const assigned=db.assignments[soldier.id]??soldier.assigned??{};
   const sig=db.signatures?.[soldier.id];
   const weps=Object.entries(assigned).filter(([k])=>WEAPON_KEYS.includes(k));
@@ -2146,17 +2148,54 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
     const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    // Add cabinet items for those marked as inCabinet
+    const newUnitItems={...(ndb.unitItems||{})};
+    valid.filter(i=>i.inCabinet&&i.cabName).forEach(i=>{
+      const key="cab_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+      const cabItems=[...(ndb.cabinets?.[i.cabName]||[]),{
+        alias:i.name, fullname:i.name, serial:i.serial||null, qty:1,
+        soldierName:soldier.name, soldierId:soldier.id, inArmory:true,
+        makat:getMakat(i.name)||null,
+      }];
+      ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[i.cabName]:cabItems}};
+      fbSet("db/cabinets/"+encodeURIComponent(i.cabName), cabItems).catch(()=>{});
+    });
     saveDB(ndb);onSave(ndb);
-    logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")).join(", ")}`, auth?.name);
+    logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")+(i.inCabinet?" [ארון:"+i.cabName+"]":"")).join(", ")}`, auth?.name);
     setView("profile");
+    setNewItems([{name:"",serial:"",inCabinet:false,cabName:""}]);
     setReSignNeeded({soldier, newAssigned:na});
   }
   function doReturn(){
     if(!retSel.length)return;
     const na={...assigned};retSel.forEach(n=>delete na[n]);
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    // Handle returned items going to cabinet
+    retSel.forEach(name=>{
+      const rc=retCabinet[name];
+      if(rc?.inCabinet && rc.cabName){
+        const serial=assigned[name];
+        const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
+          alias:name, fullname:name, qty:1,
+          serial:serial&&serial!==1?String(serial):null,
+          makat:getMakat(name)||null,
+          returnedFrom:soldier.name, returnedAt:new Date().toLocaleDateString("he-IL"),
+        }];
+        ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
+        fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
+        // Also add to unitItems for inventory tracking
+        const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+        const newUI={...(ndb.unitItems||{}),[uid]:{
+          n:name, s:serial&&serial!==1?String(serial):null,
+          u:"גדודי", t:"unit", cabName:rc.cabName,
+          addedAt:new Date().toLocaleDateString("he-IL"),
+        }};
+        ndb={...ndb, unitItems:newUI};
+      }
+    });
     saveDB(ndb);onSave(ndb);
     logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
+    setRetSel([]); setRetCabinet({});
     setView("profile");
     setReSignNeeded({soldier, newAssigned:na});
   }
@@ -2439,10 +2478,31 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 })()}
               </div>
               <SerialPicker itemName={item.name} value={item.serial} onChange={v=>{const n=[...newItems];n[i]={...n[i],serial:v};setNewItems(n);}} db={db}/>
+              {/* שאלת ארון */}
+              {item.name&&!WEAPON_KEYS.includes(item.name)&&(
+                <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",
+                    color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap"}}>
+                    <input type="checkbox" checked={!!item.inCabinet}
+                      onChange={e=>{const n=[...newItems];n[i]={...n[i],inCabinet:e.target.checked,cabName:""};setNewItems(n);}}/>
+                    🗄️ בארון?
+                  </label>
+                  {item.inCabinet&&(
+                    <select value={item.cabName||""}
+                      onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}}
+                      style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:80}}>
+                      <option value="">— ארון —</option>
+                      {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               {newItems.length>1&&<button onClick={()=>setNewItems(p=>p.filter((_,x)=>x!==i))} style={{...S.btn("red"),padding:"8px"}}>✕</button>}
             </div>
           ))}
-          <button onClick={()=>setNewItems(p=>[...p,{name:"",serial:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:12}}>+ הוסף שורה</button>
+          <button onClick={()=>setNewItems(p=>[...p,{name:"",serial:"",inCabinet:false,cabName:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:12}}>+ הוסף שורה</button>
           <button onClick={doCheckout} disabled={!newItems.some(i=>i.name)} style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:newItems.some(i=>i.name)?1:0.5}}>✅ שייך</button>
         </div>
       )}
@@ -2452,10 +2512,33 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
               {Object.entries(assigned).map(([name,val])=>(
-                <label key={name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:retSel.includes(name)?"var(--btn-blue-bg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${retSel.includes(name)?"var(--color-accent-fg)":"var(--color-border-muted)"}`}}>
-                  <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
-                  <div style={{flex:1}}><span style={{fontSize:"var(--text-base)",fontWeight:600,color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div>{isSerial(val)&&<span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{val}</span>}
-                </label>
+                <div key={name} style={{padding:"8px 12px",background:retSel.includes(name)?"var(--btn-blue-bg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+                  <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+                    <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
+                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</span>
+                    {isSerial(val)&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{val}</span>}
+                  </label>
+                  {retSel.includes(name)&&!WEAPON_KEYS.includes(name)&&(
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",cursor:"pointer"}}>
+                        <input type="checkbox"
+                          checked={!!(retCabinet[name]?.inCabinet)}
+                          onChange={e=>setRetCabinet(p=>({...p,[name]:{...p[name],inCabinet:e.target.checked,cabName:p[name]?.cabName||""}}))}/>
+                        🗄️ חוזר לארון?
+                      </label>
+                      {retCabinet[name]?.inCabinet&&(
+                        <select value={retCabinet[name]?.cabName||""}
+                          onChange={e=>setRetCabinet(p=>({...p,[name]:{...p[name],cabName:e.target.value}}))}
+                          style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:100}}>
+                          <option value="">— בחר ארון —</option>
+                          {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
               <button onClick={doReturn} disabled={!retSel.length} style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>🔄 בטל שיוך ({retSel.length})</button>
             </>
@@ -7057,14 +7140,37 @@ function CabinetsTab({db, setDb, auth}){
 
   function addItem(cabName){
     if(!addForm.alias.trim()) return;
+    const name = addForm.alias.trim();
+    const qty = parseInt(addForm.qty)||1;
+    const serial = addForm.serial.trim()||null;
+    const makat = addForm.makat||"";
+    // Find the unit this cabinet belongs to
+    const cabUnit = Object.keys(UNIT_CABINETS_DEFAULT).find(u=>
+      getCabNames(u).includes(cabName)
+    )||"גדודי";
+
     const items = [...getItems(cabName), {
-      makat: addForm.makat||"",
-      alias: addForm.alias.trim(),
-      fullname: addForm.alias.trim(),
-      qty: parseInt(addForm.qty)||1,
-      serial: addForm.serial.trim()||null,
+      makat, alias: name, fullname: name, qty, serial,
     }];
     saveItems(cabName, items);
+
+    // Also add to unitItems so it appears in מלאי ארמון
+    const newUnitItems = {...db.unitItems};
+    for(let i=0; i<qty; i++){
+      const key = "cab_"+Date.now()+"_"+i+"_"+Math.random().toString(36).slice(2,5);
+      newUnitItems[key] = {
+        n: name, s: qty===1?serial:null,
+        u: cabUnit, t: "unit",
+        makat: makat||null,
+        cabName, // track which cabinet
+        addedAt: new Date().toLocaleDateString("he-IL"),
+      };
+    }
+    const ndb = {...db, unitItems: newUnitItems};
+    saveDB(ndb); setDb(ndb);
+    if(makat && !NAME_TO_MAKAT[name]){ NAME_TO_MAKAT[name]=parseInt(makat)||makat; window._makatCache=window._makatCache||{}; window._makatCache[name]=String(makat); }
+    if(!EQ_COLS.includes(name)) EQ_COLS.push(name);
+
     setAddingTo(null);
     setAddForm({alias:"",makat:"",qty:1,serial:""});
     setSearch("");
@@ -7253,9 +7359,28 @@ function CabinetsTab({db, setDb, auth}){
                         <div style={{fontSize:10,color:"var(--color-text-muted)",marginBottom:4}}>מספר סידורי / צ — בחר מהרשימה או הכנס ידנית</div>
                         {/* Serials from ALL_SERIALS for this item */}
                         {(()=>{
-                          const itemSerials = ALL_SERIALS.filter(x=>
-                            x.name===addForm.alias || (ARMORY_MASTER[addForm.alias]&&x.name===addForm.alias)
-                          );
+                          // Collect serials from assignments + unitItems + ALL_SERIALS
+                          const itemSerials = [];
+                          const seenSers = new Set();
+                          const allSolsForCab=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+                          allSolsForCab.forEach(sol=>{
+                            const asgn=db.assignments?.[sol.id]||sol.assigned||{};
+                            Object.entries(asgn).forEach(([nm,val])=>{
+                              if((!addForm.alias||nm===addForm.alias)&&val&&val!==1&&val!==true){
+                                const ser=String(val);
+                                if(!seenSers.has(ser)){seenSers.add(ser);itemSerials.push({serial:ser,name:nm,assignedToSoldier:sol.name,unit:sol.unit});}
+                              }
+                            });
+                          });
+                          Object.values(db.unitItems||{}).forEach(v=>{
+                            const nm=v.n||v.name||""; const ser=v.s||v.serial||"";
+                            if((!addForm.alias||nm===addForm.alias)&&ser&&!seenSers.has(String(ser))){
+                              seenSers.add(String(ser));itemSerials.push({serial:String(ser),name:nm,assignedToSoldier:null,unit:v.u||v.unit});
+                            }
+                          });
+                          ALL_SERIALS.filter(x=>!addForm.alias||x.name===addForm.alias).forEach(x=>{
+                            if(!seenSers.has(String(x.serial))){seenSers.add(String(x.serial));itemSerials.push(x);}
+                          });
                           return itemSerials.length>0 ? (
                             <div style={{marginBottom:6}}>
                               <div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:80,overflowY:"auto",
@@ -7541,33 +7666,39 @@ function MyStockTab({db, setDb, soldiers, auth}){
       assigned[name][unit] = (assigned[name][unit]||0)+1;
     });
 
-    // Only fall back to ARMORY_MASTER on first load (before Firebase responds)
-    // If armoryMaster is {} after Firebase loaded → it was reset intentionally → show empty
-    const masterData = Object.keys(db.armoryMaster||{}).length>0 ? db.armoryMaster : (db._armoryMasterLoaded ? {} : ARMORY_MASTER);
-    // Count unitItems per name
-    const unitItemCounts = {}; // name -> total count in unitItems
+    // Build item list from ALL sources: armoryMaster + assignments + unitItems
+    // Source of truth = whatever items exist in assignments
+    const allItemNames = new Set();
+    // From assignments (main source)
+    Object.values(assigned).forEach(byUnit=>Object.keys(byUnit).forEach(u=>{}));
+    Object.values(assigned).forEach(()=>{});
+    Object.keys(assigned).forEach(name=>allItemNames.add(name));
+    // From unitItems
     Object.values(db.unitItems||{}).forEach(item=>{
-      const name=item.n||item.name||"";
-      if(name) unitItemCounts[name]=(unitItemCounts[name]||0)+1;
+      const name=item.n||item.name||""; if(name) allItemNames.add(name);
     });
+    // From armoryMaster (adds declared items even with 0 assignments)
+    const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : {};
+    Object.keys(masterData2).forEach(name=>allItemNames.add(name));
 
-    return Object.entries(masterData).map(([name, info])=>{
+    return Array.from(allItemNames).map(name=>{
+      const info = masterData2[name]||{};
+      const makat = info.makat || getMakat(name) || null;
       const liveByUnit = assigned[name]||{};
       const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
-      const gadudi = assigned[name]?.["גדודי"]||0; // בארמון גדודי = "פנוי" = לא מוקצה לפלוגה
-      const assignedToUnits = liveTotal - gadudi;   // מוקצה לפלוגה כלשהי
-      const total = Math.max(info.total||0, unitItemCounts[name]||0, liveTotal);
-      // "פנוי" = מה שיושב בגדודי (לא מוקצה) + מה שה-armoryMaster הצהיר אבל לא נכנס ל-unitItems
-      const declaredFree = Math.max(0, total - liveTotal); // מה ש-armoryMaster הצהיר אבל לא מוקצה בכלל
-      const unassigned = gadudi + declaredFree;
-      // Count: items assigned to soldiers vs items assigned to units (no soldier)
+      const gadudi = liveByUnit["גדודי"]||0;
+      const assignedToUnits = liveTotal - gadudi;
+      // total = max of declared (armoryMaster) vs actual (assignments+unitItems)
+      const unitItemCount = Object.values(db.unitItems||{}).filter(v=>(v.n||v.name)===name).length;
+      const total = Math.max(info.total||0, liveTotal, unitItemCount);
       const toUnits = Object.values(db.unitItems||{}).filter(v=>{
         const n=v.n||v.name||""; const u=v.u||v.unit||""; const t=v.t||v.assignedType||"unit";
         return n===name && t==="unit" && u!=="גדודי";
       }).length;
       const toSoldiers = Math.max(0, assignedToUnits - toUnits);
-      return { name, ...info, total, liveByUnit, liveTotal, assignedToUnits, gadudi, toSoldiers, toUnits, unassigned };
-    }).filter(item=>{
+      const unassigned = gadudi + Math.max(0, total - liveTotal);
+      return { name, makat, total, byUnit:info.byUnit||{}, liveByUnit, liveTotal, assignedToUnits, gadudi, toSoldiers, toUnits, unassigned };
+    }).filter(item=>item.total>0||item.liveTotal>0).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
       if(showFreeOnly && item.unassigned===0) return false;
       if(filterName.trim() && !item.name.includes(filterName.trim())) return false;
