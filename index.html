@@ -871,6 +871,7 @@ const {useState,useMemo,useRef,useEffect} = React;
 function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});}
 function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});}
 function isSerial(v){return v && v!==1 && String(v).length>3;}
+function cleanItemName(name){return name?name.replace(/__\d+$/,""):name;}
 // כל האמצעים שיש להם מספרים סידוריים במערכת
 const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim()));
 // מלאי ראשוני — פריטים פנויים (לא משויכים לחיילים)
@@ -2126,7 +2127,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
   const [reSignNeeded,setReSignNeeded]=useState(null); // {soldier, newAssigned} for re-sign prompt
-  const [newItems,setNewItems]=useState([{name:"",serial:"",inCabinet:false,cabName:""}]);
+  const [newItems,setNewItems]=useState([{name:"",serial:"",qty:1,inCabinet:false,cabName:""}]);
   const [showCabQ,setShowCabQ]=useState(false); // after checkout show cabinet questions
   const [soldierItemSearches,setSoldierItemSearches]=useState({});
   const allSoldierItemNames=React.useMemo(()=>{
@@ -2151,7 +2152,14 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
 
   function doCheckout(){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
-    const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
+    const na={...assigned};
+    valid.forEach(i=>{
+      const qty=Math.max(1,parseInt(i.qty)||1);
+      for(let q=0;q<qty;q++){
+        const key=q===0?i.name:i.name+"__"+(q+1);
+        na[key]=i.serial&&qty===1?i.serial:1;
+      }
+    });
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     // Add cabinet items for those marked as inCabinet
     const newUnitItems={...(ndb.unitItems||{})};
@@ -2168,7 +2176,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     saveDB(ndb);onSave(ndb);
     logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")+(i.inCabinet?" [ארון:"+i.cabName+"]":"")).join(", ")}`, auth?.name);
     setView("profile");
-    setNewItems([{name:"",serial:"",inCabinet:false,cabName:""}]);
+    setNewItems([{name:"",serial:"",qty:1,inCabinet:false,cabName:""}]);
     setReSignNeeded({soldier, newAssigned:na});
   }
   function doReturn(){
@@ -2494,7 +2502,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
               {Object.entries(assigned).map(([name,val])=>(
                 <div key={name} style={{display:"flex",justifyContent:"space-between",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
-                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{name}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div><span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{isSerial(val)?val:"—"}</span>
+                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{cleanItemName(name)}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(cleanItemName(name))||"—"})</span></div><span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{isSerial(val)?val:"—"}</span>
                 </div>
               ))}
             </div>
@@ -2538,6 +2546,11 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 })()}
               </div>
               <SerialPicker itemName={item.name} value={item.serial} onChange={v=>{const n=[...newItems];n[i]={...n[i],serial:v};setNewItems(n);}} db={db}/>
+              <div style={{display:"flex",alignItems:"center",gap:3}}>
+                <button onClick={()=>{const n=[...newItems];n[i]={...n[i],qty:Math.max(1,(parseInt(n[i].qty)||1)-1)};setNewItems(n);}} style={{...S.btn("neutral"),padding:"0 8px",minWidth:28,height:34,fontSize:16,lineHeight:1}}>−</button>
+                <input type="number" min="1" max="99" value={item.qty||1} onChange={e=>{const n=[...newItems];n[i]={...n[i],qty:Math.max(1,parseInt(e.target.value)||1)};setNewItems(n);}} style={{...S.input,marginBottom:0,width:46,textAlign:"center",padding:"4px 6px"}}/>
+                <button onClick={()=>{const n=[...newItems];n[i]={...n[i],qty:(parseInt(n[i].qty)||1)+1};setNewItems(n);}} style={{...S.btn("neutral"),padding:"0 8px",minWidth:28,height:34,fontSize:16,lineHeight:1}}>+</button>
+              </div>
               {/* שאלת ארון */}
               {item.name&&!WEAPON_KEYS.includes(item.name)&&(
                 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
@@ -2562,7 +2575,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               {newItems.length>1&&<button onClick={()=>setNewItems(p=>p.filter((_,x)=>x!==i))} style={{...S.btn("red"),padding:"8px"}}>✕</button>}
             </div>
           ))}
-          <button onClick={()=>setNewItems(p=>[...p,{name:"",serial:"",inCabinet:false,cabName:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:12}}>+ הוסף שורה</button>
+          <button onClick={()=>setNewItems(p=>[...p,{name:"",serial:"",qty:1,inCabinet:false,cabName:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:12}}>+ הוסף שורה</button>
           <button onClick={doCheckout} disabled={!newItems.some(i=>i.name)} style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:newItems.some(i=>i.name)?1:0.5}}>✅ שייך</button>
         </div>
       )}
@@ -2585,7 +2598,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 <div key={name} style={{padding:"8px 12px",background:isSelected?"#dbeafe":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
                     <input type="checkbox" checked={retSel.includes(name)} onChange={e=>{const n=name;const sel=e.target.checked;setRetSel(p=>sel?[...p,n]:p.filter(x=>String(x)!==String(n)));}}/>
-                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{name}</span>
+                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{cleanItemName(name)}</span>
                     {isSerial(val)&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{val}</span>}
                   </label>
                   {isSelected&&(
@@ -2882,7 +2895,7 @@ function InPersonSignModal({soldier, db, onSave, auth, onClose}){
                 border:"1px solid "+(WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-border-muted)"),
                 color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-text-primary)",
                 fontWeight:WEAPON_KEYS.includes(name)?700:400}}>
-                {name}{val&&val!==1&&val!==true?<span style={{fontFamily:"monospace",fontSize:10,marginRight:4,color:"var(--color-text-muted)"}}> {val}</span>:null}
+                {cleanItemName(name)}{val&&val!==1&&val!==true?<span style={{fontFamily:"monospace",fontSize:10,marginRight:4,color:"var(--color-text-muted)"}}> {val}</span>:null}
               </span>
             ))}
           </div>
