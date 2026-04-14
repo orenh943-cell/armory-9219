@@ -2184,7 +2184,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       const qty=Math.max(1,parseInt(i.qty)||1);
       for(let q=0;q<qty;q++){
         const key=q===0?i.name:i.name+"__"+(q+1);
-        na[key]=i.serial&&qty===1?i.serial:1;
+        // צ נשמר רק לפריט הראשון; שאר הכמות ללא צ
+        na[key]=q===0&&i.serial?i.serial:1;
       }
     });
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
