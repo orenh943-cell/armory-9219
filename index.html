@@ -785,7 +785,7 @@ function formatSigner(auth, db){
 const ALL_SERIALS = window.ALL_SERIALS_DATA;
 
 const NAME_TO_MAKAT = window.NAME_TO_MAKAT_DATA;
-function getMakat(name){return NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
+function getMakat(name,db){const fromDB=db?.armoryMaster?.[name]?.makat;if(fromDB) return String(fromDB);return NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
 
 // שמור חתימה ישנה בהיסטוריה ואפס
 function archiveAndClearSig(db, soldierId){
@@ -872,11 +872,11 @@ function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",
 function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});}
 function isSerial(v){return v && v!==1 && String(v).length>3;}
 function cleanItemName(name){return name?name.replace(/__\d+$/,""):name;}
-function groupAssigned(assigned){
+function groupAssigned(assigned,db){
   const g={};
   Object.entries(assigned||{}).forEach(([name,val])=>{
     const clean=cleanItemName(name);
-    if(!g[clean]) g[clean]={qty:0,serials:[],isWeapon:WEAPON_KEYS.includes(clean),makat:getMakat(clean)||""};
+    if(!g[clean]) g[clean]={qty:0,serials:[],isWeapon:WEAPON_KEYS.includes(clean),makat:getMakat(clean,db)||""};
     g[clean].qty++;
     if(isSerial(val)) g[clean].serials.push(val);
   });
@@ -1476,7 +1476,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   const soldierData = customSoldier;
   const testStatus = getTestStatus(db, auth.soldierId);
   const needsTest = soldierNeedsTest(soldierData, db);
-  const items=groupAssigned(assigned);
+  const items=groupAssigned(assigned,db);
   const weapons=items.filter(([k])=>WEAPON_KEYS.includes(k));
   const accessories=items.filter(([k])=>!WEAPON_KEYS.includes(k));
   function doSign(sigData){
@@ -1553,10 +1553,10 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                 </tr></thead>
                 <tbody>
                   {weapons.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
+                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                   {accessories.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
+                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1996,7 +1996,7 @@ function DailyModal({db,onClose,type,auth}){
 function SignatureDocument({soldier, db, onClose}){
   const sig = db.signatures?.[soldier.id];
   const assigned = db.assignments[soldier.id] ?? soldier.assigned ?? {};
-  const items = groupAssigned(assigned);
+  const items = groupAssigned(assigned,db);
   const today = new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
 
   const DISCLAIMER = 'עם הגיעך לביצוע שירות מילואים פעיל, הינך מקבל לידך אמצעים לוגיסטיים יקרי ערך (לבוש, מיגון, נשק, צלם, אופיטיקה, אמר"ל, קשר, תחמושת וכו\'). באחריותך האישית לוודא שאמצעים אלו חוזרים לרשות הצבא בסיום שירותך במילואים. מדינת ישראל וצה"ל משקיעים מדי שנה סכומי עתק לוודא שיהיו ברשותך האמצעים הטובים ביותר לביצוע משימתך. האחריות לשמירה על האמצעים מוטלת עלייך. בכדי לוודא שאמצעים אלו ימשיכו לשרת את כולנו ולא יגיעו לידיים עוינות - עלייך לוודא כי בעת קבלת ציוד לידך מכל סוג, תוחתם על אמצעים אלו בחתימת ידך ע"ג טופס 1008. מרגע שהוחתמת על טופס זה הינך אחראי ישיר לכשירותו ואבטחתו של הציוד.';
@@ -2704,7 +2704,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           </div>
           <div style={{background:"var(--color-bg-canvas)",borderRadius:"var(--radius-md)",padding:10,marginBottom:14,fontSize:"var(--text-sm)"}}>
             <div style={{fontWeight:700,marginBottom:6}}>ציוד מעודכן:</div>
-            {groupAssigned(reSignNeeded.newAssigned||{}).map(([k,g])=>(
+            {groupAssigned(reSignNeeded.newAssigned||{},db).map(([k,g])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
                 <span style={{fontWeight:g.isWeapon?700:400,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{k}</span>
                 <span style={{display:"flex",gap:6,alignItems:"center"}}>
