@@ -2051,7 +2051,7 @@ function SignatureDocument({soldier, db, onClose}){
                   ? <tr><td colSpan={4} style={{border:"1px solid #000",padding:"4px",textAlign:"center",color:"var(--color-text-muted)"}}>אין אמצעים</td></tr>
                   : items.map(([name,g],i)=>(
                     <tr key={i} style={{background:i%2===0?"#fff":"var(--color-bg-default)"}}>
-                      <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{NAME_TO_MAKAT[name]||"—"}</td>
+                      <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{g.makat||"—"}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontWeight:g.isWeapon?"bold":"normal"}}>{name}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{g.serials.length>0?g.serials.join(", "):"—"}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center"}}>{g.qty}</td>
