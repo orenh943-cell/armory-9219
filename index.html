@@ -2182,10 +2182,19 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     const na={...assigned};
     valid.forEach(i=>{
       const qty=Math.max(1,parseInt(i.qty)||1);
+      // מצא index פנוי — אל תדרוס קיימים
+      const baseName=i.name;
+      const existingKeys=Object.keys(na).filter(k=>cleanItemName(k)===baseName);
+      // מצא את ה-index הגבוה ביותר
+      let nextIdx=existingKeys.length; // 0=base, 1=__2, 2=__3...
       for(let q=0;q<qty;q++){
-        const key=q===0?i.name:i.name+"__"+(q+1);
-        // צ נשמר רק לפריט הראשון; שאר הכמות ללא צ
+        let key;
+        if(nextIdx===0) key=baseName;
+        else key=baseName+"__"+(nextIdx+1);
+        // אם ה-key תפוס, קדם
+        while(na[key]!==undefined){nextIdx++;key=baseName+"__"+(nextIdx+1);}
         na[key]=q===0&&i.serial?i.serial:1;
+        nextIdx++;
       }
     });
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
