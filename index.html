@@ -873,14 +873,22 @@ function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",m
 function isSerial(v){return v && v!==1 && v!==true && String(v).trim().length>0;}
 function cleanItemName(name){return name?name.replace(/__\d+$/,""):name;}
 function groupAssigned(assigned,db){
-  const g={};
+  // קבץ לפי שם נקי + צ: אם יש צ שונה — שורה נפרדת; אם אין צ — קבץ לפי שם בלבד
+  const rows={}; // key: "name" or "name||serial"
   Object.entries(assigned||{}).forEach(([name,val])=>{
     const clean=cleanItemName(name);
-    if(!g[clean]) g[clean]={qty:0,serials:[],isWeapon:WEAPON_KEYS.includes(clean),makat:getMakat(clean,db)||""};
-    g[clean].qty++;
-    if(isSerial(val)) g[clean].serials.push(val);
+    const makat=getMakat(clean,db)||"";
+    const isWeapon=WEAPON_KEYS.includes(clean);
+    const serial=isSerial(val)?String(val):null;
+    const key=serial?clean+"||"+serial:clean;
+    if(!rows[key]) rows[key]={name:clean,qty:0,serials:[],isWeapon,makat,serial};
+    rows[key].qty++;
+    if(serial && !rows[key].serials.includes(serial)) rows[key].serials.push(serial);
   });
-  return Object.entries(g);
+  // החזר כמערך [name, groupObj] ממוין: קודם לפי שם, אחר כך לפי צ
+  return Object.values(rows)
+    .sort((a,b)=>a.name.localeCompare(b.name,"he")||(a.serial||"").localeCompare(b.serial||""))
+    .map(g=>[g.name,g]);
 }
 // כל האמצעים שיש להם מספרים סידוריים במערכת
 const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim()));
@@ -1559,10 +1567,10 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                 </tr></thead>
                 <tbody>
                   {weapons.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
+                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serial||"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                   {accessories.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
+                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{val.makat||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serial||"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1651,7 +1659,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
             <h2 style={{color:"var(--color-success-fg)",fontSize:"var(--text-xl)",fontWeight:800,marginBottom:6}}>החתימה התקבלה!</h2>
             <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:16}}>נשמר במערכת • {db.signatures?.[auth.soldierId]?.signedAt}</p>
             <button onClick={()=>{
-              const rows=items.map(([name,g])=>`<tr><td style="padding:6px 8px;border:1px solid #ccc;font-weight:${g.isWeapon?"bold":"normal"}">${name}</td><td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${g.serials.length>0?g.serials.join(", "):"—"}</td><td style="padding:6px 8px;border:1px solid #ccc;text-align:center">${g.qty}</td></tr>`).join("");
+              const rows=items.map(([name,g])=>`<tr><td style="padding:6px 8px;border:1px solid #ccc;font-weight:${g.isWeapon?"bold":"normal"}">${name}</td><td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${g.serial||"—"}</td><td style="padding:6px 8px;border:1px solid #ccc;text-align:center">${g.qty}</td></tr>`).join("");
               const sigHtml=sigImg?`<div style="margin-top:12px"><strong>חתימה:</strong><br/><img src="${sigImg}" style="height:60px;margin-top:6px" alt="חתימה"/></div>`:"<div style='color:red'>ללא חתימה</div>";
               const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>טופס חתימה — ${soldierData.name}</title><style>body{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#000}h2{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#f0f0f0}.noprint{display:none}@media print{.noprint{display:none!important}}</style></head><body><h2>טופס החתמה — גדוד 9219</h2><p style="color:#555;font-size:13px">${soldierData.name} • מ.א: ${soldierData.id} • ${db.signatures?.[auth.soldierId]?.signedAt||todayStr()}</p><table><thead><tr><th>אמצעי</th><th>מספר סידורי</th></tr></thead><tbody>${rows}</tbody></table>${sigHtml}<p style="font-size:11px;color:#888;margin-top:16px">מסמך זה הינו העתק לעיון</p><button class="noprint" onclick="window.print()" style="margin-top:12px;padding:8px 20px;cursor:pointer;font-size:14px">🖨️ הדפס</button></body></html>`;
               const blob=new Blob([html],{type:"text/html;charset=utf-8"});
@@ -1670,7 +1678,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                   {items.map(([name,g])=>(
                     <tr key={name}>
                       <td style={{padding:"4px 0",fontWeight:600,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}{g.qty>1&&<span style={{marginRight:4,fontSize:10,color:"var(--color-accent-fg)"}}>×{g.qty}</span>}</td>
-                      <td style={{padding:"4px 0",color:"var(--color-text-secondary)",fontFamily:"monospace",textAlign:"left"}}>{g.serials.length>0?g.serials.join(", "):"—"}</td>
+                      <td style={{padding:"4px 0",color:"var(--color-text-secondary)",fontFamily:"monospace",textAlign:"left"}}>{g.serial||"—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2059,7 +2067,7 @@ function SignatureDocument({soldier, db, onClose}){
                     <tr key={i} style={{background:i%2===0?"#fff":"var(--color-bg-default)"}}>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{g.makat||"—"}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontWeight:g.isWeapon?"bold":"normal"}}>{name}</td>
-                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{g.serials.length>0?g.serials.join(", "):"—"}</td>
+                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{g.serial||"—"}</td>
                       <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center"}}>{g.qty}</td>
                     </tr>
                   ))
@@ -2212,9 +2220,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     }
     // Handle items going to cabinet
     retSel.forEach(name=>{
-      const rc=retCabinet[name]||retCabinet[cleanItemName(name)];
+      const serial=assigned[name]; const sStr=isSerial(serial)?String(serial):null; const rowKey=cleanItemName(name)+(sStr||""); const rc=retCabinet[rowKey]||retCabinet[name]||retCabinet[cleanItemName(name)];
       if(rc?.inCabinet && rc.cabName){
-        const serial=assigned[name];
         if(signoffMode){
           // זיכוי: הציוד בארון אבל עדיין שייך לחייל — סמן soldierId
           const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
@@ -2519,26 +2526,16 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           )}
           {Object.keys(assigned).length>0
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
-              {(()=>{
-                const grouped={};
-                Object.entries(assigned).forEach(([name,val])=>{
-                  const clean=cleanItemName(name);
-                  if(!grouped[clean]) grouped[clean]={qty:0,serials:[],keys:[]};
-                  grouped[clean].qty++;
-                  grouped[clean].keys.push(name);
-                  if(isSerial(val)) grouped[clean].serials.push(val);
-                });
-                return Object.entries(grouped).map(([clean,g])=>(
-                  <div key={clean} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
+              {groupAssigned(assigned,db).map(([name,g])=>(
+                  <div key={name+(g.serial||"")} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
                     <div style={{flex:1}}>
-                      <span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{clean}</span>
-                      <span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(clean)||"—"})</span>
+                      <span style={{fontWeight:600,fontSize:"var(--text-base)",color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{name}</span>
+                      <span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({g.makat||"—"})</span>
                     </div>
                     {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700,marginLeft:6}}>×{g.qty}</span>}
-                    <span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{g.serials.length>0?g.serials.join(", "):"—"}</span>
+                    <span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{g.serial||"—"}</span>
                   </div>
-                ));
-              })()}
+                ))}
             </div>
             :<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
           }
@@ -2623,34 +2620,33 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
-              {(()=>{
-                const grouped={};
-                Object.entries(assigned).forEach(([name,val])=>{
-                  const clean=cleanItemName(name);
-                  if(!grouped[clean]) grouped[clean]={keys:[],serials:[],isWeapon:WEAPON_KEYS.includes(clean)};
-                  grouped[clean].keys.push(name);
-                  if(isSerial(val)) grouped[clean].serials.push(val);
-                });
-                return Object.entries(grouped).map(([clean,g])=>{
-                  const allSelected=g.keys.every(k=>retSel.includes(k));
-                  const someSelected=g.keys.some(k=>retSel.includes(k));
+              {groupAssigned(assigned,db).map(([clean,g])=>{
+                  // כל ה-keys מה-assignments שמתאימים לשם+צ של שורה זו
+                  const rowKeys=Object.keys(assigned).filter(k=>{
+                    const kClean=cleanItemName(k);
+                    const kVal=assigned[k];
+                    const kSerial=isSerial(kVal)?String(kVal):null;
+                    return kClean===clean && (g.serial?kSerial===g.serial:!kSerial);
+                  });
+                  const allSelected=rowKeys.every(k=>retSel.includes(k));
+                  const someSelected=rowKeys.some(k=>retSel.includes(k));
                   const isSelected=allSelected;
-                  const repKey=clean;
+                  const rowKey=clean+(g.serial||"");
                   const nameColor=isSelected?"#111":g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)";
                   return (
-                <div key={clean} style={{padding:"8px 12px",background:isSelected?"#dbeafe":someSelected?"#1a3a5c":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+                <div key={rowKey} style={{padding:"8px 12px",background:isSelected?"#dbeafe":someSelected?"#1a3a5c":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-                    <input type="checkbox" checked={allSelected} onChange={e=>{const sel=e.target.checked;setRetSel(p=>sel?[...new Set([...p,...g.keys])]:p.filter(x=>!g.keys.includes(x)));}}/>
+                    <input type="checkbox" checked={allSelected} onChange={e=>{const sel=e.target.checked;setRetSel(p=>sel?[...new Set([...p,...rowKeys])]:p.filter(x=>!rowKeys.includes(x)));}}/>
                     <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{clean}</span>
-                    {g.keys.length>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>×{g.keys.length}</span>}
-                    {g.serials.length>0&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serials.join(", ")}</span>}
+                    {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>×{g.qty}</span>}
+                    {g.serial&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial}</span>}
                   </label>
                   {(allSelected||someSelected)&&(
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
                       <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>🗄️ ארון:</span>
-                      <select value={retCabinet[clean]?.cabName||""}
+                      <select value={retCabinet[rowKey]?.cabName||retCabinet[clean]?.cabName||""}
                         onClick={e=>e.stopPropagation()}
-                        onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};g.keys.forEach(k=>{u[k]=cab;});u[clean]=cab;return u;});}}
+                        onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};rowKeys.forEach(k=>{u[k]=cab;});u[rowKey]=cab;return u;});}}
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
                         <option value="">— בחר ארון —</option>
                         {(()=>{
@@ -2681,8 +2677,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   )}
                 </div>
               );
-              });
-              })()}
+              })}
               {retSel.some(name=>{const clean=cleanItemName(name);return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;})&&retSel.length>0&&(
                 <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-xs)",textAlign:"center",marginBottom:6}}>
                   ⚠️ בחר ארון לכל הפריטים המסומנים
@@ -2715,7 +2710,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 <span style={{fontWeight:g.isWeapon?700:400,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{k}</span>
                 <span style={{display:"flex",gap:6,alignItems:"center"}}>
                   {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:700}}>×{g.qty}</span>}
-                  <span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontSize:11}}>{g.serials.length>0?g.serials.join(", "):"—"}</span>
+                  <span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontSize:11}}>{g.serial||"—"}</span>
                 </span>
               </div>
             ))}
