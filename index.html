@@ -2136,6 +2136,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   },[db.unitItems]);
   const [retSel,setRetSel]=useState([]);
   const [retCabinet,setRetCabinet]=useState({}); // name -> {inCabinet:bool, cabName:str}
+  const [signoffMode,setSignoffMode]=useState(false); // true = זיכוי (keep assignments, just clear sig)
   const assigned=db.assignments[soldier.id]??soldier.assigned??{};
   const sig=db.signatures?.[soldier.id];
   const weps=Object.entries(assigned).filter(([k])=>WEAPON_KEYS.includes(k));
@@ -2172,8 +2173,15 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   }
   function doReturn(){
     if(!retSel.length)return;
-    const na={...assigned};retSel.forEach(n=>delete na[n]);
-    let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    let ndb;
+    if(signoffMode){
+      // זיכוי: clear signature only, keep assignments
+      ndb = archiveAndClearSig({...db}, soldier.id);
+    } else {
+      // ביטול שיוך: remove items from assignments
+      const na={...assigned};retSel.forEach(n=>delete na[n]);
+      ndb = archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
+    }
     // Handle returned items going to cabinet
     retSel.forEach(name=>{
       const rc=retCabinet[name];
@@ -2225,14 +2233,14 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         ndb={...ndb, unitItems:newUI};
       }
     });
-    // Clear signature after full return
-    if(Object.keys(assigned).every(k=>retSel.includes(k))){
-      fbDelete("db/signatures/"+soldier.id).catch(()=>{});
-      delete ndb.signatures[soldier.id];
+    // In signoffMode sig already cleared by archiveAndClearSig above
+    // In normal mode, also clear sig if ALL items returned
+    if(!signoffMode && Object.keys(assigned).every(k=>retSel.includes(k))){
+      // already handled by archiveAndClearSig in the else branch above
     }
     saveDB(ndb);onSave(ndb);
     logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
-    setRetSel([]); setRetCabinet({});
+    setRetSel([]); setRetCabinet({}); setSignoffMode(false);
     setView("profile");
     setReSignNeeded({soldier, newAssigned:na});
   }
@@ -2551,6 +2559,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       )}
       {view==="return"&&canEditThisSoldier&&perms.canReturn&&(
         <div>
+          {signoffMode&&<div style={{background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-fg)",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>
+            ⚠️ מצב זיכוי — הציוד ישאר שייך לחייל, רק החתימה תימחק. בחר ארון לכל פריט לרישום מיקום.
+          </div>}
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
@@ -2608,7 +2619,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               )}
               <button onClick={doReturn}
                 disabled={!retSel.length||retSel.some(name=>!retCabinet[name]?.cabName)}
-                style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>🔄 בטל שיוך ({retSel.length})</button>
+                style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>{signoffMode?"✅ זיכוי חתימה ("+retSel.length+")":"🔄 בטל שיוך ("+retSel.length+")"}</button>
             </>
           }
         </div>
