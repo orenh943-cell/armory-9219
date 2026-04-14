@@ -2210,21 +2210,26 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         ndb={...ndb, unitItems:newUI};
       }
     });
-    // Items with no cabinet selection → go to unitItems as גדודי (unassigned armory)
+    // Items with no cabinet selection → stay in soldier's unit (unassigned to specific soldier)
     retSel.forEach(name=>{
       const rc=retCabinet[name];
       if(!rc?.inCabinet){
         const serial=assigned[name];
-        const uid="ret_free_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+        const uid="ret_unit_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
         const newUI={...(ndb.unitItems||{}),[uid]:{
           n:name, s:serial&&serial!==1?String(serial):null,
-          u:"גדודי", t:"unit",
+          u:soldier.unit||"גדודי", t:"unit",
           returnedFrom:soldier.name,
           addedAt:new Date().toLocaleDateString("he-IL"),
         }};
         ndb={...ndb, unitItems:newUI};
       }
     });
+    // Clear signature after full return
+    if(Object.keys(assigned).every(k=>retSel.includes(k))){
+      fbDelete("db/signatures/"+soldier.id).catch(()=>{});
+      delete ndb.signatures[soldier.id];
+    }
     saveDB(ndb);onSave(ndb);
     logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
     setRetSel([]); setRetCabinet({});
@@ -2324,7 +2329,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   return null;
                 })()}
                 <button onClick={()=>setShowDoc(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📄 טופס</button>
-                {sig&&canDelete(auth)&&<button onClick={clearSig} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
+                {sig&&canDelete(auth)&&<button onClick={()=>{
+                  // Pre-select all assigned items for return
+                  setRetSel(Object.keys(assigned));
+                  setRetCabinet({});
+                  setView("return");
+                }} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>❌ זיכוי</button>}
               </div>
             </div>
             {sig&&<img src={sig.sigData} style={{height:38,marginTop:10,borderRadius:4,border:"1px solid var(--color-border-default)"}} alt="חתימה"/>}
@@ -2553,27 +2563,42 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   </label>
                   {retSel.includes(name)&&(
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
-                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",cursor:"pointer"}}>
-                        <input type="checkbox"
-                          checked={!!(retCabinet[name]?.inCabinet)}
-                          onChange={e=>setRetCabinet(p=>({...p,[name]:{...p[name],inCabinet:e.target.checked,cabName:p[name]?.cabName||""}}))}/>
-                        🗄️ חוזר לארון?
-                      </label>
-                      {retCabinet[name]?.inCabinet&&(
-                        <select value={retCabinet[name]?.cabName||""}
-                          onChange={e=>setRetCabinet(p=>({...p,[name]:{...p[name],cabName:e.target.value}}))}
-                          style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:100}}>
-                          <option value="">— בחר ארון —</option>
-                          {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
-                      )}
+                      <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>🗄️ ארון:</span>
+                      <select value={retCabinet[name]?.cabName||""}
+                        onClick={e=>e.stopPropagation()}
+                        onChange={e=>{e.stopPropagation();setRetCabinet(p=>({...p,[name]:{inCabinet:!!e.target.value,cabName:e.target.value}}));}}
+                        style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
+                        <option value="">— בחר ארון —</option>
+                        {(()=>{
+                          const fromDB = db.cabinetNames?Object.values(db.cabinetNames).flat():[];
+                          // Add כנה for each unit prominently
+                          const kanas = ["א","ב","ג","מסייעת","אגמ","פלסמ"].map(u=>"כנה "+u);
+                          const defaults = [...kanas,"ארון גדודי","ארמון 2","ארמון 3","ארמון 4"];
+                          const all = [...new Set([...kanas,...fromDB,...defaults])].filter(Boolean);
+                          // Sort: כנה of soldier's unit first
+                          const solUnit = soldier.unit||"";
+                          all.sort((a,b)=>{
+                            if(a==="כנה "+solUnit) return -1;
+                            if(b==="כנה "+solUnit) return 1;
+                            if(a.startsWith("כנה")&&!b.startsWith("כנה")) return -1;
+                            if(!a.startsWith("כנה")&&b.startsWith("כנה")) return 1;
+                            return a.localeCompare(b,"he");
+                          });
+                          return all.map(n=><option key={n} value={n}>{n}</option>);
+                        })()}
+                      </select>
                     </div>
                   )}
                 </div>
               ))}
-              <button onClick={doReturn} disabled={!retSel.length} style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>🔄 בטל שיוך ({retSel.length})</button>
+              {retSel.some(name=>!retCabinet[name]?.cabName)&&retSel.length>0&&(
+                <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-xs)",textAlign:"center",marginBottom:6}}>
+                  ⚠️ בחר ארון לכל הפריטים המסומנים
+                </div>
+              )}
+              <button onClick={doReturn}
+                disabled={!retSel.length||retSel.some(name=>!retCabinet[name]?.cabName)}
+                style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>🔄 בטל שיוך ({retSel.length})</button>
             </>
           }
         </div>
