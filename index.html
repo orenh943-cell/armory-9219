@@ -870,7 +870,7 @@ const {useState,useMemo,useRef,useEffect} = React;
 
 function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});}
 function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});}
-function isSerial(v){return v && v!==1 && String(v).length>3;}
+function isSerial(v){return v && v!==1 && v!==true && String(v).trim().length>0;}
 function cleanItemName(name){return name?name.replace(/__\d+$/,""):name;}
 function groupAssigned(assigned,db){
   const g={};
@@ -1199,14 +1199,20 @@ function SerialPicker({itemName, value, onChange, db}){
     return used;
   },[db]);
 
-  // סידוריים זמינים לאמצעי זה — לא בשימוש ב-DB
+  // סידוריים זמינים לאמצעי זה — מ-ALL_SERIALS + armoryMaster, לא בשימוש ב-DB
   const available = useMemo(()=>{
     if(!itemName) return [];
     const name = itemName.trim();
-    return ALL_SERIALS
+    const fromStatic = ALL_SERIALS
       .filter(s=>s.name.trim()===name && !usedSerials.has(s.serial))
       .map(s=>s.serial);
-  },[itemName, usedSerials]);
+    // גם מ-armoryMaster serials אם קיימים
+    const masterEntry = db?.armoryMaster?.[name];
+    const fromMaster = (masterEntry?.serials||[])
+      .map(s=>Number(s)||s)
+      .filter(s=>s && !usedSerials.has(s) && !fromStatic.includes(s));
+    return [...fromStatic, ...fromMaster];
+  },[itemName, usedSerials, db]);
 
   // סידוריים שמתאימים לחיפוש
   const filtered = useMemo(()=>{
