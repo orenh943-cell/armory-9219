@@ -2476,8 +2476,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           {Object.keys(assigned).length>0
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
               {Object.entries(assigned).map(([name,val])=>(
-                <div key={name} style={{display:"flex",justifyContent:"space-between",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px"}}>
-                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:"var(--text-base)",color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div><span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{isSerial(val)?val:"—"}</span>
+                <div key={name} style={{display:"flex",justifyContent:"space-between",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
+                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{name}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(name)||"—"})</span></div><span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{isSerial(val)?val:"—"}</span>
                 </div>
               ))}
             </div>
@@ -2556,9 +2556,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
             :<>
               {Object.entries(assigned).map(([name,val])=>{
                 const isSelected=retSel.includes(name);
-                const nameColor=isSelected?"white":WEAPON_KEYS.includes(name)?"crimson":"inherit";
+                const nameColor=isSelected?"#111":WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-text-primary)";
                 return (
-                <div key={name} style={{padding:"8px 12px",background:isSelected?"var(--color-accent-fg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+                <div key={name} style={{padding:"8px 12px",background:isSelected?"#dbeafe":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
                     <input type="checkbox" checked={retSel.includes(name)} onChange={e=>{const n=name;const sel=e.target.checked;setRetSel(p=>sel?[...p,n]:p.filter(x=>String(x)!==String(n)));}}/>
                     <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{name}</span>
@@ -2570,7 +2570,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                       <select value={retCabinet[name]?.cabName||""}
                         onClick={e=>e.stopPropagation()}
                         onChange={e=>{e.stopPropagation();setRetCabinet(p=>({...p,[name]:{inCabinet:!!e.target.value,cabName:e.target.value}}));}}
-                        style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
+                        size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
                         <option value="">— בחר ארון —</option>
                         {(()=>{
                           // All cabinets from Firebase cabinetNames
@@ -5948,7 +5948,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={S.td}>
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>פרופיל</button>
-                              <button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];fbDelete("db/signatures/"+s.id).catch(()=>{});saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>זכה</button>
+                              <button onClick={()=>{setSelSoldier(s);}} style={{...S.btn("red"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>❌ זיכוי</button>
                             </div>
                           </td>
                         </tr>
