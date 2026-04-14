@@ -2554,14 +2554,17 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
-              {Object.entries(assigned).map(([name,val])=>(
-                <div key={name} style={{padding:"8px 12px",background:retSel.includes(name)?"var(--btn-blue-bg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+              {Object.entries(assigned).map(([name,val])=>{
+                const isSelected=retSel.includes(name);
+                const nameColor=isSelected?"white":WEAPON_KEYS.includes(name)?"crimson":"inherit";
+                return (
+                <div key={name} style={{padding:"8px 12px",background:isSelected?"var(--color-accent-fg)":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-                    <input type="checkbox" checked={retSel.includes(name)} onChange={e=>setRetSel(p=>e.target.checked?[...p,name]:p.filter(x=>x!==name))}/>
-                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</span>
+                    <input type="checkbox" checked={retSel.includes(name)} onChange={e=>{const n=name;const sel=e.target.checked;setRetSel(p=>sel?[...p,n]:p.filter(x=>String(x)!==String(n)));}}/>
+                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{name}</span>
                     {isSerial(val)&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{val}</span>}
                   </label>
-                  {retSel.includes(name)&&(
+                  {isSelected&&(
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
                       <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>🗄️ ארון:</span>
                       <select value={retCabinet[name]?.cabName||""}
@@ -2570,27 +2573,34 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                         style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
                         <option value="">— בחר ארון —</option>
                         {(()=>{
-                          const fromDB = db.cabinetNames?Object.values(db.cabinetNames).flat():[];
-                          // Add כנה for each unit prominently
-                          const kanas = ["א","ב","ג","מסייעת","אגמ","פלסמ"].map(u=>"כנה "+u);
-                          const defaults = [...kanas,"ארון גדודי","ארמון 2","ארמון 3","ארמון 4"];
-                          const all = [...new Set([...kanas,...fromDB,...defaults])].filter(Boolean);
-                          // Sort: כנה of soldier's unit first
-                          const solUnit = soldier.unit||"";
-                          all.sort((a,b)=>{
-                            if(a==="כנה "+solUnit) return -1;
-                            if(b==="כנה "+solUnit) return 1;
-                            if(a.startsWith("כנה")&&!b.startsWith("כנה")) return -1;
-                            if(!a.startsWith("כנה")&&b.startsWith("כנה")) return 1;
-                            return a.localeCompare(b,"he");
+                          // All cabinets from Firebase cabinetNames
+                          const fromDB = db.cabinetNames
+                            ? Object.entries(db.cabinetNames).flatMap(([unit,names])=>names.map(n=>({n,unit})))
+                            : [];
+                          const kanas = ["א","ב","ג","מסייעת","אגמ","פלסמ"].map(u=>({n:"כנה "+u,unit:u}));
+                          const extra = ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"].map(n=>({n,unit:"גדודי"}));
+                          const seen=new Set(); const all=[];
+                          [...kanas,...fromDB,...extra].forEach(({n,unit})=>{
+                            if(n&&!seen.has(n)){seen.add(n);all.push({n,unit});}
                           });
-                          return all.map(n=><option key={n} value={n}>{n}</option>);
+                          const solUnit=soldier.unit||"";
+                          all.sort((a,b)=>{
+                            if(a.n==="כנה "+solUnit) return -1;
+                            if(b.n==="כנה "+solUnit) return 1;
+                            if(a.unit===solUnit&&b.unit!==solUnit) return -1;
+                            if(a.unit!==solUnit&&b.unit===solUnit) return 1;
+                            if(a.n.startsWith("כנה")&&!b.n.startsWith("כנה")) return -1;
+                            if(!a.n.startsWith("כנה")&&b.n.startsWith("כנה")) return 1;
+                            return a.n.localeCompare(b.n,"he");
+                          });
+                          return all.map(({n})=><option key={n} value={n}>{n}</option>);
                         })()}
                       </select>
                     </div>
                   )}
                 </div>
-              ))}
+              );
+              })}
               {retSel.some(name=>!retCabinet[name]?.cabName)&&retSel.length>0&&(
                 <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-xs)",textAlign:"center",marginBottom:6}}>
                   ⚠️ בחר ארון לכל הפריטים המסומנים
