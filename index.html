@@ -2174,12 +2174,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   function doReturn(){
     if(!retSel.length)return;
     let ndb;
+    let na={...assigned};
     if(signoffMode){
       // זיכוי: clear signature only, keep assignments
       ndb = archiveAndClearSig({...db}, soldier.id);
     } else {
       // ביטול שיוך: remove items from assignments
-      const na={...assigned};retSel.forEach(n=>delete na[n]);
+      retSel.forEach(n=>delete na[n]);
       ndb = archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     }
     // Handle returned items going to cabinet
@@ -2239,10 +2240,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       // already handled by archiveAndClearSig in the else branch above
     }
     saveDB(ndb);onSave(ndb);
-    logAction("ביטול_שיוך", `בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
+    logAction(signoffMode?"זיכוי_חתימה":"ביטול_שיוך", signoffMode?`זוכתה חתימה של ${soldier.name} (${soldier.id})`:`בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
+    if(!signoffMode) setReSignNeeded({soldier, newAssigned:na});
     setRetSel([]); setRetCabinet({}); setSignoffMode(false);
     setView("profile");
-    setReSignNeeded({soldier, newAssigned:na});
   }
   function clearSig(){
     const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[soldier.id];saveDB(ndb);onSave(ndb);
