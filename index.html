@@ -872,6 +872,16 @@ function todayStr(){return new Date().toLocaleDateString("he-IL",{day:"2-digit",
 function nowStr(){return new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});}
 function isSerial(v){return v && v!==1 && String(v).length>3;}
 function cleanItemName(name){return name?name.replace(/__\d+$/,""):name;}
+function groupAssigned(assigned){
+  const g={};
+  Object.entries(assigned||{}).forEach(([name,val])=>{
+    const clean=cleanItemName(name);
+    if(!g[clean]) g[clean]={qty:0,serials:[],isWeapon:WEAPON_KEYS.includes(clean),makat:getMakat(clean)||""};
+    g[clean].qty++;
+    if(isSerial(val)) g[clean].serials.push(val);
+  });
+  return Object.entries(g);
+}
 // כל האמצעים שיש להם מספרים סידוריים במערכת
 const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim()));
 // מלאי ראשוני — פריטים פנויים (לא משויכים לחיילים)
@@ -1466,7 +1476,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
   const soldierData = customSoldier;
   const testStatus = getTestStatus(db, auth.soldierId);
   const needsTest = soldierNeedsTest(soldierData, db);
-  const items=Object.entries(assigned);
+  const items=groupAssigned(assigned);
   const weapons=items.filter(([k])=>WEAPON_KEYS.includes(k));
   const accessories=items.filter(([k])=>!WEAPON_KEYS.includes(k));
   function doSign(sigData){
@@ -1543,10 +1553,10 @@ function SoldierSignView({auth,onLogout,db,setDb}){
                 </tr></thead>
                 <tbody>
                   {weapons.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{isSerial(val)?val:"—"}</td><td style={{...S.td,textAlign:"center"}}>1</td></tr>
+                    <tr key={name}><td style={{...S.td,fontWeight:700}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10,fontWeight:"normal"}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                   {accessories.map(([name,val])=>(
-                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{isSerial(val)?val:"—"}</td><td style={{...S.td,textAlign:"center"}}>1</td></tr>
+                    <tr key={name}><td style={{...S.td,color:"var(--color-accent-fg)"}}>{name}<br/><span style={{color:"var(--color-text-muted)",fontSize:10}}>{getMakat(name)||""}</span></td><td style={{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>{val.serials.length>0?val.serials.join(", "):"—"}</td><td style={{...S.td,textAlign:"center"}}>{val.qty}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1635,7 +1645,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
             <h2 style={{color:"var(--color-success-fg)",fontSize:"var(--text-xl)",fontWeight:800,marginBottom:6}}>החתימה התקבלה!</h2>
             <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:16}}>נשמר במערכת • {db.signatures?.[auth.soldierId]?.signedAt}</p>
             <button onClick={()=>{
-              const rows=items.map(([name,val])=>`<tr><td style="padding:6px 8px;border:1px solid #ccc;font-weight:${WEAPON_KEYS.includes(name)?"bold":"normal"}">${name}</td><td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${isSerial(val)?val:"—"}</td></tr>`).join("");
+              const rows=items.map(([name,g])=>`<tr><td style="padding:6px 8px;border:1px solid #ccc;font-weight:${g.isWeapon?"bold":"normal"}">${name}</td><td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${g.serials.length>0?g.serials.join(", "):"—"}</td><td style="padding:6px 8px;border:1px solid #ccc;text-align:center">${g.qty}</td></tr>`).join("");
               const sigHtml=sigImg?`<div style="margin-top:12px"><strong>חתימה:</strong><br/><img src="${sigImg}" style="height:60px;margin-top:6px" alt="חתימה"/></div>`:"<div style='color:red'>ללא חתימה</div>";
               const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>טופס חתימה — ${soldierData.name}</title><style>body{font-family:Arial,sans-serif;padding:20px;direction:rtl;color:#000}h2{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#f0f0f0}.noprint{display:none}@media print{.noprint{display:none!important}}</style></head><body><h2>טופס החתמה — גדוד 9219</h2><p style="color:#555;font-size:13px">${soldierData.name} • מ.א: ${soldierData.id} • ${db.signatures?.[auth.soldierId]?.signedAt||todayStr()}</p><table><thead><tr><th>אמצעי</th><th>מספר סידורי</th></tr></thead><tbody>${rows}</tbody></table>${sigHtml}<p style="font-size:11px;color:#888;margin-top:16px">מסמך זה הינו העתק לעיון</p><button class="noprint" onclick="window.print()" style="margin-top:12px;padding:8px 20px;cursor:pointer;font-size:14px">🖨️ הדפס</button></body></html>`;
               const blob=new Blob([html],{type:"text/html;charset=utf-8"});
@@ -1651,10 +1661,10 @@ function SoldierSignView({auth,onLogout,db,setDb}){
               <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:10}}>{soldierData.name} • {soldierData.id} • {todayStr()}</div>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)",marginBottom:12}}>
                 <tbody>
-                  {items.map(([name,val])=>(
+                  {items.map(([name,g])=>(
                     <tr key={name}>
-                      <td style={{padding:"4px 0",fontWeight:600,color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</td>
-                      <td style={{padding:"4px 0",color:"var(--color-text-secondary)",fontFamily:"monospace",textAlign:"left"}}>{isSerial(val)?val:"—"}</td>
+                      <td style={{padding:"4px 0",fontWeight:600,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}{g.qty>1&&<span style={{marginRight:4,fontSize:10,color:"var(--color-accent-fg)"}}>×{g.qty}</span>}</td>
+                      <td style={{padding:"4px 0",color:"var(--color-text-secondary)",fontFamily:"monospace",textAlign:"left"}}>{g.serials.length>0?g.serials.join(", "):"—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1986,7 +1996,7 @@ function DailyModal({db,onClose,type,auth}){
 function SignatureDocument({soldier, db, onClose}){
   const sig = db.signatures?.[soldier.id];
   const assigned = db.assignments[soldier.id] ?? soldier.assigned ?? {};
-  const items = Object.entries(assigned);
+  const items = groupAssigned(assigned);
   const today = new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
 
   const DISCLAIMER = 'עם הגיעך לביצוע שירות מילואים פעיל, הינך מקבל לידך אמצעים לוגיסטיים יקרי ערך (לבוש, מיגון, נשק, צלם, אופיטיקה, אמר"ל, קשר, תחמושת וכו\'). באחריותך האישית לוודא שאמצעים אלו חוזרים לרשות הצבא בסיום שירותך במילואים. מדינת ישראל וצה"ל משקיעים מדי שנה סכומי עתק לוודא שיהיו ברשותך האמצעים הטובים ביותר לביצוע משימתך. האחריות לשמירה על האמצעים מוטלת עלייך. בכדי לוודא שאמצעים אלו ימשיכו לשרת את כולנו ולא יגיעו לידיים עוינות - עלייך לוודא כי בעת קבלת ציוד לידך מכל סוג, תוחתם על אמצעים אלו בחתימת ידך ע"ג טופס 1008. מרגע שהוחתמת על טופס זה הינך אחראי ישיר לכשירותו ואבטחתו של הציוד.';
@@ -2039,12 +2049,12 @@ function SignatureDocument({soldier, db, onClose}){
               <tbody>
                 {items.length===0
                   ? <tr><td colSpan={4} style={{border:"1px solid #000",padding:"4px",textAlign:"center",color:"var(--color-text-muted)"}}>אין אמצעים</td></tr>
-                  : items.map(([name,serial],i)=>(
+                  : items.map(([name,g],i)=>(
                     <tr key={i} style={{background:i%2===0?"#fff":"var(--color-bg-default)"}}>
                       <td style={{border:"1px solid #000",padding:"3px 6px",fontSize:9,fontFamily:"monospace"}}>{NAME_TO_MAKAT[name]||"—"}</td>
-                      <td style={{border:"1px solid #000",padding:"3px 6px",fontWeight:WEAPON_KEYS.includes(name)?"bold":"normal"}}>{name}</td>
-                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{isSerial(serial)?serial:"—"}</td>
-                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center"}}>1</td>
+                      <td style={{border:"1px solid #000",padding:"3px 6px",fontWeight:g.isWeapon?"bold":"normal"}}>{name}</td>
+                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center",fontFamily:"monospace",fontSize:10}}>{g.serials.length>0?g.serials.join(", "):"—"}</td>
+                      <td style={{border:"1px solid #000",padding:"3px 6px",textAlign:"center"}}>{g.qty}</td>
                     </tr>
                   ))
                 }
@@ -2694,10 +2704,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           </div>
           <div style={{background:"var(--color-bg-canvas)",borderRadius:"var(--radius-md)",padding:10,marginBottom:14,fontSize:"var(--text-sm)"}}>
             <div style={{fontWeight:700,marginBottom:6}}>ציוד מעודכן:</div>
-            {Object.entries(reSignNeeded.newAssigned||{}).map(([k,v])=>(
+            {groupAssigned(reSignNeeded.newAssigned||{}).map(([k,g])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
-                <span style={{fontWeight:WEAPON_KEYS.includes(k)?700:400,color:WEAPON_KEYS.includes(k)?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{k}</span>
-                <span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontSize:11}}>{v&&v!==1?v:"—"}</span>
+                <span style={{fontWeight:g.isWeapon?700:400,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{k}</span>
+                <span style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:10,padding:"0 6px",fontSize:10,fontWeight:700}}>×{g.qty}</span>}
+                  <span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontSize:11}}>{g.serials.length>0?g.serials.join(", "):"—"}</span>
+                </span>
               </div>
             ))}
           </div>
@@ -7827,13 +7840,14 @@ function MyStockTab({db, setDb, soldiers, auth}){
     allSols.forEach(s=>{
       const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
       Object.entries(asgn).forEach(([name])=>{
-        if(!assigned[name]) assigned[name]={};
-        assigned[name][s.unit] = (assigned[name][s.unit]||0)+1;
+        const clean=cleanItemName(name);
+        if(!assigned[clean]) assigned[clean]={};
+        assigned[clean][s.unit] = (assigned[clean][s.unit]||0)+1;
       });
     });
     // Also count unitItems (items assigned to units without specific soldier)
     Object.values(db.unitItems||{}).forEach(item=>{
-      const name = item.n||item.name||"";
+      const name = cleanItemName(item.n||item.name||"");
       const unit = item.u||item.unit||"";
       if(!name||!unit) return;
       if(!assigned[name]) assigned[name]={};
@@ -7846,7 +7860,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
     // From assignments (main source)
     Object.values(assigned).forEach(byUnit=>Object.keys(byUnit).forEach(u=>{}));
     Object.values(assigned).forEach(()=>{});
-    Object.keys(assigned).forEach(name=>allItemNames.add(name));
+    Object.keys(assigned).forEach(name=>allItemNames.add(cleanItemName(name)));
     // From unitItems
     Object.values(db.unitItems||{}).forEach(item=>{
       const name=item.n||item.name||""; if(name) allItemNames.add(name);
