@@ -2551,29 +2551,25 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 <input type="number" min="1" max="99" value={item.qty||1} onChange={e=>{const n=[...newItems];n[i]={...n[i],qty:Math.max(1,parseInt(e.target.value)||1)};setNewItems(n);}} style={{...S.input,marginBottom:0,width:46,textAlign:"center",padding:"4px 6px"}}/>
                 <button onClick={()=>{const n=[...newItems];n[i]={...n[i],qty:(parseInt(n[i].qty)||1)+1};setNewItems(n);}} style={{...S.btn("neutral"),padding:"0 8px",minWidth:28,height:34,fontSize:16,lineHeight:1}}>+</button>
               </div>
-              {/* שאלת ארון */}
-              {item.name&&!WEAPON_KEYS.includes(item.name)&&(
-                <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",
-                    color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap"}}>
-                    <input type="checkbox" checked={!!item.inCabinet}
-                      onChange={e=>{const n=[...newItems];n[i]={...n[i],inCabinet:e.target.checked,cabName:""};setNewItems(n);}}/>
-                    🗄️ בארון?
-                  </label>
-                  {item.inCabinet&&(
-                    <select value={item.cabName||""}
-                      onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}}
-                      style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:80}}>
-                      <option value="">— ארון —</option>
-                      {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
               {newItems.length>1&&<button onClick={()=>setNewItems(p=>p.filter((_,x)=>x!==i))} style={{...S.btn("red"),padding:"8px"}}>✕</button>}
             </div>
+            {/* שאלת ארון — שורה שנייה */}
+            {item.name&&!WEAPON_KEYS.includes(item.name)&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,marginBottom:4,paddingRight:4}}>
+                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <input type="checkbox" checked={!!item.inCabinet} onChange={e=>{const n=[...newItems];n[i]={...n[i],inCabinet:e.target.checked,cabName:""};setNewItems(n);}}/>
+                  🗄️ בארון?
+                </label>
+                {item.inCabinet&&(
+                  <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:80}}>
+                    <option value="">— ארון —</option>
+                    {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           ))}
           <button onClick={()=>setNewItems(p=>[...p,{name:"",serial:"",qty:1,inCabinet:false,cabName:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:12}}>+ הוסף שורה</button>
           <button onClick={doCheckout} disabled={!newItems.some(i=>i.name)} style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:newItems.some(i=>i.name)?1:0.5}}>✅ שייך</button>
