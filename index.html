@@ -2193,7 +2193,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
     }
     // Handle items going to cabinet
     retSel.forEach(name=>{
-      const rc=retCabinet[name];
+      const rc=retCabinet[name]||retCabinet[cleanItemName(name)];
       if(rc?.inCabinet && rc.cabName){
         const serial=assigned[name];
         if(signoffMode){
@@ -2500,11 +2500,26 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           )}
           {Object.keys(assigned).length>0
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
-              {Object.entries(assigned).map(([name,val])=>(
-                <div key={name} style={{display:"flex",justifyContent:"space-between",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
-                  <div style={{flex:1}}><span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{cleanItemName(name)}</span><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(cleanItemName(name))||"—"})</span></div><span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{isSerial(val)?val:"—"}</span>
-                </div>
-              ))}
+              {(()=>{
+                const grouped={};
+                Object.entries(assigned).forEach(([name,val])=>{
+                  const clean=cleanItemName(name);
+                  if(!grouped[clean]) grouped[clean]={qty:0,serials:[],keys:[]};
+                  grouped[clean].qty++;
+                  grouped[clean].keys.push(name);
+                  if(isSerial(val)) grouped[clean].serials.push(val);
+                });
+                return Object.entries(grouped).map(([clean,g])=>(
+                  <div key={clean} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--color-bg-canvas)",borderRadius:7,padding:"7px 12px",border:"1px solid var(--color-border-muted)"}}>
+                    <div style={{flex:1}}>
+                      <span style={{fontWeight:600,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>{clean}</span>
+                      <span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:4}}>({getMakat(clean)||"—"})</span>
+                    </div>
+                    {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700,marginLeft:6}}>×{g.qty}</span>}
+                    <span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{g.serials.length>0?g.serials.join(", "):"—"}</span>
+                  </div>
+                ));
+              })()}
             </div>
             :<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
           }
@@ -2587,22 +2602,34 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
-              {Object.entries(assigned).map(([name,val])=>{
-                const isSelected=retSel.includes(name);
-                const nameColor=isSelected?"#111":WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-text-primary)";
-                return (
-                <div key={name} style={{padding:"8px 12px",background:isSelected?"#dbeafe":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+              {(()=>{
+                const grouped={};
+                Object.entries(assigned).forEach(([name,val])=>{
+                  const clean=cleanItemName(name);
+                  if(!grouped[clean]) grouped[clean]={keys:[],serials:[],isWeapon:WEAPON_KEYS.includes(clean)};
+                  grouped[clean].keys.push(name);
+                  if(isSerial(val)) grouped[clean].serials.push(val);
+                });
+                return Object.entries(grouped).map(([clean,g])=>{
+                  const allSelected=g.keys.every(k=>retSel.includes(k));
+                  const someSelected=g.keys.some(k=>retSel.includes(k));
+                  const isSelected=allSelected;
+                  const repKey=clean;
+                  const nameColor=isSelected?"#111":g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)";
+                  return (
+                <div key={clean} style={{padding:"8px 12px",background:isSelected?"#dbeafe":someSelected?"#1a3a5c":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-                    <input type="checkbox" checked={retSel.includes(name)} onChange={e=>{const n=name;const sel=e.target.checked;setRetSel(p=>sel?[...p,n]:p.filter(x=>String(x)!==String(n)));}}/>
-                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{cleanItemName(name)}</span>
-                    {isSerial(val)&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{val}</span>}
+                    <input type="checkbox" checked={allSelected} onChange={e=>{const sel=e.target.checked;setRetSel(p=>sel?[...new Set([...p,...g.keys])]:p.filter(x=>!g.keys.includes(x)));}}/>
+                    <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{clean}</span>
+                    {g.keys.length>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>×{g.keys.length}</span>}
+                    {g.serials.length>0&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serials.join(", ")}</span>}
                   </label>
-                  {isSelected&&(
+                  {(allSelected||someSelected)&&(
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
                       <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>🗄️ ארון:</span>
-                      <select value={retCabinet[name]?.cabName||""}
+                      <select value={retCabinet[clean]?.cabName||""}
                         onClick={e=>e.stopPropagation()}
-                        onChange={e=>{e.stopPropagation();setRetCabinet(p=>({...p,[name]:{inCabinet:!!e.target.value,cabName:e.target.value}}));}}
+                        onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};g.keys.forEach(k=>{u[k]=cab;});u[clean]=cab;return u;});}}
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
                         <option value="">— בחר ארון —</option>
                         {(()=>{
@@ -2633,14 +2660,15 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   )}
                 </div>
               );
-              })}
-              {retSel.some(name=>!retCabinet[name]?.cabName)&&retSel.length>0&&(
+              });
+              })()}
+              {retSel.some(name=>{const clean=cleanItemName(name);return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;})&&retSel.length>0&&(
                 <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-xs)",textAlign:"center",marginBottom:6}}>
                   ⚠️ בחר ארון לכל הפריטים המסומנים
                 </div>
               )}
               <button onClick={doReturn}
-                disabled={!retSel.length||retSel.some(name=>!retCabinet[name]?.cabName)}
+                disabled={!retSel.length||retSel.some(name=>{const clean=cleanItemName(name);return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;})}
                 style={{...S.btn(signoffMode?"green":"orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>{signoffMode?"✅ זכה "+retSel.length+" פריטים":"🔄 בטל שיוך ("+retSel.length+")"}</button>
             </>
           }
