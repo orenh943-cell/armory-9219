@@ -2189,9 +2189,37 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
         // Also add to unitItems for inventory tracking
         const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+        // Find which unit this cabinet belongs to
+        const CAB_UNITS={"א":"א","ב":"ב","ג":"ג","מסייעת":"מסייעת","אגמ":"אגמ","פלסמ":"פלסמ","גדודי":"גדודי"};
+        const cabUnit=(()=>{
+          const cabN=rc.cabName||"";
+          for(const [u,names] of Object.entries(db.cabinetNames||{})){
+            if(names.includes(cabN)) return u;
+          }
+          // fallback: guess from cabinet name
+          for(const u of ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]){
+            if(cabN.includes(u)) return u;
+          }
+          return "גדודי";
+        })();
         const newUI={...(ndb.unitItems||{}),[uid]:{
           n:name, s:serial&&serial!==1?String(serial):null,
-          u:"גדודי", t:"unit", cabName:rc.cabName,
+          u:cabUnit, t:"unit", cabName:rc.cabName,
+          addedAt:new Date().toLocaleDateString("he-IL"),
+        }};
+        ndb={...ndb, unitItems:newUI};
+      }
+    });
+    // Items with no cabinet selection → go to unitItems as גדודי (unassigned armory)
+    retSel.forEach(name=>{
+      const rc=retCabinet[name];
+      if(!rc?.inCabinet){
+        const serial=assigned[name];
+        const uid="ret_free_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+        const newUI={...(ndb.unitItems||{}),[uid]:{
+          n:name, s:serial&&serial!==1?String(serial):null,
+          u:"גדודי", t:"unit",
+          returnedFrom:soldier.name,
           addedAt:new Date().toLocaleDateString("he-IL"),
         }};
         ndb={...ndb, unitItems:newUI};
@@ -2523,7 +2551,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                     <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:WEAPON_KEYS.includes(name)?"var(--color-danger-fg)":"var(--color-accent-fg)"}}>{name}</span>
                     {isSerial(val)&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{val}</span>}
                   </label>
-                  {retSel.includes(name)&&!WEAPON_KEYS.includes(name)&&(
+                  {retSel.includes(name)&&(
                     <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,paddingRight:24}}>
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",cursor:"pointer"}}>
                         <input type="checkbox"
