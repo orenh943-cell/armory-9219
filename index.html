@@ -2183,61 +2183,69 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       retSel.forEach(n=>delete na[n]);
       ndb = archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     }
-    // Handle returned items going to cabinet
+    // Handle items going to cabinet
     retSel.forEach(name=>{
       const rc=retCabinet[name];
       if(rc?.inCabinet && rc.cabName){
         const serial=assigned[name];
-        const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
-          alias:name, fullname:name, qty:1,
-          serial:serial&&serial!==1?String(serial):null,
-          makat:getMakat(name)||null,
-          returnedFrom:soldier.name, returnedAt:new Date().toLocaleDateString("he-IL"),
-        }];
-        ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
-        fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
-        // Also add to unitItems for inventory tracking
-        const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-        // Find which unit this cabinet belongs to
-        const CAB_UNITS={"א":"א","ב":"ב","ג":"ג","מסייעת":"מסייעת","אגמ":"אגמ","פלסמ":"פלסמ","גדודי":"גדודי"};
-        const cabUnit=(()=>{
-          const cabN=rc.cabName||"";
-          for(const [u,names] of Object.entries(db.cabinetNames||{})){
-            if(names.includes(cabN)) return u;
-          }
-          // fallback: guess from cabinet name
-          for(const u of ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]){
-            if(cabN.includes(u)) return u;
-          }
-          return "גדודי";
-        })();
-        const newUI={...(ndb.unitItems||{}),[uid]:{
-          n:name, s:serial&&serial!==1?String(serial):null,
-          u:cabUnit, t:"unit", cabName:rc.cabName,
-          addedAt:new Date().toLocaleDateString("he-IL"),
-        }};
-        ndb={...ndb, unitItems:newUI};
+        if(signoffMode){
+          // זיכוי: הציוד בארון אבל עדיין שייך לחייל — סמן soldierId
+          const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
+            alias:name, fullname:name, qty:1,
+            serial:serial&&serial!==1?String(serial):null,
+            makat:getMakat(name)||null,
+            soldierId:soldier.id, soldierName:soldier.name,
+            signedOff:true, signedOffAt:new Date().toLocaleDateString("he-IL"),
+          }];
+          ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
+          fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
+        } else {
+          // ביטול שיוך: הציוד חוזר לארמון — returnedFrom
+          const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
+            alias:name, fullname:name, qty:1,
+            serial:serial&&serial!==1?String(serial):null,
+            makat:getMakat(name)||null,
+            returnedFrom:soldier.name, returnedAt:new Date().toLocaleDateString("he-IL"),
+          }];
+          ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
+          fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
+          // unitItems רק בביטול שיוך אמיתי
+          const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+          const cabUnit=(()=>{
+            const cabN=rc.cabName||"";
+            for(const [u,names] of Object.entries(db.cabinetNames||{})){
+              if(names.includes(cabN)) return u;
+            }
+            for(const u of ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]){
+              if(cabN.includes(u)) return u;
+            }
+            return "גדודי";
+          })();
+          const newUI={...(ndb.unitItems||{}),[uid]:{
+            n:name, s:serial&&serial!==1?String(serial):null,
+            u:cabUnit, t:"unit", cabName:rc.cabName,
+            addedAt:new Date().toLocaleDateString("he-IL"),
+          }};
+          ndb={...ndb, unitItems:newUI};
+        }
       }
     });
-    // Items with no cabinet selection → stay in soldier's unit (unassigned to specific soldier)
-    retSel.forEach(name=>{
-      const rc=retCabinet[name];
-      if(!rc?.inCabinet){
-        const serial=assigned[name];
-        const uid="ret_unit_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-        const newUI={...(ndb.unitItems||{}),[uid]:{
-          n:name, s:serial&&serial!==1?String(serial):null,
-          u:soldier.unit||"גדודי", t:"unit",
-          returnedFrom:soldier.name,
-          addedAt:new Date().toLocaleDateString("he-IL"),
-        }};
-        ndb={...ndb, unitItems:newUI};
-      }
-    });
-    // In signoffMode sig already cleared by archiveAndClearSig above
-    // In normal mode, also clear sig if ALL items returned
-    if(!signoffMode && Object.keys(assigned).every(k=>retSel.includes(k))){
-      // already handled by archiveAndClearSig in the else branch above
+    // פריטים ללא ארון — רק בביטול שיוך (לא בזיכוי)
+    if(!signoffMode){
+      retSel.forEach(name=>{
+        const rc=retCabinet[name];
+        if(!rc?.inCabinet){
+          const serial=assigned[name];
+          const uid="ret_unit_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+          const newUI={...(ndb.unitItems||{}),[uid]:{
+            n:name, s:serial&&serial!==1?String(serial):null,
+            u:soldier.unit||"גדודי", t:"unit",
+            returnedFrom:soldier.name,
+            addedAt:new Date().toLocaleDateString("he-IL"),
+          }};
+          ndb={...ndb, unitItems:newUI};
+        }
+      });
     }
     saveDB(ndb);onSave(ndb);
     logAction(signoffMode?"זיכוי_חתימה":"ביטול_שיוך", signoffMode?`זוכתה חתימה של ${soldier.name} (${soldier.id})`:`בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
@@ -2560,9 +2568,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
       )}
       {view==="return"&&canEditThisSoldier&&perms.canReturn&&(
         <div>
-          {signoffMode&&<div style={{background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-fg)",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>
-            ⚠️ מצב זיכוי — הציוד ישאר שייך לחייל, רק החתימה תימחק. בחר ארון לכל פריט לרישום מיקום.
-          </div>}
+          <div style={{display:"flex",gap:6,marginBottom:12}}>
+            <button onClick={()=>setSignoffMode(false)} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1.5px solid",borderColor:!signoffMode?"var(--color-warning-fg)":"var(--color-border-default)",background:!signoffMode?"var(--btn-warning-bg)":"var(--color-bg-subtle)",color:!signoffMode?"var(--color-warning-fg)":"var(--color-text-secondary)",cursor:"pointer",fontWeight:600,fontSize:"var(--text-sm)"}}>🔄 ביטול שיוך</button>
+            <button onClick={()=>setSignoffMode(true)} style={{flex:1,padding:"8px 0",borderRadius:8,border:"1.5px solid",borderColor:signoffMode?"var(--color-success-fg)":"var(--color-border-default)",background:signoffMode?"var(--btn-success-bg)":"var(--color-bg-subtle)",color:signoffMode?"var(--color-success-fg)":"var(--color-text-secondary)",cursor:"pointer",fontWeight:600,fontSize:"var(--text-sm)"}}>✅ זיכוי</button>
+          </div>
+          <div style={{background:signoffMode?"var(--color-success-bg)":"var(--color-warning-bg)",border:"1px solid",borderColor:signoffMode?"var(--color-success-fg)":"var(--color-warning-fg)",borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:"var(--text-xs)",color:signoffMode?"var(--color-success-fg)":"var(--color-warning-fg)"}}>
+            {signoffMode?"✅ זיכוי — הציוד נשאר שייך לחייל, רק החתימה תימחק. בחר ארון לכל פריט.":"🔄 ביטול שיוך — הציוד יוחזר לארמון ויוסר מהחייל לחלוטין."}
+          </div>
           {Object.keys(assigned).length===0
             ?<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
             :<>
@@ -2620,7 +2632,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               )}
               <button onClick={doReturn}
                 disabled={!retSel.length||retSel.some(name=>!retCabinet[name]?.cabName)}
-                style={{...S.btn("orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>{signoffMode?"✅ זיכוי חתימה ("+retSel.length+")":"🔄 בטל שיוך ("+retSel.length+")"}</button>
+                style={{...S.btn(signoffMode?"green":"orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>{signoffMode?"✅ זכה "+retSel.length+" פריטים":"🔄 בטל שיוך ("+retSel.length+")"}</button>
             </>
           }
         </div>
