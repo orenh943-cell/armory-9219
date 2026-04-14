@@ -2132,9 +2132,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [soldierItemSearches,setSoldierItemSearches]=useState({});
   const allSoldierItemNames=React.useMemo(()=>{
     const fromUnit=[...new Set(Object.values(db.unitItems||{}).map(x=>x.n||x.name||"").filter(Boolean))];
-    const fromEq=EQ_COLS.filter(x=>!fromUnit.includes(x));
-    return [...fromUnit,...fromEq].sort((a,b)=>a.localeCompare(b,"he"));
-  },[db.unitItems]);
+    const fromMaster=Object.keys(db.armoryMaster||{}).filter(Boolean);
+    const fromAssigned=[...new Set(Object.values(db.assignments||{}).flatMap(a=>Object.keys(a).map(k=>cleanItemName(k))))];
+    const fromEq=EQ_COLS;
+    const all=new Set([...fromUnit,...fromMaster,...fromAssigned,...fromEq]);
+    return [...all].filter(Boolean).sort((a,b)=>a.localeCompare(b,"he"));
+  },[db.unitItems,db.armoryMaster,db.assignments]);
   const [retSel,setRetSel]=useState([]);
   const [retCabinet,setRetCabinet]=useState({}); // name -> {inCabinet:bool, cabName:str}
   const [signoffMode,setSignoffMode]=useState(false); // true = זיכוי (keep assignments, just clear sig)
