@@ -8008,22 +8008,32 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
   function exportCSV(){
     if(!liveData.length){alert("אין נתונים לייצוא");return;}
-    const BOM="﻿";
-    const UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-    const unitLabel=filterUnit==="הכל"?"כל הפלוגות":"פלוגה "+filterUnit;
-    const unitCols=filterUnit==="הכל"?UNITS:[filterUnit];
-    const headers=["מקט","אמצעי","סהכ",...unitCols.map(u=>"פלוגה "+u),"פנוי"];
-    const rows=liveData.map(item=>{
-      const unitVals=unitCols.map(u=>(item.liveByUnit[u]||0)+(item.byUnit?.[u]||0)||0);
-      return [item.makat||"—",item.name,item.total,...unitVals,item.unassigned];
+    var BOM="﻿";
+    var UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+    var unitLabel=filterUnit==="הכל"?"כל הפלוגות":"פלוגה "+filterUnit;
+    var unitCols=filterUnit==="הכל"?UNITS:[filterUnit];
+    var headers=["מקט","אמצעי","סהכ"].concat(unitCols.map(function(u){return "פלוגה "+u;})).concat(["פנוי"]);
+    var rows=liveData.map(function(item){
+      var unitVals=unitCols.map(function(u){return (item.liveByUnit[u]||0)+(item.byUnit&&item.byUnit[u]||0)||0;});
+      return [item.makat||"-",item.name,item.total].concat(unitVals).concat([item.unassigned]);
     });
-    const csv=BOM+[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""`)}`).join(",")).join("\n");
-    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    const dateStr=new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
-    a.href=url;a.download=`מלאי_ארמון_${unitLabel}_${dateStr}.csv`;a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    var allRows=[headers].concat(rows);
+    var csvLines=allRows.map(function(r){
+      return r.map(function(c){
+        var s=String(c).split('"').join('""')
+        return '"'+s+'"';
+      }).join(",");
+    });
+    var csv=BOM+csvLines.join("
+");
+    var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    var dateStr=new Date().toLocaleDateString("he-IL").split("/").join("-");
+    a.href=url;
+    a.download="מלאי_ארמון_"+unitLabel+"_"+dateStr+".csv";
+    a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
   }
 
   return (
