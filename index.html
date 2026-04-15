@@ -8067,8 +8067,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
           <input
             type="password" value={pinInput}
             onChange={e=>setPinInput(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);setPinError("");}else{setPinError("קוד שגוי ❌");}}}
-            placeholder="קוד אישי..."
+            onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);setPinError("");}else{setPinError("קוד שגוי ❌");}}}}
+            placeholder="הכנס קוד..."
             style={{...S.input,textAlign:"center",fontSize:20,letterSpacing:4,marginBottom:10}}
           />
           {pinError&&<div style={{color:"var(--color-danger-fg)",marginBottom:8,fontSize:"var(--text-sm)"}}>{pinError}</div>}
