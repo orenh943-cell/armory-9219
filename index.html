@@ -2605,9 +2605,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                 {item.inCabinet&&(
                   <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:80}}>
                     <option value="">— ארון —</option>
-                    {(db.cabinetNames?Object.values(db.cabinetNames).flat():[]).filter((v,i2,a)=>a.indexOf(v)===i2).map(n=>(
-                      <option key={n} value={n}>{n}</option>
-                    ))}
+                    {(()=>{
+                      const seen=new Set(); const opts=[];
+                      Object.keys(db.cabinets||{}).forEach(k=>{const d=decodeURIComponent(k);if(!seen.has(d)){seen.add(d);opts.push(d);}});
+                      Object.values(db.cabinetNames||{}).flat().forEach(n=>{if(n&&!seen.has(n)){seen.add(n);opts.push(n);}});
+                      return opts.sort((a,b)=>a.localeCompare(b,"he")).map(n=><option key={n} value={n}>{n}</option>);
+                    })()}
                   </select>
                 )}
               </div>
@@ -2660,20 +2663,32 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
                         <option value="">— בחר ארון —</option>
                         {(()=>{
-                          // All cabinets: Firebase first, then defaults
-                          const DEF_CABS={"א":["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],"ב":["כנה ב","ארון ב 1","ארון ב 2","ארון רחפנים ב"],"ג":["כנה ג","ארון ג 1","ארון ג 2","ארון רחפנים ג"],"מסייעת":["כנה מסייעת","ארון מסייעת 1","ארון מסייעת 2","ארון מסייעת 3","ארון מסייעת 4"],"אגמ":["כנה אגמ","ארון אגמ 1","ארון אגמ 2","ארון רחפנים אגמ"],"פלסמ":["כנה פלסמ","ארון פלסמ 1","ארון פלסמ 2","ארון רחפנים פלסמ"],"גדודי":["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
-                          const cabSrc=Object.keys(db.cabinetNames||{}).length>0?db.cabinetNames:DEF_CABS;
-                          const fromDB=Object.entries(cabSrc).flatMap(([unit,names])=>names.map(n=>({n,unit})));
-                          const kanas = ["א","ב","ג","מסייעת","אגמ","פלסמ"].map(u=>({n:"כנה "+u,unit:u}));
-                          const extra = ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"].map(n=>({n,unit:"גדודי"}));
+                          // All cabinets: from db.cabinets (actual) + cabinetNames (by unit)
                           const seen=new Set(); const all=[];
-                          [...kanas,...fromDB,...extra].forEach(({n,unit})=>{
-                            if(n&&!seen.has(n)){seen.add(n);all.push({n,unit});}
-                          });
                           const solUnit=soldier.unit||"";
+                          // כנה של הפלוגה — ראשון
+                          if(solUnit) all.push({n:"כנה "+solUnit,unit:solUnit});
+                          seen.add("כנה "+solUnit);
+                          // כל הארונות האמיתיים מ-db.cabinets
+                          Object.keys(db.cabinets||{}).forEach(cabName=>{
+                            const dec=decodeURIComponent(cabName);
+                            if(!seen.has(dec)){seen.add(dec);
+                              // נסה לשייך לפלוגה לפי cabinetNames
+                              let unit="גדודי";
+                              Object.entries(db.cabinetNames||{}).forEach(([u,names])=>{if(names.includes(dec)) unit=u;});
+                              all.push({n:dec,unit});
+                            }
+                          });
+                          // כנות שאר הפלוגות
+                          ["א","ב","ג","מסייעת","אגמ","פלסמ"].forEach(u=>{
+                            const k="כנה "+u;
+                            if(!seen.has(k)){seen.add(k);all.push({n:k,unit:u});}
+                          });
+                          // ארונות מ-cabinetNames שלא ב-db.cabinets
+                          Object.entries(db.cabinetNames||{}).forEach(([unit,names])=>{
+                            (names||[]).forEach(n=>{if(n&&!seen.has(n)){seen.add(n);all.push({n,unit});}});
+                          });
                           all.sort((a,b)=>{
-                            if(a.n==="כנה "+solUnit) return -1;
-                            if(b.n==="כנה "+solUnit) return 1;
                             if(a.unit===solUnit&&b.unit!==solUnit) return -1;
                             if(a.unit!==solUnit&&b.unit===solUnit) return 1;
                             if(a.n.startsWith("כנה")&&!b.n.startsWith("כנה")) return -1;
