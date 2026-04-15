@@ -8130,7 +8130,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
           <thead>
             <tr style={{background:"var(--color-bg-subtle)"}}>
               <th style={{...S.th}}>תיאור פריט</th>
-              <th style={{...S.th,width:110}}>מק"ט</th>
+              <th style={{...S.th,width:110}}>מקט</th>
               <th style={{...S.th,width:70,textAlign:"center"}}>כמות</th>
               <th style={{...S.th,width:70,textAlign:"center"}}>בשימוש</th>
               <th style={{...S.th,width:70,textAlign:"center"}}>פנוי</th>
@@ -8170,7 +8170,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                             <input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input,marginBottom:0,width:180}}/>
                           </div>
                           <div>
-                            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מק"ט</div>
+                            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
                             <input value={editMakat} onChange={e=>setEditMakat(e.target.value)} style={{...S.input,marginBottom:0,width:120}}/>
                           </div>
                           <div>
@@ -8193,14 +8193,14 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
 
       {/* Add item modal */}
       {addItemModal&&(
-        <Modal title="➕ הוספת פריט למלאי" onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");}} wide={false}>
+        <Modal title={"➕ הוספת פריט למלאי"} onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");}} wide={false}>
           <div style={{marginBottom:10}}>
             <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט</div>
             <input value={addName} onChange={e=>setAddName(e.target.value)} placeholder="שם הפריט..." style={{...S.input}}/>
           </div>
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מק"ט</div>
-            <input value={addMakat} onChange={e=>setAddMakat(e.target.value)} placeholder="מק"ט..." style={{...S.input}}/>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
+            <input value={addMakat} onChange={e=>setAddMakat(e.target.value)} placeholder="מקט..." style={{...S.input}}/>
           </div>
           <div style={{marginBottom:16}}>
             <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות</div>
