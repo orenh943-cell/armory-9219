@@ -763,6 +763,11 @@ function canEditUnit(auth, db, unit){
 function canDelete(auth){
   return auth?.username==="אורן" || auth?.name==="אורן חלפון";
 }
+function canSignAdmin(auth){
+  // אורן, מתן, יעקב בלבד
+  const u=auth?.username||""; const n=auth?.name||"";
+  return u==="אורן"||u==="מתן"||u==="יעקב"||n==="אורן חלפון"||n==="מתן ניסים דיין"||n==="יעקב שרון";
+}
 function getUserMeta(auth, db){
   const perms = db?.userPerms?.[auth.username]||{};
   const dynUser = db?.dynamicUsers?.[auth.username];
@@ -2150,6 +2155,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [locNote,setLocNote]=useState("");
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
+  const [showSignHere,setShowSignHere]=useState(false);
+  const [showPartialSign,setShowPartialSign]=useState(false);
+  const [partialSel,setPartialSel]=useState([]);
   const [reSignNeeded,setReSignNeeded]=useState(null); // {soldier, newAssigned} for re-sign prompt
   const [newItems,setNewItems]=useState([{name:"",serial:"",qty:1,inCabinet:false,cabName:""}]);
   const [showCabQ,setShowCabQ]=useState(false); // after checkout show cabinet questions
@@ -2378,6 +2386,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
               </div>
               <div style={{display:"flex",gap:6}}>
                 {weps.length>0&&!sig&&<button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
+                {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
+                {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowPartialSign(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                 {soldierNeedsTest(soldier,db)&&(()=>{
                   const ts=getTestStatus(db,soldier.id);
                   const ph=soldier.phone;
@@ -2716,6 +2726,67 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         </div>
       )}
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
+    {showSignHere&&(
+      <Modal title={"✍️ חתום לידי — "+soldier.name} onClose={()=>setShowSignHere(false)} wide>
+        <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>חתימת החייל על כל הציוד המשוייך אליו</div>
+        <div style={{marginBottom:8,background:"var(--color-bg-canvas)",borderRadius:8,padding:"8px 12px",fontSize:"var(--text-sm)"}}>
+          {groupAssigned(assigned,db).map(([name,g])=>(
+            <div key={name+(g.serial||"")} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
+              <span style={{fontWeight:g.isWeapon?700:400,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{name}{g.qty>1&&" ×"+g.qty}</span>
+              <span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial||"—"}</span>
+            </div>
+          ))}
+        </div>
+        <SignaturePad onSave={sigData=>{
+          const signedAt=new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+          const sigEntry={sigData,signedAt};
+          const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+          saveDB(ndb); onSave(ndb);
+          fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+          logAction("חתימה_לידי", "חתימה לידי של "+soldier.name+" ("+soldier.id+")", auth?.name);
+          setShowSignHere(false);
+        }}/>
+      </Modal>
+    )}
+    {showPartialSign&&(
+      <Modal title={"📝 חתימה חלקית — "+soldier.name} onClose={()=>{setShowPartialSign(false);setPartialSel([]);}} wide>
+        <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>בחר את הפריטים עליהם תרצה להחתים:</div>
+        <div style={{marginBottom:12}}>
+          {groupAssigned(assigned,db).map(([name,g])=>(
+            <label key={name+(g.serial||"")} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:partialSel.includes(name+(g.serial||""))?"var(--color-accent-bg)":"var(--color-bg-canvas)",borderRadius:7,marginBottom:4,cursor:"pointer",border:"1px solid var(--color-border-muted)"}}>
+              <input type="checkbox" checked={partialSel.includes(name+(g.serial||""))} onChange={e=>{const k=name+(g.serial||"");setPartialSel(p=>e.target.checked?[...p,k]:p.filter(x=>x!==k));}}/>
+              <span style={{flex:1,fontWeight:600,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{name}</span>
+              {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:10,padding:"0 7px",fontSize:10,fontWeight:700}}>×{g.qty}</span>}
+              {g.serial&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial}</span>}
+              <span style={{fontSize:10,color:"var(--color-text-muted)"}}>{g.makat||""}</span>
+            </label>
+          ))}
+        </div>
+        <button onClick={()=>setPartialSel(groupAssigned(assigned,db).map(([n,g])=>n+(g.serial||"")))} style={{...S.btn(),fontSize:"var(--text-xs)",marginBottom:10}}>בחר הכל</button>
+        {partialSel.length>0&&(
+          <div style={{borderTop:"1px solid var(--color-border-muted)",paddingTop:12,marginTop:4}}>
+            <div style={{fontWeight:700,marginBottom:8,fontSize:"var(--text-sm)"}}>✍️ חתימה על {partialSel.length} פריטים:</div>
+            <SignaturePad onSave={sigData=>{
+              const signedAt=new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+              const partialItems={};
+              groupAssigned(assigned,db).forEach(([name,g])=>{
+                const k=name+(g.serial||"");
+                if(partialSel.includes(k)){
+                  g.keys=g.keys||Object.keys(assigned).filter(ak=>cleanItemName(ak)===name&&(g.serial?isSerial(assigned[ak])&&String(assigned[ak])===g.serial:!isSerial(assigned[ak])));
+                  (g.keys||[name]).forEach(ak=>{partialItems[ak]=assigned[ak];});
+                }
+              });
+              const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems)};
+              const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+              saveDB(ndb); onSave(ndb);
+              fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+              logAction("חתימה_חלקית", "חתימה חלקית של "+soldier.name+" על: "+Object.keys(partialItems).map(k=>cleanItemName(k)).join(", "), auth?.name);
+              setShowPartialSign(false); setPartialSel([]);
+            }}/>
+          </div>
+        )}
+      </Modal>
+    )}
     {reSignNeeded&&(
       <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{...S.card,maxWidth:440,width:"100%",border:"2px solid var(--color-warning-fg)"}}>
@@ -5966,6 +6037,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
                       {!sig&&s.guarantee&&<Badge color="purple" small>🛡️ ערב: {s.guarantee.repName}</Badge>}
                       {!sig&&perms.canSign&&<button onClick={()=>sendWhatsApp(s)} style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
+                      {!sig&&canSignAdmin(auth)&&Object.keys(s.assigned||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
+                      {!sig&&canSignAdmin(auth)&&Object.keys(s.assigned||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                       {!sig&&perms.canSign&&<button onClick={()=>setSignInPersonSoldier(s)} style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>✍️ חתום ליד</button>}
                       {sig&&perms.canEdit&&<button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];fbDelete("db/signatures/"+s.id).catch(()=>{});saveDB(ndb);setDb(ndb);}} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
                       <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>פרופיל</button>
