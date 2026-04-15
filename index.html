@@ -8006,6 +8006,27 @@ function MyStockTab({db, setDb, soldiers, auth}){
     win.document.close();
   }
 
+  function exportCSV(){
+    if(!liveData.length){alert("אין נתונים לייצוא");return;}
+    const BOM="﻿";
+    const UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+    const unitLabel=filterUnit==="הכל"?"כל הפלוגות":"פלוגה "+filterUnit;
+    const unitCols=filterUnit==="הכל"?UNITS:[filterUnit];
+    const headers=["מק"ט","אמצעי","סהכ",...unitCols.map(u=>"פלוגה "+u),"פנוי"];
+    const rows=liveData.map(item=>{
+      const unitVals=unitCols.map(u=>(item.liveByUnit[u]||0)+(item.byUnit?.[u]||0)||0);
+      return [item.makat||"—",item.name,item.total,...unitVals,item.unassigned];
+    });
+    const csv=BOM+[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("
+");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    const dateStr=new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
+    a.href=url;a.download=`מלאי_ארמון_${unitLabel}_${dateStr}.csv`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
   return (
     <div style={{maxWidth:900,margin:"0 auto",padding:16}}>
       {/* Header */}
@@ -8022,6 +8043,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
           <button onClick={()=>setShowAddNew(true)} style={{...S.btn("blue"),padding:"7px 14px",fontSize:"var(--text-base)"}}>➕ הוסף פריט</button>
           {canDelete(auth)&&<button onClick={resetAllArmory} style={{...S.btn("red"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🗑️ אפס מלאי</button>}
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
+          <button onClick={exportCSV} style={{...S.btn("success"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📥 Excel</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
         </div>
       </div>
