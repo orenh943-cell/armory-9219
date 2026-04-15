@@ -8012,7 +8012,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
     const UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
     const unitLabel=filterUnit==="הכל"?"כל הפלוגות":"פלוגה "+filterUnit;
     const unitCols=filterUnit==="הכל"?UNITS:[filterUnit];
-    const headers=["מק"ט","אמצעי","סהכ",...unitCols.map(u=>"פלוגה "+u),"פנוי"];
+    const headers=["מקט","אמצעי","סהכ",...unitCols.map(u=>"פלוגה "+u),"פנוי"];
     const rows=liveData.map(item=>{
       const unitVals=unitCols.map(u=>(item.liveByUnit[u]||0)+(item.byUnit?.[u]||0)||0);
       return [item.makat||"—",item.name,item.total,...unitVals,item.unassigned];
