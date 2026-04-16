@@ -2950,7 +2950,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 {item.inCabinet&&(
                   <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
                     <option value="">— בחר מיקום —</option>
-                    {getAllCabinets(db,soldier.unit).map(({n})=><option key={n} value={n}>{n}</option>)}
+                    {getAllCabinets(db,"הכל").map(({n})=><option key={n} value={n}>{n}</option>)}
                   </select>
                 )}
               </div>
@@ -3338,18 +3338,24 @@ function InPersonSignModal({soldier, db, onSave, auth, onClose}){
 
   function doSign(sig){
     const signedAt = todayStr()+" "+nowStr();
-    const armoryUser = (()=>{
-      const allU={...(db.dynamicUsers||{}),...USERS};
-      const entry=Object.entries(allU).find(([,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[Object.keys(allU).find(k=>allU[k]===u)]?._roleTitle==="אחראי ארמון"));
-      if(!entry) return null;
-      const [uname,u]=entry;
-      const perms=db.userPerms?.[uname]||{};
-      return {name:u.name||uname, rank:u.rank||perms._rank||""};
-    })();
-    const issuerDisplay = armoryUser
-      ? [armoryUser.rank,"אחראי ארמון",armoryUser.name].filter(Boolean).join(" ")
-      : (auth?.name||"אחראי ארמון");
-    const sigEntry = {sigData:sig, signedAt, issuerName:issuerDisplay};
+    const ADMIN_USERNAMES = ["אורן","מתן","יעקב"];
+    const allU = {...(db.dynamicUsers||{}),...USERS};
+    // המנפק הוא המשתמש המחובר אם הוא מנהל, אחרת אחראי ארמון
+    let issuerDisplay = auth?.name||"אחראי ארמון";
+    let issuerSigUsername = null;
+    if(ADMIN_USERNAMES.includes(auth?.username)){
+      issuerSigUsername = auth.username;
+      issuerDisplay = auth.name||auth.username;
+    } else {
+      const entry=Object.entries(allU).find(([uname,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[uname]?._roleTitle==="אחראי ארמון"));
+      if(entry){
+        const [uname,u]=entry;
+        issuerSigUsername=uname;
+        issuerDisplay=u.name||uname;
+      }
+    }
+    const issuerSig = issuerSigUsername ? (db.userSigs?.[issuerSigUsername]||null) : null;
+    const sigEntry = {sigData:sig, signedAt, issuerName:issuerDisplay, ...(issuerSig?{issuerSig}:{})};
     fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
     const ndb = {...db, signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
     try{localStorage.setItem("armory_9219_v4",JSON.stringify(ndb));}catch(e){}
@@ -3366,7 +3372,8 @@ function InPersonSignModal({soldier, db, onSave, auth, onClose}){
         <h2 style={{color:"var(--color-success-fg)",marginBottom:8}}>{soldier.name} חתם!</h2>
         <p style={{color:"var(--color-text-secondary)",marginBottom:20}}>החתימה נשמרה במערכת</p>
         <button onClick={()=>{
-          const html=buildSignatureFormHtml({...soldier},{sigData,signedAt:todayStr()+" "+nowStr(),issuerName:auth?.name||"אחראי ארמון"},assigned);
+          const issuerSigForForm = auth?.username ? (db.userSigs?.[auth.username]||null) : null;
+          const html=buildSignatureFormHtml({...soldier},{sigData,signedAt:todayStr()+" "+nowStr(),issuerName:auth?.name||"אחראי ארמון",...(issuerSigForForm?{issuerSig:issuerSigForForm}:{})},assigned);
           const blob=new Blob([html],{type:"text/html"});
           const url=URL.createObjectURL(blob);
           const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+".html";
