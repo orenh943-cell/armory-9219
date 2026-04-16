@@ -7764,30 +7764,15 @@ function CabinetsTab({db, setDb, auth}){
 
   // Cabinet items stored in db.cabinets[cabName]
   function getItems(cabName){
-    // כנה = auto-populated from assignments + unitItems (weapons in this unit)
+    // כנה = מה שיושב פיזית בארמון:
+    // 1. unitItems t=unit (מוקצה לפלוגה, לא יצא)
+    // 2. משוייך לחייל אבל לא חתום (הנשק עדיין בארמון, ממתין לחתימה)
+    // לא מופיע: משוייך + חתום (יצא פיזית מהארמון)
     if(cabName.startsWith("כנה ")){
       const unit = cabName.replace("כנה ","");
       const signedIds = new Set(Object.keys(db.signatures||{}));
       const items = [];
-      // נשקים משוייכים לחיילים
-      const allSolsHere = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS]
-        .filter(s=>s.unit===unit);
-      allSolsHere.forEach(sol=>{
-        const asgn = db._assignmentsLoaded ? (db.assignments?.[sol.id]||{}) : (db.assignments?.[sol.id]||{});
-        if(Object.keys(asgn).length===0) return;
-        Object.entries(asgn).forEach(([name,val])=>{
-          if(WEAPON_KEYS.includes(name)){
-            items.push({
-              alias:name, fullname:name, qty:1,
-              serial:val&&val!==1?String(val):null,
-              makat:getMakat(name)||null,
-              soldierName:sol.name, soldierId:sol.id,
-              signed:signedIds.has(sol.id),
-            });
-          }
-        });
-      });
-      // נשקים מוקצים לפלוגה (unitItems — t=unit)
+      // 1. unitItems t=unit
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
         const u=v.u||v.unit||"";
@@ -7799,8 +7784,25 @@ function CabinetsTab({db, setDb, auth}){
           alias:n, fullname:n, qty:1,
           serial:serial?String(serial):null,
           makat:getMakat(n)||null,
-          soldierName:"— מוקצה לפלוגה", soldierId:null,
+          soldierName:"בארמון", soldierId:null,
           signed:false,
+        });
+      });
+      // 2. משוייך לחייל + לא חתום
+      const allSolsHere=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS].filter(s=>s.unit===unit);
+      allSolsHere.forEach(sol=>{
+        if(signedIds.has(sol.id)) return; // חתום — יצא מהארמון
+        const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
+        if(Object.keys(asgn).length===0) return;
+        Object.entries(asgn).forEach(([name,val])=>{
+          if(!WEAPON_KEYS.includes(name)) return;
+          items.push({
+            alias:name, fullname:name, qty:1,
+            serial:val&&val!==1?String(val):null,
+            makat:getMakat(name)||null,
+            soldierName:"⏳ "+sol.name+" (לא חתם)",
+            soldierId:sol.id, signed:false,
+          });
         });
       });
       return items;
