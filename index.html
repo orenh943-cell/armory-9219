@@ -1660,23 +1660,36 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       newTestCerts[auth.soldierId] = {img:uploadedCert, date:new Date().toISOString(), signedAt};
       fbSet("db/testCerts/"+auth.soldierId, newTestCerts[auth.soldierId]).catch(()=>{});
     }
-    // מצא אחראי ארמון
-    const armoryUser = (() => {
-      const allU = {...(db.dynamicUsers||{}), ...USERS};
-      const entry = Object.entries(allU).find(([,u]) => {
-        const perms = db.userPerms?.[Object.keys(allU).find(k=>allU[k]===u)]||{};
-        return (u.roleTitle==='אחראי ארמון') || perms._roleTitle==='אחראי ארמון';
-      });
-      if(!entry) return null;
-      const [uname, u] = entry;
-      const perms = db.userPerms?.[uname]||{};
-      const rank = u.rank||perms._rank||"";
-      return {name: u.name||uname, rank, username: uname};
+    // מצא מנפק — לפי linkIssuer (מי ששלח את הקישור)
+    const issuerUsername = auth?.linkIssuer || (() => {
+      try{ return sessionStorage.getItem("link_issuer")||""; }catch(e){ return ""; }
     })();
-    const issuerDisplay = armoryUser
-      ? [armoryUser.rank, "אחראי ארמון", armoryUser.name].filter(Boolean).join(" ")
-      : "אחראי ארמון";
-    const sigEntry = {sigData, signedAt, issuerName: issuerDisplay, ...(testImg?{testImg}:{})};
+    const allUsersMap = {...(db.dynamicUsers||{}), ...USERS};
+    const ADMIN_USERNAMES = ["אורן","מתן","יעקב"];
+    const issuerIsAdmin = ADMIN_USERNAMES.includes(issuerUsername);
+
+    // אם השולח הוא מנהל ארמון — השתמש בחתימה שלו
+    // אחרת — חפש את מנהל הארמון הרשום (roleTitle=אחראי ארמון)
+    let issuerDisplay = "אחראי ארמון";
+    let issuerSig = null;
+
+    if(issuerIsAdmin){
+      const u = allUsersMap[issuerUsername];
+      issuerDisplay = u?.name || issuerUsername;
+      issuerSig = db.userSigs?.[issuerUsername] || null;
+    } else {
+      // חפש אחראי ארמון מוגדר
+      const armoryEntry = Object.entries(allUsersMap).find(([uname, u]) => {
+        const perms = db.userPerms?.[uname]||{};
+        return (u.roleTitle==="אחראי ארמון") || (perms._roleTitle==="אחראי ארמון");
+      });
+      if(armoryEntry){
+        const [uname, u] = armoryEntry;
+        issuerDisplay = u.name || uname;
+        issuerSig = db.userSigs?.[uname] || null;
+      }
+    }
+    const sigEntry = {sigData, signedAt, issuerName: issuerDisplay, ...(issuerSig?{issuerSig}:{}), ...(testImg?{testImg}:{})};
     const newDb={...db,
       signatures:{...db.signatures,[auth.soldierId]:sigEntry},
       bulkGuarantors:newGuarantors,
@@ -6134,7 +6147,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     // שימוש ב-btoa לקידוד קצר וללא תווים בעייתיים
     const encoded=btoa(JSON.stringify(compactData));
-    const signLink=link+"?sign="+soldier.id+"&b="+encoded;
+    const issuerParam=auth?.username?("&issuer="+encodeURIComponent(auth.username)):"";
+    const signLink=link+"?sign="+soldier.id+"&b="+encoded+issuerParam;
     const msg=`שלום ${soldier.name},\nנא לחתום על טופס ההחתמה האישי:\n${signLink}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
   }
@@ -13855,6 +13869,8 @@ function App(){
     }
     // שמור context של לינק ייעודי לsession - כדי שרענון לא יאבד את הדף
     if(signId) try{sessionStorage.setItem("link_sign", signId);}catch(e){}
+    const issuerParam=params.get("issuer");
+    if(issuerParam) try{sessionStorage.setItem("link_issuer", issuerParam);}catch(e){}
     if(testCertId) try{sessionStorage.setItem("link_testcert", testCertId);}catch(e){}
     if(bulkSignId) try{sessionStorage.setItem("link_bulksign", bulkSignId);}catch(e){}
     if(exitId) try{sessionStorage.setItem("link_exit", exitId);}catch(e){}
@@ -13906,8 +13922,9 @@ function App(){
           else assignedFromLink[k]=v;
         });
       }catch(e){}}
-      if(s) return{role:"soldier",name:s.name,soldierId:signId,autoSign:true,assignedFromLink};
-      return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink};
+      const issuerUser=issuerParam||"";
+      if(s) return{role:"soldier",name:s.name,soldierId:signId,autoSign:true,assignedFromLink,linkIssuer:issuerUser};
+      return{role:"soldier",name:"חייל",soldierId:signId,autoSign:true,assignedFromLink,linkIssuer:issuerUser};
     }
     // בדוק אם יש context של לינק ייעודי מרענון
     try{
