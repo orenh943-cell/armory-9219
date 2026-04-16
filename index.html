@@ -1918,25 +1918,33 @@ function DailyModal({db,onClose,type,auth}){
 
   // בנה מפת alias→שם-ב-armoryMaster לכל פריט בדוח
   // totalMap: alias -> מלאי קבוע
-  // סדר עדיפויות: armoryMaster (Firebase, עדכני) > DAILY_ITEMS (קוד, ברירת מחדל)
+  // חיפוש לפי מק"ט — ייחודי ולא תלוי בשם
+  // בנה: makat -> total מ-armoryMaster
+  const makatToTotal = {};
+  Object.values(armoryMaster).forEach(entry=>{
+    if(entry.makat && entry.total!=null) makatToTotal[String(entry.makat)] = entry.total;
+  });
+  // בנה גם: makat -> total מ-NAME_TO_MAKAT_DATA + DAILY_ITEMS
+  const nameToMakat = window.NAME_TO_MAKAT_DATA||{};
+  const makatToDaily = {};
+  DAILY_ITEMS.forEach(d=>{
+    const mk = nameToMakat[d.name] || nameToMakat[cleanItemName(d.name)];
+    if(mk) makatToDaily[String(mk)] = d.total;
+  });
+
   const totalMap = {};
   [...DAILY_LEFT, ...DAILY_RIGHT].forEach(item=>{
     const alias = (item.alias||item.name||"").trim();
-    if(!alias) return;
-    // 1. armoryMaster — מה שהוזן דרך המערכת
-    const masterEntry = armoryMaster[alias] || armoryMaster[cleanItemName(alias)] ||
-      Object.values(armoryMaster).find ? 
-        (() => { const e=Object.entries(armoryMaster).find(([k])=>cleanItemName(k)===cleanItemName(alias)); return e?e[1]:null; })()
-        : null;
-    const masterVal = masterEntry?.total;
-    // 2. DAILY_ITEMS — מספרים שהוזנו בקוד
-    const dailyEntry = DAILY_ITEMS.find(d=>
-      d.name===alias || 
-      cleanItemName(d.name)===cleanItemName(alias) ||
-      d.name.replace(/["׳″]/g,"")===alias.replace(/["׳″]/g,"")
-    );
-    const dailyVal = dailyEntry?.total;
-    totalMap[alias] = (masterVal!=null&&masterVal>0) ? masterVal : (dailyVal||0);
+    const makat = String(item.makat||"");
+    // 1. לפי מק"ט ב-armoryMaster (Firebase)
+    const masterVal = makat ? makatToTotal[makat] : undefined;
+    // 2. לפי מק"ט ב-DAILY_ITEMS
+    const dailyVal = makat ? makatToDaily[makat] : undefined;
+    // 3. fallback: שם
+    const byName = armoryMaster[alias]?.total ?? armoryMaster[cleanItemName(alias)]?.total;
+    totalMap[alias] = (masterVal!=null&&masterVal>0) ? masterVal
+                    : (byName!=null&&byName>0) ? byName
+                    : (dailyVal||0);
   });
 
   // חשב השאלות ומצאי מ-assignments + unitItems
