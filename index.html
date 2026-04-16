@@ -777,23 +777,28 @@ function canViewVisut(auth,db){
 function getAllCabinets(db, soldierUnit){
   const seen=new Set(); const all=[];
   const UNIT_ORDER=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-  const UNIT_CABINETS_DEF={"א":["כנה א"],"ב":["כנה ב"],"ג":["כנה ג"],"מסייעת":["כנה מסייעת"],"אגמ":["כנה אגמ"],"פלסמ":["כנה פלסמ"],"גדודי":["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
-  // מקור: db.cabinetNames אם קיים, אחרת ברירת מחדל
-  const cabSrc=Object.keys(db.cabinetNames||{}).length>0 ? db.cabinetNames : UNIT_CABINETS_DEF;
-  // סדר: פלוגת החייל קודם (אם צוין), שאר הפלוגות לפי UNIT_ORDER, גדודי אחרון
+  const UNIT_CABINETS_DEF={"א":["כנה א"],"ב":["כנה ב"],"ג":["כנה ג"],"מסייעת":["כנה מסייעת"],"אגמ":["כנה אגמ"],"פלסמ":["כנה פלסמ"],"גדודי":["כנה גדודי","ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
+  // מיזוג: Firebase + ברירות מחדל לכל פלוגה שאין לה Firebase
+  const fbCabs = db.cabinetNames||{};
+  const cabSrc={};
+  UNIT_ORDER.forEach(u=>{
+    // אם יש ב-Firebase — השתמש בזה, אחרת ברירת מחדל
+    cabSrc[u] = (fbCabs[u]&&fbCabs[u].length>0) ? fbCabs[u] : (UNIT_CABINETS_DEF[u]||[]);
+  });
+  // סדר: פלוגת החייל קודם, שאר הפלוגות, גדודי אחרון
   const showAll = !soldierUnit || soldierUnit==="הכל";
   const sorted = showAll
     ? UNIT_ORDER
     : [soldierUnit, ...UNIT_ORDER.filter(u=>u!==soldierUnit&&u!=="גדודי"), "גדודי"];
   sorted.forEach(unit=>{
     const names=cabSrc[unit]||[];
-    // הוסף header של פלוגה כ-divider רק אם יש ארונות
-    if(names.length>0) all.push({n:"── "+( unit==="גדודי"?"ארמון גדודי":"פלוגה "+unit)+" ──", unit, divider:true});
+    const label = unit==="גדודי"?"── ארמון גדודי ──":"── פלוגה "+unit+" ──";
+    all.push({n:label, unit, divider:true});
     names.forEach(n=>{
       if(n&&!seen.has(n)){seen.add(n);all.push({n,unit,divider:false});}
     });
   });
-  // ארונות שב-db.cabinets אבל לא ב-cabinetNames
+  // ארונות שב-db.cabinets אבל לא ב-cabinetNames ולא ב-DEF
   Object.keys(db.cabinets||{}).forEach(cabName=>{
     const dec=decodeURIComponent(cabName);
     if(!seen.has(dec)){
@@ -7743,7 +7748,7 @@ function CabinetsTab({db, setDb, auth}){
     "מסייעת":  ["כנה מסייעת","ארון מסייעת 1","ארון מסייעת 2","ארון מסייעת 3","ארון מסייעת 4","ארון רחפנים מסייעת"],
     "אגמ":     ["כנה אגמ","ארון אגמ 1","ארון אגמ 2","ארון רחפנים אגמ"],
     "פלסמ":    ["כנה פלסמ","ארון פלסמ 1","ארון פלסמ 2","ארון רחפנים פלסמ"],
-    "גדודי":   ["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
+    "גדודי":   ["כנה גדודי","ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
   };
 
   const units = Object.keys(UNIT_CABINETS_DEFAULT);
@@ -7759,17 +7764,17 @@ function CabinetsTab({db, setDb, auth}){
 
   // Cabinet items stored in db.cabinets[cabName]
   function getItems(cabName){
-    // כנה = auto-populated from assignments (weapons of unsigned soldiers in this unit)
+    // כנה = auto-populated from assignments + unitItems (weapons in this unit)
     if(cabName.startsWith("כנה ")){
       const unit = cabName.replace("כנה ","");
-      const allSolsHere = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS]
-        .filter(s=>s.unit===unit);
       const signedIds = new Set(Object.keys(db.signatures||{}));
       const items = [];
+      // נשקים משוייכים לחיילים
+      const allSolsHere = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS]
+        .filter(s=>s.unit===unit);
       allSolsHere.forEach(sol=>{
-        // Only use live Firebase assignments - NOT static RAW_SOLDIERS data
         const asgn = db._assignmentsLoaded ? (db.assignments?.[sol.id]||{}) : (db.assignments?.[sol.id]||{});
-        if(Object.keys(asgn).length===0) return; // skip if no live assignment
+        if(Object.keys(asgn).length===0) return;
         Object.entries(asgn).forEach(([name,val])=>{
           if(WEAPON_KEYS.includes(name)){
             items.push({
@@ -7780,6 +7785,22 @@ function CabinetsTab({db, setDb, auth}){
               signed:signedIds.has(sol.id),
             });
           }
+        });
+      });
+      // נשקים מוקצים לפלוגה (unitItems — t=unit)
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const n=cleanItemName(v.n||v.name||"");
+        const u=v.u||v.unit||"";
+        const t=v.t||v.assignedType||"unit";
+        if(!WEAPON_KEYS.includes(n)) return;
+        if(u!==unit || t!=="unit") return;
+        const serial=v.s||v.serial||null;
+        items.push({
+          alias:n, fullname:n, qty:1,
+          serial:serial?String(serial):null,
+          makat:getMakat(n)||null,
+          soldierName:"— מוקצה לפלוגה", soldierId:null,
+          signed:false,
         });
       });
       return items;
