@@ -7904,36 +7904,93 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
   const [pinUnlocked, setPinUnlocked] = React.useState(false);
   const [pinInput, setPinInput] = React.useState("");
   const [pinError, setPinError] = React.useState("");
-  const [activeSection, setActiveSection] = React.useState("overview"); // overview | item | users
+  const [view, setView] = React.useState("grid"); // grid | serials | users
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [editName, setEditName] = React.useState("");
   const [editMakat, setEditMakat] = React.useState("");
   const [editQty, setEditQty] = React.useState("");
-  const [pinAction, setPinAction] = React.useState(null); // {type, payload, onConfirm}
+  const [pinAction, setPinAction] = React.useState(null);
   const [pinActionInput, setPinActionInput] = React.useState("");
   const [pinActionError, setPinActionError] = React.useState("");
   const [filterName, setFilterName] = React.useState("");
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [showWeaponsOnly, setShowWeaponsOnly] = React.useState(false);
   const [showAddUser, setShowAddUser] = React.useState(false);
   const [newUser, setNewUser] = React.useState("");
   const [addItemModal, setAddItemModal] = React.useState(false);
   const [addName, setAddName] = React.useState("");
   const [addMakat, setAddMakat] = React.useState("");
   const [addQty, setAddQty] = React.useState("1");
-  const [addNameSearch, setAddNameSearch] = React.useState("");
+  const [serialSearch, setSerialSearch] = React.useState("");
+  const [editSerialItem, setEditSerialItem] = React.useState(null);
+  const [editSerialVal, setEditSerialVal] = React.useState("");
+  const [editQtyItem, setEditQtyItem] = React.useState(null);
+  const [editQtyVal, setEditQtyVal] = React.useState("");
+
+  const UNITS = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const allowedUsers = db.armoryDashUsers||{};
 
   const master = React.useMemo(()=>{
     const m = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
-    return Object.entries(m).map(([name,v])=>({name, makat:v.makat||getMakat(name)||"", total:v.total||0, serials:v.serials||[]}))
-      .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+    return Object.entries(m).map(([name,v])=>({
+      name, makat:v.makat||getMakat(name,db)||"", total:v.total||0, serials:v.serials||[]
+    })).sort((a,b)=>a.name.localeCompare(b.name,"he"));
   },[db.armoryMaster]);
 
-  const filtered = React.useMemo(()=>{
-    if(!filterName.trim()) return master;
-    const q=filterName.toLowerCase();
-    return master.filter(x=>x.name.includes(filterName)||String(x.makat).includes(q));
-  },[master, filterName]);
+  const liveAssigned = React.useMemo(()=>{
+    const counts = {};
+    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers];
+    allSols.forEach(s=>{
+      const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+      Object.keys(asgn||{}).forEach(k=>{
+        const clean = cleanItemName(k);
+        counts[clean] = (counts[clean]||0)+1;
+      });
+    });
+    return counts;
+  },[db.assignments, db.customSoldiers, soldiers]);
 
-  const allowedUsers = db.armoryDashUsers||{};
+  const filtered = React.useMemo(()=>{
+    return master.filter(item=>{
+      if(filterName.trim() && !item.name.includes(filterName.trim()) && !String(item.makat).includes(filterName.trim())) return false;
+      if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
+      return true;
+    });
+  },[master, filterName, showWeaponsOnly]);
+
+  // All serials from ALL_SERIALS + assignments + armoryMaster
+  const allSerialRows = React.useMemo(()=>{
+    const rows = [];
+    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers];
+    // From assignments
+    allSols.forEach(s=>{
+      const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+      Object.entries(asgn||{}).forEach(([k,v])=>{
+        if(isSerial(v)){
+          rows.push({name:cleanItemName(k), serial:String(v), soldierName:s.name, soldierId:s.id, unit:s.unit, source:"assigned"});
+        }
+      });
+    });
+    // From ALL_SERIALS not assigned
+    const usedSerials = new Set(rows.map(r=>r.serial));
+    ALL_SERIALS.forEach(s=>{
+      if(!usedSerials.has(String(s.serial))){
+        rows.push({name:s.name, serial:String(s.serial), soldierName:"—", soldierId:null, unit:s.unit, source:"free"});
+      }
+    });
+    return rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||a.serial.localeCompare(b.serial));
+  },[db.assignments, db.customSoldiers, soldiers]);
+
+  const filteredSerials = React.useMemo(()=>{
+    return allSerialRows.filter(r=>{
+      if(filterUnit!=="הכל" && r.unit!==filterUnit) return false;
+      if(serialSearch.trim()){
+        const q = serialSearch.toLowerCase();
+        return r.name.includes(serialSearch)||r.serial.includes(q)||r.soldierName.includes(serialSearch)||r.unit.includes(serialSearch);
+      }
+      return true;
+    });
+  },[allSerialRows, filterUnit, serialSearch]);
 
   function requirePin(label, onConfirm){
     setPinAction({label, onConfirm});
@@ -7942,13 +7999,9 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
   }
 
   function confirmPinAction(){
-    if(pinActionInput!==ARMORY_DASH_PIN){
-      setPinActionError("קוד שגוי ❌");
-      return;
-    }
+    if(pinActionInput!==ARMORY_DASH_PIN){ setPinActionError("קוד שגוי ❌"); return; }
     pinAction.onConfirm();
-    setPinAction(null);
-    setPinActionInput("");
+    setPinAction(null); setPinActionInput("");
   }
 
   function doAddItem(){
@@ -7956,76 +8009,59 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     requirePin("הוספת פריט: "+addName, ()=>{
       const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
       master2[addName.trim()]={makat:addMakat.trim()||null, total:parseInt(addQty)||1};
-      if(addMakat.trim() && !NAME_TO_MAKAT[addName.trim()]){
+      if(addMakat.trim()&&!NAME_TO_MAKAT[addName.trim()]){
         NAME_TO_MAKAT[addName.trim()]=parseInt(addMakat)||addMakat;
-        window._makatCache=window._makatCache||{};
-        window._makatCache[addName.trim()]=String(addMakat);
+        window._makatCache=window._makatCache||{}; window._makatCache[addName.trim()]=String(addMakat);
       }
       const ndb={...db, armoryMaster:master2, _armoryMasterLoaded:true};
       saveDB(ndb); setDb(ndb);
       fbSet("db/armoryMaster/"+addName.trim(), master2[addName.trim()]).catch(()=>{});
       fbSet("db/armoryMasterSeededV2", true).catch(()=>{});
       logAction("הוספת_פריט_ארמון", "נוסף: "+addName+" מקט:"+addMakat+" כמות:"+addQty, auth?.name);
-      setAddItemModal(false); setAddName(""); setAddMakat(""); setAddQty("1"); setAddNameSearch("");
+      setAddItemModal(false); setAddName(""); setAddMakat(""); setAddQty("1");
     });
   }
 
   function doRemoveItem(itemName){
-    requirePin("הסרת פריט: "+itemName, ()=>{
+    requirePin("מחיקת פריט: "+itemName, ()=>{
       const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
       delete master2[itemName];
       const ndb={...db, armoryMaster:master2, _armoryMasterLoaded:true};
       saveDB(ndb); setDb(ndb);
-      fbSet("db/armoryMaster/"+itemName, null).catch(()=>{});
-      logAction("הסרת_פריט_ארמון", "הוסר: "+itemName, auth?.name);
+      fbSet("db/armoryMaster/"+encodeURIComponent(itemName), null).catch(()=>{});
+      logAction("מחיקת_פריט_ארמון", "נמחק: "+itemName, auth?.name);
+      setSelectedItem(null);
     });
   }
 
-  function doEditItem(item){
+  function doSaveEdit(item){
     if(!editName.trim()) return;
-    requirePin("עריכת פריט: "+item.name+" → "+editName, ()=>{
+    requirePin("עריכת: "+item.name+(editName.trim()!==item.name?" → "+editName.trim():""), ()=>{
       const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
       const oldData=master2[item.name]||{};
-      // עדכן שם אם שונה — גם ב-assignments
       let ndb={...db};
       if(editName.trim()!==item.name){
-        // rename ב-armoryMaster
         delete master2[item.name];
         master2[editName.trim()]={...oldData, makat:editMakat||oldData.makat||null, total:parseInt(editQty)||oldData.total||0};
-        // rename ב-assignments
         const newAssignments={};
         Object.entries(db.assignments||{}).forEach(([sid,asgn])=>{
           const newAsgn={};
           Object.entries(asgn||{}).forEach(([k,v])=>{
             const cleanK=cleanItemName(k);
-            if(cleanK===item.name){
-              const suffix=k.slice(item.name.length); // שמור __2 וכו
-              newAsgn[editName.trim()+suffix]=v;
-            } else {
-              newAsgn[k]=v;
-            }
+            if(cleanK===item.name){newAsgn[editName.trim()+k.slice(item.name.length)]=v;}
+            else{newAsgn[k]=v;}
           });
           newAssignments[sid]=newAsgn;
         });
         ndb={...ndb, assignments:newAssignments};
         fbSet("db/assignments", newAssignments).catch(()=>{});
-        fbSet("db/armoryMaster/"+item.name, null).catch(()=>{});
-        fbSet("db/armoryMaster/"+editName.trim(), master2[editName.trim()]).catch(()=>{});
-        // עדכן NAME_TO_MAKAT
-        if(editMakat){
-          NAME_TO_MAKAT[editName.trim()]=parseInt(editMakat)||editMakat;
-          window._makatCache=window._makatCache||{};
-          window._makatCache[editName.trim()]=String(editMakat);
-        }
+        fbSet("db/armoryMaster/"+encodeURIComponent(item.name), null).catch(()=>{});
+        fbSet("db/armoryMaster/"+encodeURIComponent(editName.trim()), master2[editName.trim()]).catch(()=>{});
+        if(editMakat){NAME_TO_MAKAT[editName.trim()]=parseInt(editMakat)||editMakat;window._makatCache=window._makatCache||{};window._makatCache[editName.trim()]=String(editMakat);}
       } else {
-        // רק עדכון מקט/כמות
         master2[item.name]={...oldData, makat:editMakat||oldData.makat||null, total:parseInt(editQty)||oldData.total||0};
-        fbSet("db/armoryMaster/"+item.name, master2[item.name]).catch(()=>{});
-        if(editMakat){
-          NAME_TO_MAKAT[item.name]=parseInt(editMakat)||editMakat;
-          window._makatCache=window._makatCache||{};
-          window._makatCache[item.name]=String(editMakat);
-        }
+        fbSet("db/armoryMaster/"+encodeURIComponent(item.name), master2[item.name]).catch(()=>{});
+        if(editMakat){NAME_TO_MAKAT[item.name]=parseInt(editMakat)||editMakat;window._makatCache=window._makatCache||{};window._makatCache[item.name]=String(editMakat);}
       }
       ndb={...ndb, armoryMaster:master2, _armoryMasterLoaded:true};
       saveDB(ndb); setDb(ndb);
@@ -8036,19 +8072,18 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
 
   function doAddUser(){
     if(!newUser.trim()) return;
-    requirePin("הוספת גישה ל: "+newUser, ()=>{
+    requirePin("הוספת גישה: "+newUser, ()=>{
       const ndb={...db, armoryDashUsers:{...(db.armoryDashUsers||{}), [newUser.trim()]:true}};
       saveDB(ndb); setDb(ndb);
       fbSet("db/armoryDashUsers/"+newUser.trim(), true).catch(()=>{});
       logAction("הוספת_משתמש_ארמון", newUser, auth?.name);
-      setNewUser("");
+      setNewUser(""); setShowAddUser(false);
     });
   }
 
   function doRemoveUser(u){
-    requirePin("הסרת גישה מ: "+u, ()=>{
-      const users={...(db.armoryDashUsers||{})};
-      delete users[u];
+    requirePin("הסרת גישה: "+u, ()=>{
+      const users={...(db.armoryDashUsers||{})}; delete users[u];
       const ndb={...db, armoryDashUsers:users};
       saveDB(ndb); setDb(ndb);
       fbSet("db/armoryDashUsers/"+u, null).catch(()=>{});
@@ -8056,24 +8091,38 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     });
   }
 
-  // PIN lock screen
+  function exportSerials(){
+    var BOM="\uFEFF";
+    var headers=["פריט","מקט","מספר סידורי","חייל","מ.א","פלוגה","סטטוס"];
+    var rows=filteredSerials.map(function(r){
+      return [r.name,String(r.makat||getMakat(r.name,db)||""),r.serial,r.soldierName,r.soldierId||"",r.unit,r.source==="assigned"?"משוייך":"פנוי"];
+    });
+    var allRows=[headers].concat(rows);
+    var csvLines=allRows.map(function(r){return r.map(function(c){return '"'+String(c).split('"').join('""')+'"';}).join(",");});
+    var csv=BOM+csvLines.join("\r\n");
+    var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url; a.download="דוח_צ_סידורי_ארמון_"+new Date().toLocaleDateString("he-IL").split("/").join("-")+".csv"; a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
+
+  // ---- PIN LOCK SCREEN ----
   if(!pinUnlocked){
     return (
-      <div style={{maxWidth:360,margin:"60px auto",padding:24}}>
-        <div style={{...S.card,textAlign:"center",border:"2px solid var(--color-accent-fg)"}}>
-          <div style={{fontSize:48,marginBottom:8}}>🗄️</div>
-          <h2 style={{fontSize:20,fontWeight:800,marginBottom:4}}>דשבורד ארמון</h2>
-          <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:20}}>הכנס קוד אישי לגישה</p>
-          <input
-            type="password" value={pinInput}
-            onChange={e=>setPinInput(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);setPinError("");}else{setPinError("קוד שגוי ❌");}}}}
-            placeholder="הכנס קוד..."
-            style={{...S.input,textAlign:"center",fontSize:20,letterSpacing:4,marginBottom:10}}
-          />
-          {pinError&&<div style={{color:"var(--color-danger-fg)",marginBottom:8,fontSize:"var(--text-sm)"}}>{pinError}</div>}
-          <button onClick={()=>{if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);setPinError("");}else{setPinError("קוד שגוי ❌");}}}
-            style={{...S.btn("blue"),width:"100%",padding:"10px 0",fontSize:"var(--text-base)"}}>
+      <div style={{maxWidth:380,margin:"60px auto",padding:16}}>
+        <div style={{...S.card,textAlign:"center",border:"2px solid var(--color-accent-fg)",padding:32}}>
+          <div style={{fontSize:56,marginBottom:8}}>🗄️</div>
+          <h2 style={{fontSize:22,fontWeight:800,marginBottom:4,color:"var(--color-text-primary)"}}>דשבורד ארמון מאובטח</h2>
+          <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:24}}>הכנס קוד אישי לגישה לניהול מלאי</p>
+          <input type="password" value={pinInput}
+            onChange={e=>{setPinInput(e.target.value);setPinError("");}}
+            onKeyDown={e=>{if(e.key==="Enter"){if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);}else{setPinError("קוד שגוי ❌");}}}}
+            placeholder="קוד..." autoFocus
+            style={{...S.input,textAlign:"center",fontSize:22,letterSpacing:6,marginBottom:8}}/>
+          {pinError&&<div style={{color:"var(--color-danger-fg)",marginBottom:10,fontSize:"var(--text-sm)",fontWeight:700}}>{pinError}</div>}
+          <button onClick={()=>{if(pinInput===ARMORY_DASH_PIN){setPinUnlocked(true);}else{setPinError("קוד שגוי ❌");}}}
+            style={{...S.btn("blue"),width:"100%",padding:"12px 0",fontSize:"var(--text-base)",fontWeight:800}}>
             🔓 כניסה
           </button>
         </div>
@@ -8081,156 +8130,255 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     );
   }
 
+  const totalItems = master.reduce((s,i)=>s+i.total,0);
+  const totalAssigned = Object.values(liveAssigned).reduce((s,v)=>s+v,0);
+  const totalFree = Math.max(0, totalItems - totalAssigned);
+  const totalTypes = master.length;
+
   return (
-    <div style={{maxWidth:1000,margin:"0 auto",padding:16}}>
-      {/* Header */}
+    <div style={{maxWidth:960,margin:"0 auto",padding:16}}>
+      {/* ---- HEADER ---- */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
         <div>
-          <h2 style={{fontSize:20,fontWeight:800,margin:0}}>🗄️ דשבורד ארמון</h2>
+          <h2 style={{fontSize:20,fontWeight:800,margin:0,color:"var(--color-text-primary)"}}>🗄️ דשבורד ארמון 9219</h2>
           <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>
-            {master.length} סוגי פריטים · <span style={{color:"var(--color-warning-fg)"}}>כל פעולה דורשת קוד אישי</span>
+            {totalTypes} סוגים · <span style={{color:"var(--color-warning-fg)",fontWeight:700}}>כל פעולה דורשת קוד אישי</span>
           </div>
         </div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setAddItemModal(true)} style={{...S.btn("success"),padding:"8px 14px"}}>➕ הוסף פריט</button>
-          <button onClick={()=>setActiveSection(activeSection==="users"?"overview":"users")} style={{...S.btn(activeSection==="users"?"blue":"neutral"),padding:"8px 14px"}}>👥 הרשאות</button>
-          <button onClick={()=>setPinUnlocked(false)} style={{...S.btn("danger"),padding:"8px 14px"}}>🔒 נעל</button>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>{setView("grid");setSelectedItem(null);}} style={{...S.btn(view==="grid"?"blue":"neutral"),padding:"7px 14px"}}>📦 מלאי</button>
+          <button onClick={()=>setView("serials")} style={{...S.btn(view==="serials"?"blue":"neutral"),padding:"7px 14px"}}>🔢 צ סידורי</button>
+          <button onClick={()=>setView("users")} style={{...S.btn(view==="users"?"blue":"neutral"),padding:"7px 14px"}}>👥 הרשאות</button>
+          <button onClick={()=>setAddItemModal(true)} style={{...S.btn("success"),padding:"7px 14px"}}>➕ הוסף פריט</button>
+          <button onClick={()=>setPinUnlocked(false)} style={{...S.btn("danger"),padding:"7px 14px"}}>🔒 נעל</button>
         </div>
       </div>
 
-      {/* Tabs */}
-      {activeSection==="users"&&(
-        <div style={{...S.card,marginBottom:16}}>
-          <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:12}}>👥 ניהול הרשאות דשבורד</div>
+      {/* ---- STAT CARDS ---- */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
+        {[
+          {label:"סוגי פריטים",val:totalTypes,color:"var(--color-accent-fg)",icon:"📋"},
+          {label:"סהכ במלאי",val:totalItems,color:"var(--color-accent-fg)",icon:"📦"},
+          {label:"בשימוש",val:totalAssigned,color:"var(--color-warning-fg)",icon:"👤"},
+          {label:"פנוי",val:totalFree,color:"var(--color-success-fg)",icon:"🟢"},
+        ].map(s=>(
+          <div key={s.label} style={{...S.card,textAlign:"center",padding:"14px 8px",marginBottom:0,border:`1px solid var(--color-border-muted)`}}>
+            <div style={{fontSize:28,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4}}>{s.icon} {s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ---- USERS VIEW ---- */}
+      {view==="users"&&(
+        <div style={{...S.card}}>
+          <div style={{fontWeight:700,fontSize:"var(--text-lg)",marginBottom:14}}>👥 ניהול הרשאות גישה לדשבורד</div>
           <div style={{marginBottom:12}}>
-            <div style={{fontWeight:600,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:6}}>משתמשים עם גישה:</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-              <span style={{background:"var(--color-success-bg)",color:"var(--color-success-fg)",borderRadius:20,padding:"3px 12px",fontSize:"var(--text-sm)",fontWeight:700}}>🔑 אורן (תמיד)</span>
+            <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginBottom:8}}>משתמשים עם גישה:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+              <span style={{background:"var(--color-success-bg)",color:"var(--color-success-fg)",borderRadius:20,padding:"5px 14px",fontSize:"var(--text-sm)",fontWeight:700,border:"1px solid var(--color-success-fg)"}}>
+                🔑 אורן (קבוע)
+              </span>
               {Object.keys(allowedUsers).map(u=>(
-                <span key={u} style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:20,padding:"3px 12px",fontSize:"var(--text-sm)",display:"flex",alignItems:"center",gap:6}}>
+                <span key={u} style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:20,padding:"5px 14px",fontSize:"var(--text-sm)",fontWeight:600,border:"1px solid var(--color-accent-fg)",display:"flex",alignItems:"center",gap:8}}>
                   {u}
-                  <button onClick={()=>doRemoveUser(u)} style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>✕</button>
+                  <button onClick={()=>doRemoveUser(u)} style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1,fontWeight:700}}>✕</button>
                 </span>
               ))}
             </div>
-            <div style={{display:"flex",gap:8}}>
-              <input value={newUser} onChange={e=>setNewUser(e.target.value)} placeholder="שם משתמש..." style={{...S.input,marginBottom:0,flex:1}}/>
-              <button onClick={doAddUser} style={{...S.btn("blue"),padding:"8px 14px"}}>הוסף</button>
-            </div>
+            {showAddUser?(
+              <div style={{display:"flex",gap:8}}>
+                <input value={newUser} onChange={e=>setNewUser(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")doAddUser();}} placeholder="שם משתמש..." style={{...S.input,marginBottom:0,flex:1}} autoFocus/>
+                <button onClick={doAddUser} style={{...S.btn("blue"),padding:"8px 16px"}}>הוסף</button>
+                <button onClick={()=>{setShowAddUser(false);setNewUser("");}} style={{...S.btn("neutral"),padding:"8px 14px"}}>ביטול</button>
+              </div>
+            ):(
+              <button onClick={()=>setShowAddUser(true)} style={{...S.btn("blue"),padding:"8px 16px"}}>+ הוסף משתמש</button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Search */}
-      <input value={filterName} onChange={e=>setFilterName(e.target.value)} placeholder="🔍 חיפוש פריט..." style={{...S.input,marginBottom:12}}/>
-
-      {/* Items table */}
-      <div style={{...S.card,padding:0,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead>
-            <tr style={{background:"var(--color-bg-subtle)"}}>
-              <th style={{...S.th}}>תיאור פריט</th>
-              <th style={{...S.th,width:110}}>מקט</th>
-              <th style={{...S.th,width:70,textAlign:"center"}}>כמות</th>
-              <th style={{...S.th,width:70,textAlign:"center"}}>בשימוש</th>
-              <th style={{...S.th,width:70,textAlign:"center"}}>פנוי</th>
-              <th style={{...S.th,width:100}}>פעולות</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((item,i)=>{
-              const assignedCount=Object.values(db.assignments||{}).reduce((sum,asgn)=>{
-                return sum+Object.keys(asgn||{}).filter(k=>cleanItemName(k)===item.name).length;
-              },0);
-              const free=Math.max(0,item.total-assignedCount);
-              const isEditing=selectedItem===item.name;
-              return (
-                <React.Fragment key={item.name}>
-                  <tr style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)",borderBottom:"1px solid var(--color-border-muted)"}}>
-                    <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(item.name)?700:400,color:WEAPON_KEYS.includes(item.name)?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{item.name}</td>
-                    <td style={{...S.td,fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>{item.makat||"—"}</td>
-                    <td style={{...S.td,textAlign:"center",fontWeight:700}}>{item.total}</td>
-                    <td style={{...S.td,textAlign:"center",color:"var(--color-warning-fg)"}}>{assignedCount}</td>
-                    <td style={{...S.td,textAlign:"center",color:free>0?"var(--color-success-fg)":"var(--color-text-muted)"}}>{free}</td>
-                    <td style={{...S.td}}>
-                      <div style={{display:"flex",gap:4}}>
-                        <button onClick={()=>{if(isEditing){setSelectedItem(null);}else{setSelectedItem(item.name);setEditName(item.name);setEditMakat(String(item.makat||""));setEditQty(String(item.total||""));}}} style={{...S.btn(isEditing?"neutral":"blue"),padding:"3px 8px",fontSize:"var(--text-xs)"}}>
-                          {isEditing?"סגור":"✏️ ערוך"}
-                        </button>
-                        <button onClick={()=>doRemoveItem(item.name)} style={{...S.btn("danger"),padding:"3px 8px",fontSize:"var(--text-xs)"}}>🗑️</button>
-                      </div>
+      {/* ---- SERIALS VIEW ---- */}
+      {view==="serials"&&(
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+            <input value={serialSearch} onChange={e=>setSerialSearch(e.target.value)}
+              placeholder="חפש פריט / צ / חייל..." style={{...S.input,flex:1,marginBottom:0,minWidth:160}}/>
+            {UNITS.map(u=>(
+              <button key={u} onClick={()=>setFilterUnit(u)}
+                style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterUnit===u?"var(--color-accent-fg)":"var(--color-border-default)"}`,
+                  background:filterUnit===u?"var(--btn-blue-bg)":"transparent",
+                  color:filterUnit===u?"var(--color-accent-fg)":"var(--color-text-secondary)",
+                  cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:filterUnit===u?700:400,minHeight:32}}>
+                {u==="הכל"?"כולם":u}
+              </button>
+            ))}
+            <button onClick={exportSerials} style={{...S.btn("success"),padding:"7px 14px"}}>📥 ייצוא Excel</button>
+          </div>
+          <div style={{...S.card,padding:0,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"var(--color-bg-subtle)"}}>
+                  <th style={{...S.th}}>#</th>
+                  <th style={{...S.th}}>פריט</th>
+                  <th style={{...S.th,width:110}}>מקט</th>
+                  <th style={{...S.th,width:100}}>מ.ס / צ</th>
+                  <th style={{...S.th}}>חייל</th>
+                  <th style={{...S.th,width:80}}>פלוגה</th>
+                  <th style={{...S.th,width:80}}>סטטוס</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSerials.slice(0,200).map((r,i)=>(
+                  <tr key={r.name+r.serial} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)",borderBottom:"1px solid var(--color-border-muted)"}}>
+                    <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>{i+1}</td>
+                    <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(r.name)?700:400,color:WEAPON_KEYS.includes(r.name)?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{r.name}</td>
+                    <td style={{...S.td,fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{getMakat(r.name,db)||"—"}</td>
+                    <td style={{...S.td,fontFamily:"monospace",fontWeight:700,color:"var(--color-accent-fg)"}}>{r.serial}</td>
+                    <td style={{...S.td}}>{r.soldierName}</td>
+                    <td style={{...S.td,textAlign:"center"}}><span style={{background:"var(--color-bg-subtle)",borderRadius:10,padding:"2px 8px",fontSize:"var(--text-xs)"}}>{r.unit}</span></td>
+                    <td style={{...S.td,textAlign:"center"}}>
+                      <span style={{background:r.source==="assigned"?"var(--color-warning-bg)":"var(--color-success-bg)",color:r.source==="assigned"?"var(--color-warning-fg)":"var(--color-success-fg)",borderRadius:10,padding:"2px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>
+                        {r.source==="assigned"?"👤 משוייך":"🟢 פנוי"}
+                      </span>
                     </td>
                   </tr>
-                  {isEditing&&(
-                    <tr style={{background:"var(--color-accent-bg)"}}>
-                      <td colSpan={6} style={{padding:"12px 16px"}}>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
-                          <div>
-                            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט</div>
-                            <input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input,marginBottom:0,width:180}}/>
-                          </div>
-                          <div>
-                            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
-                            <input value={editMakat} onChange={e=>setEditMakat(e.target.value)} style={{...S.input,marginBottom:0,width:120}}/>
-                          </div>
-                          <div>
-                            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות</div>
-                            <input type="number" value={editQty} onChange={e=>setEditQty(e.target.value)} style={{...S.input,marginBottom:0,width:70}}/>
-                          </div>
-                          <button onClick={()=>doEditItem(item)} style={{...S.btn("success"),padding:"8px 16px"}}>💾 שמור</button>
-                          {editName.trim()!==item.name&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",alignSelf:"center"}}>⚠️ שינוי שם יעדכן את כל השיוכים</div>}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+            {filteredSerials.length>200&&<div style={{padding:"8px 16px",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center"}}>מציג 200 מתוך {filteredSerials.length} — סנן לצמצום</div>}
+            {filteredSerials.length===0&&<div style={{padding:32,textAlign:"center",color:"var(--color-text-secondary)"}}>לא נמצאו תוצאות</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ---- GRID VIEW ---- */}
+      {view==="grid"&&(
+        <div>
+          {/* Filters */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+            <button onClick={()=>setShowWeaponsOnly(p=>!p)}
+              style={{padding:"4px 12px",borderRadius:20,minHeight:32,
+                border:`1px solid ${showWeaponsOnly?"var(--color-danger-fg)":"var(--color-border-default)"}`,
+                background:showWeaponsOnly?"rgba(248,81,73,.15)":"transparent",
+                color:showWeaponsOnly?"var(--color-danger-fg)":"var(--color-text-secondary)",
+                cursor:"pointer",fontSize:"var(--text-sm)"}}>
+              🔫 נשק בלבד
+            </button>
+          </div>
+          <input value={filterName} onChange={e=>setFilterName(e.target.value)}
+            placeholder="חפש פריט / מקט..." style={{...S.input,marginBottom:12}}/>
+
+          {/* Tiles grid */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8,marginBottom:16}}>
+            {filtered.map(item=>{
+              const assigned = liveAssigned[item.name]||0;
+              const free = Math.max(0,item.total-assigned);
+              const isWeapon = WEAPON_KEYS.includes(item.name);
+              const isSelected = selectedItem===item.name;
+              return (
+                <div key={item.name} onClick={()=>{if(isSelected){setSelectedItem(null);}else{setSelectedItem(item.name);setEditName(item.name);setEditMakat(String(item.makat||""));setEditQty(String(item.total||""));}}}
+                  style={{background:isSelected?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:10,
+                    padding:"12px 14px",cursor:"pointer",
+                    border:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                    borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                    transition:"all 150ms",boxShadow:isSelected?"0 0 0 2px var(--color-accent-fg)40":"none"}}>
+                  <div style={{fontWeight:800,fontSize:"var(--text-3xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{item.total}</div>
+                  <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginTop:5,color:"var(--color-text-primary)",lineHeight:1.3}}>{item.name}</div>
+                  <div style={{fontSize:10,color:"var(--color-text-muted)",marginTop:3,fontFamily:"monospace"}}>{item.makat||"ללא מקט"}</div>
+                  <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:2}}>
+                    {assigned>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                      <span style={{background:"var(--color-warning-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{assigned}</span>
+                      <span style={{color:"var(--color-warning-fg)",fontSize:9}}>👤 מוקצה</span>
+                    </div>}
+                    {free>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                      <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{free}</span>
+                      <span style={{color:"var(--color-success-fg)",fontSize:9}}>🟢 פנוי</span>
+                    </div>}
+                    {free===0&&assigned===0&&<div style={{fontSize:9,color:"var(--color-text-muted)"}}>📭 ריק</div>}
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
-        {filtered.length===0&&<div style={{padding:32,textAlign:"center",color:"var(--color-text-secondary)"}}>לא נמצאו פריטים</div>}
-      </div>
+          </div>
 
-      {/* Add item modal */}
+          {/* Edit panel */}
+          {selectedItem&&(()=>{
+            const item = filtered.find(x=>x.name===selectedItem);
+            if(!item) return null;
+            return (
+              <div style={{...S.card,border:"2px solid var(--color-accent-fg)",marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-accent-fg)"}}>✏️ עריכת פריט: {item.name}</div>
+                  <button onClick={()=>setSelectedItem(null)} style={{...S.btn("neutral"),padding:"4px 10px",fontSize:"var(--text-sm)"}}>✕ סגור</button>
+                </div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12}}>
+                  <div style={{flex:2,minWidth:160}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט</div>
+                    <input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input,marginBottom:0}}/>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
+                    <input value={editMakat} onChange={e=>setEditMakat(e.target.value)} style={{...S.input,marginBottom:0,fontFamily:"monospace"}}/>
+                  </div>
+                  <div style={{width:90}}>
+                    <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות כוללת</div>
+                    <input type="number" min="0" value={editQty} onChange={e=>setEditQty(e.target.value)} style={{...S.input,marginBottom:0}}/>
+                  </div>
+                </div>
+                {editName.trim()!==item.name&&(
+                  <div style={{background:"var(--color-warning-bg)",border:"1px solid var(--color-warning-fg)",borderRadius:6,padding:"6px 12px",marginBottom:10,fontSize:"var(--text-xs)",color:"var(--color-warning-fg)"}}>
+                    ⚠️ שינוי שם יעדכן את כל השיוכים הקיימים אוטומטית
+                  </div>
+                )}
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>doSaveEdit(item)} style={{...S.btn("success"),padding:"9px 20px",fontWeight:700}}>💾 שמור (ידרש קוד)</button>
+                  <button onClick={()=>doRemoveItem(item.name)} style={{...S.btn("danger"),padding:"9px 20px",fontWeight:700}}>🗑️ מחק פריט (ידרש קוד)</button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ---- ADD ITEM MODAL ---- */}
       {addItemModal&&(
-        <Modal title={"➕ הוספת פריט למלאי"} onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");}} wide={false}>
+        <Modal title={"➕ הוספת פריט למלאי ארמון"} onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");}}>
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט</div>
-            <input value={addName} onChange={e=>setAddName(e.target.value)} placeholder="שם הפריט..." style={{...S.input}}/>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט *</div>
+            <input value={addName} onChange={e=>setAddName(e.target.value)} placeholder="שם..." style={{...S.input}} autoFocus/>
           </div>
           <div style={{marginBottom:10}}>
             <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
-            <input value={addMakat} onChange={e=>setAddMakat(e.target.value)} placeholder="מקט..." style={{...S.input}}/>
+            <input value={addMakat} onChange={e=>setAddMakat(e.target.value)} placeholder="מספר מקט..." style={{...S.input,fontFamily:"monospace"}}/>
           </div>
-          <div style={{marginBottom:16}}>
+          <div style={{marginBottom:20}}>
             <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות</div>
             <input type="number" min="1" value={addQty} onChange={e=>setAddQty(e.target.value)} style={{...S.input,width:100}}/>
           </div>
-          <button onClick={doAddItem} disabled={!addName.trim()} style={{...S.btn("success"),width:"100%",padding:"10px 0",opacity:addName.trim()?1:0.5}}>
-            ➕ הוסף (ידרש קוד אישי)
+          <button onClick={doAddItem} disabled={!addName.trim()} style={{...S.btn("success"),width:"100%",padding:"11px 0",fontWeight:700,opacity:addName.trim()?1:0.5}}>
+            ➕ הוסף פריט (ידרש קוד אישי)
           </button>
         </Modal>
       )}
 
-      {/* PIN action confirmation modal */}
+      {/* ---- PIN CONFIRM MODAL ---- */}
       {pinAction&&(
-        <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{...S.card,maxWidth:360,width:"100%",border:"2px solid var(--color-warning-fg)"}}>
-            <div style={{fontSize:28,textAlign:"center",marginBottom:8}}>🔑</div>
-            <div style={{fontWeight:700,textAlign:"center",marginBottom:4}}>אישור פעולה</div>
-            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:16}}>{pinAction.label}</div>
-            <input
-              type="password" value={pinActionInput}
-              onChange={e=>setPinActionInput(e.target.value)}
+        <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{...S.card,maxWidth:380,width:"100%",border:"2px solid var(--color-warning-fg)",padding:28}}>
+            <div style={{fontSize:40,textAlign:"center",marginBottom:8}}>🔑</div>
+            <div style={{fontWeight:800,textAlign:"center",fontSize:"var(--text-lg)",marginBottom:4}}>אישור פעולה</div>
+            <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:18,padding:"8px 12px",background:"var(--color-bg-subtle)",borderRadius:6}}>{pinAction.label}</div>
+            <input type="password" value={pinActionInput}
+              onChange={e=>{setPinActionInput(e.target.value);setPinActionError("");}}
               onKeyDown={e=>{if(e.key==="Enter") confirmPinAction();}}
-              placeholder="הכנס קוד אישי..."
-              autoFocus
-              style={{...S.input,textAlign:"center",fontSize:18,letterSpacing:3,marginBottom:8}}
-            />
-            {pinActionError&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:8}}>{pinActionError}</div>}
+              placeholder="קוד..." autoFocus
+              style={{...S.input,textAlign:"center",fontSize:20,letterSpacing:4,marginBottom:8}}/>
+            {pinActionError&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",textAlign:"center",marginBottom:8,fontWeight:700}}>{pinActionError}</div>}
             <div style={{display:"flex",gap:8}}>
-              <button onClick={confirmPinAction} style={{...S.btn("success"),flex:1,padding:"10px 0"}}>✅ אשר</button>
-              <button onClick={()=>setPinAction(null)} style={{...S.btn("neutral"),flex:1,padding:"10px 0"}}>ביטול</button>
+              <button onClick={confirmPinAction} style={{...S.btn("success"),flex:1,padding:"11px 0",fontWeight:700}}>✅ אשר</button>
+              <button onClick={()=>{setPinAction(null);setPinActionInput("");}} style={{...S.btn("neutral"),flex:1,padding:"11px 0"}}>ביטול</button>
             </div>
           </div>
         </div>
@@ -8238,6 +8386,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     </div>
   );
 }
+
+
 
 function MyStockTab({db, setDb, soldiers, auth}){
   const [filterUnit, setFilterUnit] = React.useState("הכל");
@@ -8621,8 +8771,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
                   <div onClick={()=>deleteItem(item.name)}
                     style={{fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>🔄 אפס כמות</div>
-                  <div onClick={()=>removeItem(item.name)}
-                    style={{fontSize:9,color:"var(--color-danger-fg)",cursor:"pointer"}}>🗑️ מחק פריט</div>
+
                 </div>
               )}
             </div>
