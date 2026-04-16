@@ -9276,10 +9276,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
         const item = liveData.find(x=>x.name===expandedItem);
         if(!item) return null;
         const allRelated = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name||"")=== expandedItem);
+        // כשבוחרים פלוגה — מסנן אוטומטית לפלוגה הנבחרת
+        const activeUnitFilter = filterUnit!=="הכל" ? filterUnit : serialUnitFilter;
         const relatedItems = allRelated.filter(([,v])=>{
           const unit=v.u||v.unit||"";
           const serial=String(v.s||v.serial||"");
-          const unitOk = serialUnitFilter==="הכל" || unit===serialUnitFilter;
+          const unitOk = activeUnitFilter==="הכל" || unit===activeUnitFilter;
           const searchOk = !serialSearch.trim() || serial.toLowerCase().includes(serialSearch.toLowerCase()) ||
             (v.sn||v.assignedSoldierName||"").includes(serialSearch);
           return unitOk && searchOk;
@@ -9356,6 +9358,19 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         padding:"2px 8px",borderRadius:10,color:isSoldier?"var(--color-accent-fg)":"var(--color-warning-fg)",fontWeight:600}}>
                         פלוגה {unit}
                       </span>
+                      {v.cabName&&<span style={{fontSize:9,background:"var(--color-success-bg)",color:"var(--color-success-fg)",borderRadius:8,padding:"1px 7px",fontWeight:700}}>🗄️ {v.cabName}</span>}
+                      {/* ארון */}
+                      <select value={v.cabName||""} onChange={e=>{
+                        const cabName=e.target.value;
+                        const nItems={...db.unitItems,[id]:{...db.unitItems[id],cabName}};
+                        const ndb={...db,unitItems:nItems};
+                        saveDB(ndb); setDb(ndb);
+                        fbSet("db/unitItems/"+id+"/cabName", cabName||null).catch(()=>{});
+                        logAction("שיוך_ארון", expandedItem+(serial!=="—"?" ("+serial+")":"")+" → "+(cabName||"ללא ארון"), auth?.name);
+                      }} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"2px 6px",minWidth:110,maxWidth:140}}>
+                        <option value="">📦 ללא ארון</option>
+                        {getAllCabinets(db,unit).map(({n})=><option key={n} value={n}>{n}</option>)}
+                      </select>
                       {/* העברה לפלוגה */}
                       {!isSoldier&&auth.role==="admin"&&(
                         <select value="" onChange={e=>{
