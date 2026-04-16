@@ -1668,17 +1668,15 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     const ADMIN_USERNAMES = ["אורן","מתן","יעקב"];
     const issuerIsAdmin = ADMIN_USERNAMES.includes(issuerUsername);
 
-    // אם השולח הוא מנהל ארמון — השתמש בחתימה שלו
-    // אחרת — חפש את מנהל הארמון הרשום (roleTitle=אחראי ארמון)
+    // קבע שם מנפק
     let issuerDisplay = "אחראי ארמון";
-    let issuerSig = null;
+    let issuerSigUsername = null;
 
     if(issuerIsAdmin){
       const u = allUsersMap[issuerUsername];
       issuerDisplay = u?.name || issuerUsername;
-      issuerSig = db.userSigs?.[issuerUsername] || null;
+      issuerSigUsername = issuerUsername;
     } else {
-      // חפש אחראי ארמון מוגדר
       const armoryEntry = Object.entries(allUsersMap).find(([uname, u]) => {
         const perms = db.userPerms?.[uname]||{};
         return (u.roleTitle==="אחראי ארמון") || (perms._roleTitle==="אחראי ארמון");
@@ -1686,21 +1684,34 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       if(armoryEntry){
         const [uname, u] = armoryEntry;
         issuerDisplay = u.name || uname;
-        issuerSig = db.userSigs?.[uname] || null;
+        issuerSigUsername = uname;
       }
     }
-    const sigEntry = {sigData, signedAt, issuerName: issuerDisplay, ...(issuerSig?{issuerSig}:{}), ...(testImg?{testImg}:{})};
-    const newDb={...db,
-      signatures:{...db.signatures,[auth.soldierId]:sigEntry},
-      bulkGuarantors:newGuarantors,
-      testCerts:newTestCerts
+
+    // שלוף חתימה שמורה מ-Firebase ישירות ושמור
+    const _doSaveWithSig = (issuerSig) => {
+      const sigEntry = {sigData, signedAt, issuerName: issuerDisplay, ...(issuerSig?{issuerSig}:{}), ...(testImg?{testImg}:{})};
+      const newDb={...db,
+        signatures:{...db.signatures,[auth.soldierId]:sigEntry},
+        bulkGuarantors:newGuarantors,
+        testCerts:newTestCerts
+      };
+      fbSet("db/signatures/"+auth.soldierId, sigEntry).catch(e=>console.warn("sig err:",e));
+      try{localStorage.setItem(DB_KEY,JSON.stringify(newDb));}catch(e){}
+      setDb(newDb);setSigImg(sigData);setStep("done");
+      logAction("חתימה", soldierData.name+" חתם על נשק", soldierData.name);
     };
-    // כתוב ישירות ל-Firebase ואל תעשה overwrite לכל החתימות
-    fbSet("db/signatures/"+auth.soldierId, sigEntry).catch(e=>console.warn("sig err:",e));
-    // שמור גם locally
-    try{localStorage.setItem(DB_KEY,JSON.stringify(newDb));}catch(e){}
-    setDb(newDb);setSigImg(sigData);setStep("done");
-    logAction("חתימה", soldierData.name+" חתם על נשק", soldierData.name);
+
+    // נסה לשלוף חתימה עדכנית מ-Firebase לפני שמירה
+    if(issuerSigUsername){
+      fbGet("db/userSigs/"+issuerSigUsername).then(sig=>{
+        _doSaveWithSig(sig || db.userSigs?.[issuerSigUsername] || null);
+      }).catch(()=>{
+        _doSaveWithSig(db.userSigs?.[issuerSigUsername] || null);
+      });
+    } else {
+      _doSaveWithSig(null);
+    }
   }
   return (
     <React.Fragment>
@@ -3015,9 +3026,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                       <select value={retCabinet[rowKey]?.cabName||retCabinet[clean]?.cabName||""}
                         onClick={e=>e.stopPropagation()}
                         onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};rowKeys.forEach(k=>{u[k]=cab;});u[rowKey]=cab;return u;});}}
-                        size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
+                        size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:160,maxHeight:"none"}}>
                         <option value="">— בחר מיקום —</option>
-                        {getAllCabinets(db,soldier.unit).map(({n})=><option key={n} value={n}>{n}</option>)}
+                        {getAllCabinets(db,"הכל").map(({n})=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                   )}
