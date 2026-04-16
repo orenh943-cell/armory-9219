@@ -3104,7 +3104,19 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
         </div>
         <SignaturePad onSave={sigData=>{
           const signedAt=new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
-          const sigEntry={sigData,signedAt};
+          const ADMIN_USERNAMES=["אורן","מתן","יעקב"];
+          const allU={...(db.dynamicUsers||{}),...USERS};
+          let issuerDisplay=auth?.name||"אחראי ארמון";
+          let issuerSigUsername=null;
+          if(ADMIN_USERNAMES.includes(auth?.username)){
+            issuerSigUsername=auth.username;
+            issuerDisplay=auth.name||auth.username;
+          } else {
+            const entry=Object.entries(allU).find(([uname,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[uname]?._roleTitle==="אחראי ארמון"));
+            if(entry){const [uname,u]=entry;issuerSigUsername=uname;issuerDisplay=u.name||uname;}
+          }
+          const issuerSig=issuerSigUsername?(db.userSigs?.[issuerSigUsername]||null):null;
+          const sigEntry={sigData,signedAt,issuerName:issuerDisplay,...(issuerSig?{issuerSig}:{})};
           const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
           saveDB(ndb); onSave(ndb);
           fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
@@ -3141,7 +3153,18 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                   (g.keys||[name]).forEach(ak=>{partialItems[ak]=assigned[ak];});
                 }
               });
-              const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems)};
+              const ADMIN_USERNAMES2=["אורן","מתן","יעקב"];
+              const allU2={...(db.dynamicUsers||{}),...USERS};
+              let issuerDisplay2=auth?.name||"אחראי ארמון";
+              let issuerSigUsername2=null;
+              if(ADMIN_USERNAMES2.includes(auth?.username)){
+                issuerSigUsername2=auth.username; issuerDisplay2=auth.name||auth.username;
+              } else {
+                const entry2=Object.entries(allU2).find(([uname,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[uname]?._roleTitle==="אחראי ארמון"));
+                if(entry2){const [uname,u]=entry2;issuerSigUsername2=uname;issuerDisplay2=u.name||uname;}
+              }
+              const issuerSig2=issuerSigUsername2?(db.userSigs?.[issuerSigUsername2]||null):null;
+              const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems),issuerName:issuerDisplay2,...(issuerSig2?{issuerSig:issuerSig2}:{})};
               const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
               saveDB(ndb); onSave(ndb);
               fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
