@@ -1902,23 +1902,39 @@ function DailyModal({db,onClose,type,auth}){
   const [showPad, setShowPad] = useState(false);
   const [showSoferPad, setShowSoferPad] = useState(false);
   const [note, setNote] = useState("");
+  const [extraItems, setExtraItems] = useState([]); // פריטים נוספים שנוסיפו ידנית
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [addItemSearch, setAddItemSearch] = useState("");
   // בעל תפקיד סופר
   const [soferName, setSoferName] = useState("");
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
   // חישוב מלאי יומי
-  // מלאי כולל = כל מה שב-assignments + unitItems
-  const totalMap = {};  // name -> total count
+  // מלאי כולל = DAILY_ITEMS (מספרים קבועים שהוגדרו) + armoryMaster מ-Firebase
+  const totalMap = {};  // name -> total (קבוע)
   const loansMap = {};  // name -> השאלות (אצל חיילים חתומים)
   const stockMap = {};  // name -> מצאי (לא חתומים + בארמון)
 
   const signedIds = new Set(Object.keys(db.signatures||{}));
 
+  // מלאי כולל — מ-DAILY_ITEMS (מספרים קבועים) או armoryMaster
+  const armoryMaster = db.armoryMaster||{};
+  [...DAILY_LEFT, ...DAILY_RIGHT].forEach(item=>{
+    const alias = item.alias||item.name||""; if(!alias) return;
+    // מlאי קבוע: מה שהוגדר ב-DAILY_ITEMS או armoryMaster
+    const dailyItem = DAILY_ITEMS.find(d=>d.name===alias);
+    const masterItem = armoryMaster[alias];
+    const fixedTotal = (masterItem?.total) || (dailyItem?.total) || 0;
+    totalMap[alias] = fixedTotal;
+  });
+
+  // השאלות = חיילים חתומים עם הפריט
+  // מצאי = חיילים לא חתומים + unitItems t=unit (בארמון)
   // מ-assignments
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
-    Object.keys(asgn||{}).forEach(name=>{
-      totalMap[name]=(totalMap[name]||0)+1;
+    Object.keys(asgn||{}).forEach(rawName=>{
+      const name=cleanItemName(rawName);
       if(signedIds.has(solId)){
         loansMap[name]=(loansMap[name]||0)+1;
       } else {
@@ -1926,11 +1942,14 @@ function DailyModal({db,onClose,type,auth}){
       }
     });
   });
-  // מ-unitItems
+  // unitItems t=unit (בארמון, לא משוייך לחייל) — רק אלה שלא ב-assignments
   Object.values(db.unitItems||{}).forEach(item=>{
-    const name=item.n||item.name||""; if(!name) return;
-    totalMap[name]=(totalMap[name]||0)+1;
-    stockMap[name]=(stockMap[name]||0)+1;
+    const name=cleanItemName(item.n||item.name||""); if(!name) return;
+    const t=item.t||item.assignedType||"unit";
+    if(t==="unit"){
+      stockMap[name]=(stockMap[name]||0)+1;
+    }
+    // t=soldier כבר נספר ב-assignments — לא כופלים
   });
 
   function calcItem(item){
@@ -1942,7 +1961,8 @@ function DailyModal({db,onClose,type,auth}){
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
-  const allCalc = [...leftCalc,...rightCalc];
+  const extraCalc = extraItems.map(calcItem);
+  const allCalc = [...leftCalc,...rightCalc,...extraCalc];
 
   // סגנון טבלה
   const TH = {padding:"5px 6px",border:"1px solid var(--color-border-default)",background:"var(--color-bg-canvas)",color:"var(--color-text-on-accent)",textAlign:"right",fontSize:"var(--text-xs)"};
@@ -1971,12 +1991,23 @@ function DailyModal({db,onClose,type,auth}){
     ).join("");
     const maxRows = Math.max(leftCalc.length, rightCalc.length);
     const leftArr = leftCalc; const rightArr = rightCalc;
+    // פריטים נוספים — שורות נוספות בסוף (עמודה שמאל בלבד)
+    const extraRows = extraCalc.map(item=>
+      "<tr><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc;background:#f0f4ff'>"+item.msd+"</td>"+
+      "<td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace;background:#f0f4ff'>"+(item.makat||"")+"</td>"+
+      "<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc;font-weight:bold;background:#f0f4ff'>"+(item.fullname||item.alias)+" ⭐</td>"+
+      "<td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;background:#f0f4ff'>"+(item.total||"")+"</td>"+
+      "<td style='text-align:center;padding:3px 5px;border:1px solid #ccc;background:#f0f4ff'>"+(item.loans||0)+"</td>"+
+      "<td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;background:#f0f4ff;color:"+(item.ok?"green":"red")+"'>"+(item.total!=null?item.stock:"")+"</td>"+
+      "<td style='padding:3px 5px;border:1px solid #ccc;background:#f0f4ff'></td>"+
+      "<td colspan='7' style='border:1px solid #ccc;background:#f0f4ff'></td></tr>"
+    ).join("");
     const tableRows = Array.from({length:maxRows},(_,i)=>{
       const L=leftArr[i]||null; const R=rightArr[i]||null;
       const Lc=L?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+L.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(L.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(L.fullname||L.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(L.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(L.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(L.ok?"green":"red")+"'>"+(L.total!=null?L.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
       const Rc=R?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+R.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(R.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(R.fullname||R.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(R.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(R.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(R.ok?"green":"red")+"'>"+(R.total!=null?R.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
       return "<tr>"+Lc+Rc+"</tr>";
-    }).join("");
+    }).join("")+extraRows;
 
     const win = window.open("","_blank");
     win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
@@ -2069,6 +2100,51 @@ function DailyModal({db,onClose,type,auth}){
         </div>
       </div>
 
+      {/* כפתור הוספת פריט */}
+      <div style={{marginBottom:12}}>
+        <button onClick={()=>setShowAddItem(p=>!p)}
+          style={{...S.btn("blue"),padding:"6px 14px",fontSize:"var(--text-sm)"}}>
+          ➕ הוסף פריט לדוח
+        </button>
+        {extraItems.length>0&&<span style={{marginRight:8,fontSize:"var(--text-xs)",color:"var(--color-accent-fg)",fontWeight:700}}>({extraItems.length} פריטים נוספים)</span>}
+      </div>
+      {showAddItem&&(()=>{
+        const allNames = Object.keys(window.NAME_TO_MAKAT_DATA||{});
+        const alreadyInReport = new Set([...DAILY_LEFT,...DAILY_RIGHT,...extraItems].map(x=>x.alias||x.name));
+        const filtered2 = allNames.filter(n=>n&&!alreadyInReport.has(n)&&n.includes(addItemSearch));
+        return (
+          <div style={{background:"var(--color-bg-canvas)",border:"1px solid var(--color-border-muted)",borderRadius:8,padding:12,marginBottom:12}}>
+            <div style={{fontWeight:700,marginBottom:8,fontSize:"var(--text-sm)"}}>בחר פריט להוספה לדוח:</div>
+            <input value={addItemSearch} onChange={e=>setAddItemSearch(e.target.value)}
+              placeholder="🔍 חפש פריט..." style={{...S.input,marginBottom:8}}/>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,maxHeight:160,overflowY:"auto"}}>
+              {filtered2.slice(0,40).map(n=>(
+                <button key={n} onClick={()=>{
+                  const makat=window.NAME_TO_MAKAT_DATA?.[n]||0;
+                  const maxMsd=Math.max(...[...DAILY_LEFT,...DAILY_RIGHT,...extraItems].map(x=>x.msd||0),0);
+                  setExtraItems(p=>[...p,{msd:maxMsd+p.length+1,makat,fullname:n,alias:n,total:0}]);
+                  setShowAddItem(false); setAddItemSearch("");
+                }} style={{...S.btn(),padding:"4px 10px",fontSize:"var(--text-xs)"}}>
+                  {n}
+                </button>
+              ))}
+              {filtered2.length===0&&<span style={{color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>לא נמצאו פריטים</span>}
+            </div>
+            {extraItems.length>0&&(
+              <div style={{marginTop:8,borderTop:"1px solid var(--color-border-muted)",paddingTop:8}}>
+                <div style={{fontSize:"var(--text-xs)",fontWeight:700,marginBottom:4,color:"var(--color-accent-fg)"}}>פריטים שנוספו:</div>
+                {extraItems.map((item,i)=>(
+                  <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,background:"var(--color-accent-subtle)",borderRadius:12,padding:"2px 8px",fontSize:"var(--text-xs)",marginLeft:4,marginBottom:4}}>
+                    {item.alias}
+                    <button onClick={()=>setExtraItems(p=>p.filter((_,j)=>j!==i))}
+                      style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-danger-fg)",fontWeight:700,padding:0,fontSize:12}}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {/* סיכום מהיר */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
         {[
@@ -2085,7 +2161,7 @@ function DailyModal({db,onClose,type,auth}){
 
       {/* טבלה דו-עמודית */}
       <div style={{overflowX:"auto",marginBottom:12}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)",direction:"rtl",minWidth:700}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)",direction:"rtl",minWidth:900}}>
           <thead>
             <tr>
               {["מסד","חומר","שם הפריט","מלאי כולל","השאלות","מצאי","הערות",
@@ -2118,6 +2194,22 @@ function DailyModal({db,onClose,type,auth}){
                     <td style={{...TDC(R.ok),background:bg,color:R.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{R.total!=null?R.stock:""}</td>
                     <td style={{...TD(),background:bg}}></td>
                   </>):<td colSpan={7} style={{border:"1px solid var(--color-border-muted)",background:bg}}/>}
+                </tr>
+              );
+            })}
+            {/* פריטים נוספים — שורות בטבלה אחת מתחת */}
+            {extraCalc.map((item,i)=>{
+              const bg=i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)";
+              return (
+                <tr key={"extra_"+i} style={{borderTop:i===0?"2px solid var(--color-accent-fg)":undefined}}>
+                  <td style={{...TD(),background:bg,textAlign:"center"}}>{item.msd}</td>
+                  <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{item.makat||""}</td>
+                  <td style={{...TD(),background:bg,color:"var(--color-accent-fg)",fontWeight:700}}>{item.fullname||item.alias} ⭐</td>
+                  <td style={{...TDC(),background:bg}}>{item.total||""}</td>
+                  <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{item.loans||0}</td>
+                  <td style={{...TDC(item.ok),background:bg,color:item.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{item.total!=null?item.stock:""}</td>
+                  <td style={{...TD(),background:bg}}></td>
+                  <td colSpan={7} style={{...TD(),background:bg,color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>—</td>
                 </tr>
               );
             })}
