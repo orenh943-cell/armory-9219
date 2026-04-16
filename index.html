@@ -734,10 +734,7 @@ const USERS = {
   "מתן": {role:"admin", pass:"7492961", name:"מתן ניסים דיין", soldierId:"7492961"},
   "יעקב": {role:"admin", pass:"8278560", name:"יעקב שרון", soldierId:"8278560"},
 
-  "צפייה_א": {role:"viewer", pass:"1111", name:"צפייה פלוגה א", soldierId:"", viewUnit:"א"},
-  "צפייה_ב": {role:"viewer", pass:"2222", name:"צפייה פלוגה ב", soldierId:"", viewUnit:"ב"},
-  "צפייה_ג": {role:"viewer", pass:"3333", name:"צפייה פלוגה ג", soldierId:"", viewUnit:"ג"},
-  "צפייה": {role:"viewer", pass:"9999", name:"צפייה כוללת", soldierId:"", viewUnit:"הכל"},
+
 };
 // הרשאות ברירת מחדל לפי תפקיד
 const DEFAULT_PERMS = {
@@ -1508,17 +1505,7 @@ function Login({onLogin}){
         onLogin({role:u.role||"viewer",name:u.name,username:uTrim,soldierId:u.soldierId||"",viewUnit:u.viewUnit||null,editUnit:u.editUnit||"הכל"});
         return true;
       }
-      // חייל מ-RAW_SOLDIERS
-      const s = RAW_SOLDIERS.find(x=>x.id===pTrim);
-      if(s&&(s.name.split(" ")[0]===uTrim||s.name.includes(uTrim)||uTrim===pTrim)){
-        onLogin({role:"soldier",name:s.name,soldierId:s.id}); return true;
-      }
-      const byId = RAW_SOLDIERS.find(x=>x.id===uTrim);
-      if(byId&&pTrim===uTrim){ onLogin({role:"soldier",name:byId.name,soldierId:byId.id}); return true; }
-      // חייל מותאם
-      const local=loadDB()||{};
-      const cs=Object.values(local.customSoldiers||{}).find(x=>x.id===pTrim&&(x.name.includes(uTrim)||uTrim===pTrim));
-      if(cs){ onLogin({role:"soldier",name:cs.name,soldierId:cs.id}); return true; }
+      // כניסת חיילים ישירה — חסומה. רק USERS ו-dynamicUsers יכולים להיכנס
       return false;
     }
 
@@ -8264,6 +8251,35 @@ function VisutTab({db, setDb, soldiers, auth}){
     const BOM="\uFEFF";
     const allSols=[...soldiers,...Object.values(db.customSoldiers||{})];
     let rows=[];
+    if(type==="all"){
+      // כל המלאי — משוייכים + מוקצים ביחד
+      const headers=["פריט","מקט","פלוגה","סוג","חייל/פלוגה","מ.א","כמות"];
+      allSols.forEach(s=>{
+        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        Object.entries(asgn||{}).forEach(([k])=>{
+          if(!s.name) return;
+          rows.push([cleanItemName(k),getMakat(cleanItemName(k),db)||"",s.unit,"👤 משוייך",s.name,s.id,1]);
+        });
+      });
+      const unitCounts={};
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const n=cleanItemName(v.n||v.name||""); const u=v.u||v.unit||"";
+        const t=v.t||v.assignedType||"unit";
+        if(t!=="unit") return;
+        const key=n+"|"+u;
+        unitCounts[key]=(unitCounts[key]||{name:n,unit:u,makat:getMakat(n,db)||"",qty:0});
+        unitCounts[key].qty++;
+      });
+      Object.values(unitCounts).forEach(c=>rows.push([c.name,c.makat,c.unit,"🏢 מוקצה","—","—",c.qty]));
+      rows.sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"he"));
+      const csv=BOM+[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
+      const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download=`ויסות_כל_המלאי_${new Date().toLocaleDateString("he-IL").split("/").join("-")}.csv`;
+      a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+      return;
+    }
     const headers = type==="soldier"
       ? ["פריט","מקט","חייל","מ.א","פלוגה"]
       : ["פריט","מקט","פלוגה","כמות"];
@@ -8315,6 +8331,7 @@ function VisutTab({db, setDb, soldiers, auth}){
           <button onClick={()=>setViewMode("requests")} style={{...S.btn(viewMode==="requests"?"blue":"neutral"),padding:"7px 14px"}}>
             📋 בקשות {openReqs.length>0&&<span style={{background:"var(--color-danger-fg)",color:"#fff",borderRadius:10,padding:"0 6px",fontSize:10,marginRight:4}}>{openReqs.length}</span>}
           </button>
+          <button onClick={()=>exportExcel("all")} style={{...S.btn("blue"),padding:"7px 12px",fontWeight:700}}>📥 Excel כל המלאי</button>
           <button onClick={()=>exportExcel("soldier")} style={{...S.btn("success"),padding:"7px 12px"}}>📥 Excel משוייכים</button>
           <button onClick={()=>exportExcel("unit")} style={{...S.btn("success"),padding:"7px 12px"}}>📥 Excel מוקצים</button>
           {isAdmin&&<button onClick={()=>setShowUserMgmt(p=>!p)} style={{...S.btn("neutral"),padding:"7px 12px"}}>👥 הרשאות</button>}
