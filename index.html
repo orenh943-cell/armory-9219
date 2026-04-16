@@ -769,6 +769,10 @@ function canSignAdmin(auth){
   return u==="אורן"||u==="מתן"||u==="יעקב"||n==="אורן חלפון"||n==="מתן ניסים דיין"||n==="יעקב שרון";
 }
 const ARMORY_DASH_PIN="7680832";
+function canViewVisut(auth,db){
+  if(auth?.username==="אורן"||auth?.name==="אורן חלפון") return true;
+  return !!(db?.visutUsers||{})[auth?.username||""];
+}
 
 // ===== פונקציית ארונות מרכזית =====
 function getAllCabinets(db, soldierUnit){
@@ -1099,7 +1103,7 @@ const SAFE_BULK_COLLECTIONS = ["assignments","customSoldiers","brokenItems","bul
 // because a race condition could wipe data: signatures, testCerts, userSigs, sigHistory, deletedUsers
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},assignmentMeta:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},assignmentMeta:{},visutRequests:{},visutUsers:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   // Only write bulk-safe collections
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
@@ -1125,7 +1129,7 @@ function saveDB(db){
 function initDB(){
   const local = loadDB();
   if(local) return local;
-  return {assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},assignmentMeta:{}};
+  return {assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},assignmentMeta:{},visutRequests:{},visutUsers:{}};
 }
 
 function logAction(type, details, actorName){
@@ -6036,6 +6040,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     fbOn("db/assignmentMeta", (meta)=>{
       setDb(prev=>({...prev, assignmentMeta: meta||{}}));
     });
+    fbOn("db/visutRequests", (vr)=>{
+      setDb(prev=>({...prev, visutRequests: vr||{}}));
+    });
+    fbOn("db/visutUsers", (vu)=>{
+      setDb(prev=>({...prev, visutUsers: vu||{}}));
+    });
     const off12 = fbOn("db/loginLog", (log)=>{
       setDb(prev=>({...prev, loginLog: log||{}}));
     });
@@ -6156,6 +6166,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
     ...(perms.canViewInventory!==false?[{id:"armorystock",label:"מלאי ארמון",icon:"📋"}]:[]),
     ...(canViewArmoryDash(auth,db)?[{id:"mystock",label:"דשבורד ארמון",icon:"🗄️"}]:[]),
+    ...(canViewVisut(auth,db)?[{id:"visut",label:"ויסות",icon:"⚖️"}]:[]),
     ...(perms.canViewCabinets!==false?[{id:"cabinets",label:"ארונות",icon:"🗄️"}]:[]),
     ...(perms.canFillExitForm||perms.canApproveExitForm||perms.canCommanderDecide?[{id:"exitform",label:"יציאה הביתה",icon:"🏠"}]:[]),
     ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
@@ -6522,6 +6533,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           canViewArmoryDash(auth,db)
             ?<ArmoryDashTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
             :<div style={{padding:40,textAlign:"center",color:"var(--color-danger-fg)",fontWeight:700}}>⛔ אין הרשאה לדשבורד ארמון</div>
+        )}
+        {tab==="visut"&&(
+          canViewVisut(auth,db)
+            ?<VisutTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+            :<div style={{padding:40,textAlign:"center",color:"var(--color-danger-fg)",fontWeight:700}}>⛔ אין הרשאה לויסות</div>
         )}
         {tab==="actlog"&&auth.role==="admin"&&(
           <ActivityLogTab db={db}/>
@@ -8089,6 +8105,430 @@ function CabinetsTab({db, setDb, auth}){
     </React.Fragment>
   );
 }
+
+// =================== VISUT TAB ===================
+function VisutTab({db, setDb, soldiers, auth}){
+  const [viewMode, setViewMode] = React.useState("inventory"); // inventory | requests
+  const [filterUnit, setFilterUnit] = React.useState("הכל");
+  const [filterType, setFilterType] = React.useState("הכל"); // הכל | soldier | unit
+  const [expandedItem, setExpandedItem] = React.useState(null);
+  const [requestModal, setRequestModal] = React.useState(null); // {itemName, fromUnit, fromType}
+  const [reqFromUnit, setReqFromUnit] = React.useState("");
+  const [reqToUnit, setReqToUnit] = React.useState("");
+  const [reqQty, setReqQty] = React.useState("1");
+  const [reqNote, setReqNote] = React.useState("");
+  const [showUserMgmt, setShowUserMgmt] = React.useState(false);
+  const [newUser, setNewUser] = React.useState("");
+
+  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const isAdmin = canDelete(auth);
+  const requests = db.visutRequests || {};
+
+  // ---- liveData (same as MyStockTab) ----
+  const liveData = React.useMemo(()=>{
+    const master = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
+    return Object.entries(master).map(([name,info])=>{
+      const total = info.total||0;
+      const makat = info.makat||getMakat(name,db)||"";
+      const liveByUnit = {};
+      const allSols = [...soldiers,...Object.values(db.customSoldiers||{})];
+      UNITS.forEach(u=>{ liveByUnit[u]=0; });
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const n=cleanItemName(v.n||v.name||"");
+        if(n!==name) return;
+        const u=v.u||v.unit||"גדודי";
+        liveByUnit[u]=(liveByUnit[u]||0)+1;
+      });
+      allSols.forEach(s=>{
+        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        Object.keys(asgn||{}).forEach(k=>{
+          if(cleanItemName(k)===name) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
+        });
+      });
+      const liveTotal=Object.values(liveByUnit).reduce((a,b)=>a+b,0);
+      // חיילים vs פלוגה
+      const toSoldiers={}, toUnits={};
+      UNITS.forEach(u=>{ toSoldiers[u]=0; toUnits[u]=0; });
+      allSols.forEach(s=>{
+        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        Object.keys(asgn||{}).forEach(k=>{ if(cleanItemName(k)===name) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1; });
+      });
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const n=cleanItemName(v.n||v.name||"");
+        if(n!==name) return;
+        const u=v.u||v.unit||"גדודי";
+        const t=v.t||v.assignedType||"unit";
+        if(t==="unit") toUnits[u]=(toUnits[u]||0)+1;
+      });
+      return {name,makat,total,liveByUnit,liveTotal,toSoldiers,toUnits};
+    }).filter(i=>i.liveTotal>0).sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  },[db,soldiers]);
+
+  function getUnitCount(item, unit, type){
+    if(type==="soldier") return item.toSoldiers[unit]||0;
+    if(type==="unit") return item.toUnits[unit]||0;
+    return (item.toSoldiers[unit]||0)+(item.toUnits[unit]||0);
+  }
+
+  function submitRequest(){
+    if(!requestModal||!reqToUnit||!reqQty) return;
+    const key="visut_"+Date.now();
+    const req={
+      id:key,
+      itemName:requestModal.itemName,
+      fromUnit:requestModal.fromUnit,
+      fromType:requestModal.fromType, // soldier|unit|gadudi
+      toUnit:reqToUnit,
+      qty:parseInt(reqQty)||1,
+      note:reqNote.trim(),
+      status:"פתוח",
+      createdBy:auth?.name||auth?.username||"—",
+      createdAt:new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}),
+    };
+    const ndb={...db, visutRequests:{...requests,[key]:req}};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/visutRequests/"+key, req).catch(()=>{});
+    logAction("בקשת_ויסות",`${req.itemName}: מ${req.fromUnit} ל${req.toUnit} × ${req.qty}`,auth?.name);
+    setRequestModal(null); setReqFromUnit(""); setReqToUnit(""); setReqQty("1"); setReqNote("");
+  }
+
+  function executeRequest(req){
+    // מבצע את ההעברה בפועל — משנה unitItems
+    const newUnitItems={...(db.unitItems||{})};
+    let moved=0;
+    const qty=req.qty;
+    // מצא פריטים מהמקור
+    const sourceKeys=Object.entries(newUnitItems).filter(([,v])=>{
+      const n=cleanItemName(v.n||v.name||"");
+      const u=v.u||v.unit||"";
+      const t=v.t||v.assignedType||"unit";
+      return n===cleanItemName(req.itemName)&&u===req.fromUnit&&t==="unit";
+    }).map(([k])=>k);
+    for(let i=0;i<Math.min(qty,sourceKeys.length);i++){
+      newUnitItems[sourceKeys[i]]={...newUnitItems[sourceKeys[i]],u:req.toUnit,unit:req.toUnit};
+      moved++;
+    }
+    // עדכן סטטוס בקשה
+    const updReq={...req, status:"בוצע", executedBy:auth?.name||auth?.username, executedAt:new Date().toLocaleDateString("he-IL"), movedActual:moved};
+    const ndb={...db, unitItems:newUnitItems, visutRequests:{...requests,[req.id]:updReq}};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/unitItems", newUnitItems).catch(()=>{});
+    fbSet("db/visutRequests/"+req.id, updReq).catch(()=>{});
+    logAction("ביצוע_ויסות",`${req.itemName}: מ${req.fromUnit} ל${req.toUnit} × ${moved} (מתוך ${qty} מבוקש)`,auth?.name);
+  }
+
+  function rejectRequest(req, reason){
+    const updReq={...req, status:"נדחה", rejectedBy:auth?.name||auth?.username, rejectedAt:new Date().toLocaleDateString("he-IL"), rejectedReason:reason||""};
+    const ndb={...db, visutRequests:{...requests,[req.id]:updReq}};
+    saveDB(ndb); setDb(ndb);
+    fbSet("db/visutRequests/"+req.id, updReq).catch(()=>{});
+  }
+
+  function exportExcel(type){
+    const BOM="\uFEFF";
+    const allSols=[...soldiers,...Object.values(db.customSoldiers||{})];
+    let rows=[];
+    const headers = type==="soldier"
+      ? ["פריט","מקט","חייל","מ.א","פלוגה"]
+      : ["פריט","מקט","פלוגה","כמות"];
+    if(type==="soldier"){
+      allSols.forEach(s=>{
+        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        Object.entries(asgn||{}).forEach(([k,v])=>{
+          if(!s.name) return;
+          rows.push([cleanItemName(k),getMakat(cleanItemName(k),db)||"",s.name,s.id,s.unit]);
+        });
+      });
+    } else {
+      const counts={};
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const n=cleanItemName(v.n||v.name||""); const u=v.u||v.unit||"";
+        const t=v.t||v.assignedType||"unit";
+        if(t!=="unit") return;
+        const key=n+"|"+u;
+        counts[key]=(counts[key]||{name:n,unit:u,makat:getMakat(n,db)||"",qty:0});
+        counts[key].qty++;
+      });
+      Object.values(counts).forEach(c=>rows.push([c.name,c.makat,c.unit,c.qty]));
+    }
+    rows.sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"he"));
+    const csv=BOM+[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`ויסות_${type==="soldier"?"משוייכים":"מוקצים"}_${new Date().toLocaleDateString("he-IL").split("/").join("-")}.csv`;
+    a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  const openReqs=Object.values(requests).filter(r=>r.status==="פתוח");
+  const doneReqs=Object.values(requests).filter(r=>r.status!=="פתוח").sort((a,b)=>(b.executedAt||b.rejectedAt||"").localeCompare(a.executedAt||a.rejectedAt||""));
+
+  return (
+    <div style={{maxWidth:960,margin:"0 auto",padding:16}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800,margin:0}}>⚖️ מסך ויסות</h2>
+          <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",marginTop:2}}>
+            {openReqs.length>0&&<span style={{color:"var(--color-warning-fg)",fontWeight:700}}>{openReqs.length} בקשות פתוחות · </span>}
+            צפייה בלבד — ביצוע ע"י מנהל
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>setViewMode("inventory")} style={{...S.btn(viewMode==="inventory"?"blue":"neutral"),padding:"7px 14px"}}>📦 מלאי</button>
+          <button onClick={()=>setViewMode("requests")} style={{...S.btn(viewMode==="requests"?"blue":"neutral"),padding:"7px 14px"}}>
+            📋 בקשות {openReqs.length>0&&<span style={{background:"var(--color-danger-fg)",color:"#fff",borderRadius:10,padding:"0 6px",fontSize:10,marginRight:4}}>{openReqs.length}</span>}
+          </button>
+          <button onClick={()=>exportExcel("soldier")} style={{...S.btn("success"),padding:"7px 12px"}}>📥 Excel משוייכים</button>
+          <button onClick={()=>exportExcel("unit")} style={{...S.btn("success"),padding:"7px 12px"}}>📥 Excel מוקצים</button>
+          {isAdmin&&<button onClick={()=>setShowUserMgmt(p=>!p)} style={{...S.btn("neutral"),padding:"7px 12px"}}>👥 הרשאות</button>}
+        </div>
+      </div>
+
+      {/* User management */}
+      {showUserMgmt&&isAdmin&&(
+        <div style={{...S.card,marginBottom:14}}>
+          <div style={{fontWeight:700,marginBottom:10}}>👥 משתמשי ויסות</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+            <span style={{background:"var(--color-success-bg)",color:"var(--color-success-fg)",borderRadius:20,padding:"4px 14px",fontSize:"var(--text-sm)",fontWeight:700,border:"1px solid var(--color-success-fg)"}}>🔑 אורן (קבוע)</span>
+            {Object.keys(db.visutUsers||{}).map(u=>(
+              <span key={u} style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:20,padding:"4px 14px",fontSize:"var(--text-sm)",fontWeight:600,border:"1px solid var(--color-accent-fg)",display:"flex",alignItems:"center",gap:8}}>
+                {u}
+                <button onClick={()=>{
+                  const users={...(db.visutUsers||{})}; delete users[u];
+                  const ndb={...db,visutUsers:users}; saveDB(ndb); setDb(ndb);
+                  fbSet("db/visutUsers/"+u,null).catch(()=>{});
+                }} style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:16,padding:0}}>✕</button>
+              </span>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input value={newUser} onChange={e=>setNewUser(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newUser.trim()){const ndb={...db,visutUsers:{...(db.visutUsers||{}),[newUser.trim()]:true}};saveDB(ndb);setDb(ndb);fbSet("db/visutUsers/"+newUser.trim(),true).catch(()=>{});setNewUser("");}}} placeholder="שם משתמש..." style={{...S.input,marginBottom:0,flex:1}}/>
+            <button onClick={()=>{if(!newUser.trim())return;const ndb={...db,visutUsers:{...(db.visutUsers||{}),[newUser.trim()]:true}};saveDB(ndb);setDb(ndb);fbSet("db/visutUsers/"+newUser.trim(),true).catch(()=>{});setNewUser("");}} style={{...S.btn("blue"),padding:"8px 16px"}}>הוסף</button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- REQUESTS VIEW ---- */}
+      {viewMode==="requests"&&(
+        <div>
+          {openReqs.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8,color:"var(--color-warning-fg)"}}>⏳ בקשות פתוחות ({openReqs.length})</div>
+              {openReqs.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(req=>(
+                <div key={req.id} style={{...S.card,marginBottom:8,border:"1px solid var(--color-warning-fg)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-text-primary)"}}>
+                        {req.itemName}
+                        <span style={{marginRight:8,fontWeight:400,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>× {req.qty}</span>
+                      </div>
+                      <div style={{fontSize:"var(--text-sm)",marginTop:4,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                        <span style={{background:"var(--color-bg-subtle)",borderRadius:8,padding:"2px 10px",fontWeight:600}}>
+                          {req.fromUnit==="גדודי"?"🏛️ ארמון":"פלוגה "+req.fromUnit}
+                          {" · "}{req.fromType==="soldier"?"👤 משוייכים":"🏢 מוקצים"}
+                        </span>
+                        <span style={{color:"var(--color-text-secondary)"}}>→</span>
+                        <span style={{background:"var(--color-accent-bg)",borderRadius:8,padding:"2px 10px",fontWeight:600,color:"var(--color-accent-fg)"}}>
+                          {req.toUnit==="גדודי"?"🏛️ ארמון":"פלוגה "+req.toUnit}
+                        </span>
+                      </div>
+                      {req.note&&<div style={{marginTop:6,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",background:"var(--color-bg-canvas)",borderRadius:6,padding:"4px 10px"}}>💬 {req.note}</div>}
+                      <div style={{marginTop:4,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>נוצר ע"י {req.createdBy} · {req.createdAt}</div>
+                    </div>
+                    {isAdmin&&(
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>executeRequest(req)} style={{...S.btn("success"),padding:"8px 16px",fontWeight:700}}>✅ בצע</button>
+                        <button onClick={()=>{const r=window.prompt("סיבת דחייה (אופציונלי):");rejectRequest(req,r||"");}} style={{...S.btn("danger"),padding:"8px 12px"}}>❌ דחה</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {openReqs.length===0&&<div style={{...S.card,textAlign:"center",padding:32,color:"var(--color-success-fg)",fontWeight:700}}>✅ אין בקשות פתוחות</div>}
+          {doneReqs.length>0&&(
+            <div>
+              <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8,color:"var(--color-text-secondary)"}}>📁 היסטוריה ({doneReqs.length})</div>
+              {doneReqs.slice(0,20).map(req=>(
+                <div key={req.id} style={{...S.card,marginBottom:6,opacity:0.8,border:`1px solid ${req.status==="בוצע"?"var(--color-success-fg)":"var(--color-danger-fg)"}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                    <div>
+                      <span style={{fontWeight:700}}>{req.itemName}</span>
+                      <span style={{marginRight:6,color:"var(--color-text-secondary)",fontSize:"var(--text-sm)"}}>× {req.qty} · מ{req.fromUnit} ל{req.toUnit}</span>
+                      {req.note&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}> · {req.note}</span>}
+                    </div>
+                    <span style={{background:req.status==="בוצע"?"var(--color-success-bg)":"var(--color-danger-bg)",color:req.status==="בוצע"?"var(--color-success-fg)":"var(--color-danger-fg)",borderRadius:10,padding:"2px 10px",fontSize:"var(--text-xs)",fontWeight:700}}>
+                      {req.status==="בוצע"?"✅ בוצע":"❌ נדחה"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:2}}>
+                    {req.status==="בוצע"?`בוצע ע"י ${req.executedBy} · ${req.executedAt} · הועבר ${req.movedActual||req.qty}`:
+                     `נדחה ע"י ${req.rejectedBy}${req.rejectedReason?" · "+req.rejectedReason:""}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- INVENTORY VIEW ---- */}
+      {viewMode==="inventory"&&(
+        <div>
+          {/* Unit filter buttons */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {["הכל",...UNITS].map(u=>(
+              <button key={u} onClick={()=>{setFilterUnit(u);setExpandedItem(null);}}
+                style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterUnit===u?"var(--color-accent-fg)":"var(--color-border-default)"}`,
+                  background:filterUnit===u?"var(--btn-blue-bg)":"transparent",
+                  color:filterUnit===u?"var(--color-accent-fg)":"var(--color-text-secondary)",
+                  cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:filterUnit===u?700:400,minHeight:32}}>
+                {u==="הכל"?"כולם":u==="גדודי"?"🏛️ ארמון":"פלוגה "+u}
+              </button>
+            ))}
+          </div>
+
+          {/* Type filter — only for units (not ארמון and not all) */}
+          {filterUnit!=="הכל"&&filterUnit!=="גדודי"&&(
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              {[["הכל","הכל"],["soldier","👤 משוייכים לחיילים"],["unit","🏢 מוקצים לפלוגה"]].map(([val,lbl])=>(
+                <button key={val} onClick={()=>setFilterType(val)}
+                  style={{padding:"4px 14px",borderRadius:20,border:`1px solid ${filterType===val?"var(--color-accent-fg)":"var(--color-border-default)"}`,
+                    background:filterType===val?"var(--btn-blue-bg)":"transparent",
+                    color:filterType===val?"var(--color-accent-fg)":"var(--color-text-secondary)",
+                    cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:filterType===val?700:400,minHeight:30}}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          )}
+          {filterUnit==="גדודי"&&(
+            <div style={{marginBottom:10,padding:"6px 12px",background:"var(--color-bg-subtle)",borderRadius:8,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>
+              🏛️ ארמון גדודי — מוקצה בלבד (אין שיוכים ישירים לחיילים)
+            </div>
+          )}
+
+          {/* Tiles */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8,marginBottom:12}}>
+            {liveData.map(item=>{
+              const count = filterUnit==="הכל"
+                ? item.liveTotal
+                : getUnitCount(item, filterUnit, filterType==="הכל"?"all":filterType);
+              if(count===0) return null;
+              const isWeapon=WEAPON_KEYS.includes(item.name);
+              const isSelected=expandedItem===item.name;
+              return (
+                <div key={item.name} onClick={()=>setExpandedItem(isSelected?null:item.name)}
+                  style={{background:isSelected?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:10,
+                    padding:"10px 12px",cursor:"pointer",
+                    border:`1px solid ${isSelected?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
+                    borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)"}`,
+                    boxShadow:isSelected?"0 0 0 2px var(--color-accent-fg)40":"none"}}>
+                  <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{count}</div>
+                  <div style={{fontWeight:600,fontSize:"var(--text-sm)",marginTop:4,color:"var(--color-text-primary)",lineHeight:1.3}}>{item.name}</div>
+                  <div style={{fontSize:9,color:"var(--color-text-muted)",marginTop:2,fontFamily:"monospace"}}>{item.makat||""}</div>
+                  {filterUnit!=="הכל"&&filterType==="הכל"&&(
+                    <div style={{marginTop:4,display:"flex",flexDirection:"column",gap:1}}>
+                      {(item.toSoldiers[filterUnit]||0)>0&&<div style={{fontSize:9,color:"var(--color-accent-fg)"}}>👤 {item.toSoldiers[filterUnit]} משוייכים</div>}
+                      {(item.toUnits[filterUnit]||0)>0&&<div style={{fontSize:9,color:"var(--color-warning-fg)"}}>🏢 {item.toUnits[filterUnit]} מוקצים</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            }).filter(Boolean)}
+          </div>
+
+          {/* Expanded item — request form */}
+          {expandedItem&&(()=>{
+            const item=liveData.find(x=>x.name===expandedItem);
+            if(!item) return null;
+            return (
+              <div style={{...S.card,border:"2px solid var(--color-accent-fg)",marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontWeight:800,fontSize:"var(--text-lg)"}}>{expandedItem}</div>
+                  <button onClick={()=>setExpandedItem(null)} style={{...S.btn("neutral"),padding:"4px 10px"}}>✕</button>
+                </div>
+
+                {/* Summary per unit */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6,marginBottom:14}}>
+                  {UNITS.map(u=>{
+                    const sol=item.toSoldiers[u]||0;
+                    const uni=item.toUnits[u]||0;
+                    if(sol+uni===0) return null;
+                    return (
+                      <div key={u} style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"8px 10px",border:"1px solid var(--color-border-muted)"}}>
+                        <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4}}>{u==="גדודי"?"🏛️ ארמון":"פלוגה "+u}</div>
+                        {sol>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-accent-fg)"}}>👤 {sol} משוייכים</div>}
+                        {uni>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)"}}>🏢 {uni} מוקצים</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* New request form */}
+                <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--color-border-muted)"}}>
+                  <div style={{fontWeight:700,marginBottom:10,fontSize:"var(--text-sm)"}}>➕ בקשת ויסות חדשה</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                    <div style={{flex:1,minWidth:120}}>
+                      <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מאיזו פלוגה</div>
+                      <select value={reqFromUnit} onChange={e=>{setReqFromUnit(e.target.value);setReqToUnit("");}} style={{...S.input,marginBottom:0}}>
+                        <option value="">— בחר מקור —</option>
+                        {UNITS.map(u=>{
+                          const total=(item.toSoldiers[u]||0)+(item.toUnits[u]||0);
+                          if(total===0) return null;
+                          return <option key={u} value={u}>{u==="גדודי"?"🏛️ ארמון":"פלוגה "+u} ({total})</option>;
+                        })}
+                      </select>
+                    </div>
+                    {reqFromUnit&&reqFromUnit!=="גדודי"&&(
+                      <div style={{flex:1,minWidth:120}}>
+                        <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>סוג</div>
+                        <select data-visut-fromtype defaultValue="unit" style={{...S.input,marginBottom:0}}>
+                          <option value="unit">🏢 מוקצים לפלוגה</option>
+                          <option value="soldier">👤 משוייכים לחיילים</option>
+                        </select>
+                      </div>
+                    )}
+                    <div style={{flex:1,minWidth:120}}>
+                      <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>לאיזו פלוגה</div>
+                      <select value={reqToUnit} onChange={e=>setReqToUnit(e.target.value)} style={{...S.input,marginBottom:0}}>
+                        <option value="">— בחר יעד —</option>
+                        {UNITS.filter(u=>u!==reqFromUnit).map(u=>(
+                          <option key={u} value={u}>{u==="גדודי"?"🏛️ ארמון":"פלוגה "+u}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{width:80}}>
+                      <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות</div>
+                      <input type="number" min="1" value={reqQty} onChange={e=>setReqQty(e.target.value)} style={{...S.input,marginBottom:0}}/>
+                    </div>
+                  </div>
+                  <input value={reqNote} onChange={e=>setReqNote(e.target.value)} placeholder="הערה (אופציונלי)..." style={{...S.input,marginBottom:10}}/>
+                  <button onClick={()=>{
+                    if(!reqFromUnit||!reqToUnit||!reqQty) return;
+                    const fromType=reqFromUnit==="גדודי"?"unit":(document.querySelector("[data-visut-fromtype]")?.value||"unit");
+                    const key="visut_"+Date.now();
+                    const req={id:key,itemName:expandedItem,fromUnit:reqFromUnit,fromType,toUnit:reqToUnit,qty:parseInt(reqQty)||1,note:reqNote.trim(),status:"פתוח",createdBy:auth?.name||auth?.username||"—",createdAt:new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})};
+                    const ndb={...db,visutRequests:{...(db.visutRequests||{}),[key]:req}};
+                    saveDB(ndb); setDb(ndb);
+                    fbSet("db/visutRequests/"+key,req).catch(()=>{});
+                    logAction("בקשת_ויסות",`${req.itemName}: מ${req.fromUnit} ל${req.toUnit} × ${req.qty}`,auth?.name);
+                    setReqFromUnit(""); setReqToUnit(""); setReqQty("1"); setReqNote("");
+                  }} disabled={!reqFromUnit||!reqToUnit} style={{...S.btn("blue"),width:"100%",padding:"10px 0",fontWeight:700,opacity:reqFromUnit&&reqToUnit?1:0.5}}>
+                    📋 שלח בקשה
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // =================== MY STOCK TAB (מלאי ארמון) ===================
 function AddSerialInline({itemName, db, setDb, onDone}){
