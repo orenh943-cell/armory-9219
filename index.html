@@ -7866,9 +7866,36 @@ function CabinetsTab({db, setDb, auth}){
       });
       return items;
     }
-    const custom = db.cabinets?.[cabName];
-    if(custom) return custom;
-    return [];
+    // ארון רגיל — מיזוג: db.cabinets (ידני) + unitItems עם cabName תואם
+    const custom = db.cabinets?.[cabName] || [];
+    const fromUnitItems = [];
+    Object.values(db.unitItems||{}).forEach(v=>{
+      if((v.cabName||"")=== cabName){
+        const n=cleanItemName(v.n||v.name||"");
+        const serial=v.s||v.serial||null;
+        const t=v.t||v.assignedType||"unit";
+        // בנה סט של צ שכבר יצאו לחיילים
+        const allSols=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+        const assignedSerials=new Set();
+        allSols.forEach(sol=>{
+          const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
+          Object.values(asgn||{}).forEach(val=>{if(val&&val!==1) assignedSerials.add(String(val));});
+        });
+        if(serial && assignedSerials.has(String(serial))) return; // אצל חייל
+        if(t!=="unit") return; // משוייך לחייל
+        // בדוק שלא כבר קיים ב-custom
+        const alreadyInCustom = custom.some(c=>(c.alias||c.fullname||"")===n && (!serial || String(c.serial||"")===String(serial)));
+        if(!alreadyInCustom){
+          fromUnitItems.push({
+            alias:n, fullname:n, qty:1,
+            serial:serial?String(serial):null,
+            makat:getMakat(n)||null,
+            fromUnitItems:true,
+          });
+        }
+      }
+    });
+    return [...custom, ...fromUnitItems];
   }
   function saveItems(cabName, items){
     const ndb={...db, cabinets:{...(db.cabinets||{}), [cabName]:items}};
