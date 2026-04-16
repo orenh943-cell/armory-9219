@@ -7866,8 +7866,31 @@ function CabinetsTab({db, setDb, auth}){
       });
       return items;
     }
-    // ארון רגיל — מיזוג: db.cabinets (ידני) + unitItems עם cabName תואם
+    // ארון רגיל — מיזוג: db.cabinets (ידני) + unitItems + assignmentMeta עם cabName תואם
     const custom = db.cabinets?.[cabName] || [];
+    // פריטים מ-assignmentMeta (חיילים לא חתומים עם ארון מוגדר)
+    const fromAssignmentMeta = [];
+    const signedIds2 = new Set(Object.keys(db.signatures||{}));
+    Object.entries(db.assignmentMeta||{}).forEach(([solId, meta])=>{
+      if(signedIds2.has(solId)) return; // חתום — יצא
+      const sol = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS].find(s=>s.id===solId);
+      if(!sol) return;
+      Object.entries(meta||{}).forEach(([itemKey, metaVal])=>{
+        if((metaVal.cabName||"")!==cabName) return;
+        const n=cleanItemName(itemKey);
+        if(WEAPON_KEYS.includes(n)) return; // נשק → בכנה, לא כאן
+        const asgn=db._assignmentsLoaded?(db.assignments?.[solId]||{}):(db.assignments?.[solId]||{});
+        const val=asgn[itemKey]||asgn[n];
+        if(!val) return;
+        fromAssignmentMeta.push({
+          alias:n, fullname:n, qty:1,
+          serial:val&&val!==1?String(val):null,
+          makat:getMakat(n)||null,
+          soldierName:"⏳ "+sol.name+" (לא חתם)",
+          soldierId:solId, signed:false,
+        });
+      });
+    });
     const fromUnitItems = [];
     Object.values(db.unitItems||{}).forEach(v=>{
       if((v.cabName||"")=== cabName){
@@ -7895,7 +7918,7 @@ function CabinetsTab({db, setDb, auth}){
         }
       }
     });
-    return [...custom, ...fromUnitItems];
+    return [...custom, ...fromUnitItems, ...fromAssignmentMeta];
   }
   function saveItems(cabName, items){
     const ndb={...db, cabinets:{...(db.cabinets||{}), [cabName]:items}};
@@ -9924,9 +9947,32 @@ function MyStockTab({db, setDb, soldiers, auth}){
         const item = liveData.find(x=>x.name===expandedItem);
         if(!item) return null;
         const allRelated = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name||"")=== expandedItem);
+        // הוסף חיילים שמשוייך להם הפריט מ-assignments (לא נשק בלבד)
+        const signedIds = new Set(Object.keys(db.signatures||{}));
+        const allSolsAll=[...Object.values(db.customSoldiers||{}),...soldiers];
+        const assignedRows = [];
+        allSolsAll.forEach(sol=>{
+          const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
+          Object.entries(asgn||{}).forEach(([k,val])=>{
+            if(cleanItemName(k)!==expandedItem) return;
+            // לא להציג אם כבר ב-unitItems (t=soldier)
+            const alreadyInUnitItems = allRelated.some(([,v])=>(v.t||v.assignedType)==="soldier"&&(v.si||v.assignedSoldierId)===sol.id&&cleanItemName(v.n||v.name||"")===expandedItem);
+            if(alreadyInUnitItems) return;
+            const meta=(db.assignmentMeta||{})[sol.id]||{};
+            const metaKey=Object.keys(meta).find(mk=>cleanItemName(mk)===expandedItem);
+            const cabName=metaKey?meta[metaKey].cabName||"":"";
+            assignedRows.push(["asgn_"+sol.id+"_"+k, {
+              n:expandedItem, s:val&&val!==1?String(val):null,
+              u:sol.unit, t:"soldier", si:sol.id, sn:sol.name,
+              cabName, _isAssignment:true, _soldierId:sol.id, _itemKey:k,
+              signed:signedIds.has(sol.id),
+            }]);
+          });
+        });
+        const allRelatedWithSoldiers = [...allRelated, ...assignedRows.filter(([,v])=>!v.signed)];
         // כשבוחרים פלוגה — מסנן אוטומטית לפלוגה הנבחרת
         const activeUnitFilter = filterUnit!=="הכל" ? filterUnit : serialUnitFilter;
-        const relatedItems = allRelated.filter(([,v])=>{
+        const relatedItems = allRelatedWithSoldiers.filter(([,v])=>{
           const unit=v.u||v.unit||"";
           const serial=String(v.s||v.serial||"");
           const unitOk = activeUnitFilter==="הכל" || unit===activeUnitFilter;
@@ -10010,10 +10056,23 @@ function MyStockTab({db, setDb, soldiers, auth}){
                       {/* ארון */}
                       <select value={v.cabName||""} onChange={e=>{
                         const cabName=e.target.value;
-                        const nItems={...db.unitItems,[id]:{...db.unitItems[id],cabName}};
-                        const ndb={...db,unitItems:nItems};
-                        saveDB(ndb); setDb(ndb);
-                        fbSet("db/unitItems/"+id+"/cabName", cabName||null).catch(()=>{});
+                        if(v._isAssignment){
+                          // שמור ב-assignmentMeta
+                          const solId=v._soldierId; const itemKey=v._itemKey;
+                          const newMeta={...(db.assignmentMeta||{})};
+                          if(!newMeta[solId]) newMeta[solId]={};
+                          const cleanKey=cleanItemName(itemKey);
+                          const existingKey=Object.keys(newMeta[solId]).find(k=>cleanItemName(k)===cleanKey)||itemKey;
+                          newMeta[solId]={...newMeta[solId],[existingKey]:{...(newMeta[solId][existingKey]||{}),cabName}};
+                          const ndb={...db,assignmentMeta:newMeta};
+                          saveDB(ndb); setDb(ndb);
+                          fbSet("db/assignmentMeta/"+solId+"/"+existingKey+"/cabName", cabName||null).catch(()=>{});
+                        } else {
+                          const nItems={...db.unitItems,[id]:{...db.unitItems[id],cabName}};
+                          const ndb={...db,unitItems:nItems};
+                          saveDB(ndb); setDb(ndb);
+                          fbSet("db/unitItems/"+id+"/cabName", cabName||null).catch(()=>{});
+                        }
                         logAction("שיוך_ארון", expandedItem+(serial!=="—"?" ("+serial+")":"")+" → "+(cabName||"ללא ארון"), auth?.name);
                       }} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"2px 6px",minWidth:110,maxWidth:140}}>
                         <option value="">📦 ללא ארון</option>
