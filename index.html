@@ -778,13 +778,17 @@ function canViewVisut(auth,db){
 function getAllCabinets(db, soldierUnit){
   const seen=new Set(); const all=[];
   const UNIT_ORDER=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-  const UNIT_CABINETS_DEF={"א":["כנה א"],"ב":["כנה ב"],"ג":["כנה ג"],"מסייעת":["כנה מסייעת"],"אגמ":["כנה אגמ"],"פלסמ":["כנה פלסמ"],"גדודי":["כנה גדודי","ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
+  const UNIT_CABINETS_DEF={"א":["כנה א","ארון א"],"ב":["כנה ב","ארון ב"],"ג":["כנה ג","ארון ג"],"מסייעת":["כנה מסייעת","ארון מסייעת","מסייעת 1","מסייעת 2","מסייעת 3","ארון רחפנים מסייעת"],"אגמ":["כנה אגמ","ארון אגמ 1","ארון אגמ 2 לא מוקצים","ארון רחפנים אגמ"],"פלסמ":["כנה פלסמ","ארון אגמ-פלסמ","אגמ-פלסמ"],"גדודי":["כנה גדודי","ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
   // מיזוג: Firebase + ברירות מחדל לכל פלוגה שאין לה Firebase
   const fbCabs = db.cabinetNames||{};
   const cabSrc={};
   UNIT_ORDER.forEach(u=>{
     // אם יש ב-Firebase — השתמש בזה, אחרת ברירת מחדל
-    cabSrc[u] = (fbCabs[u]&&fbCabs[u].length>0) ? fbCabs[u] : (UNIT_CABINETS_DEF[u]||[]);
+    // מיזוג: Firebase + ברירת מחדל (לא החלפה)
+    const fbList = fbCabs[u]||[];
+    const defList = UNIT_CABINETS_DEF[u]||[];
+    const merged2 = [...new Set([...fbList,...defList])];
+    cabSrc[u] = merged2;
   });
   // סדר: פלוגת החייל קודם, שאר הפלוגות, גדודי אחרון
   const showAll = !soldierUnit || soldierUnit==="הכל";
@@ -6146,6 +6150,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
   const [sigSortDir,setSigSortDir]=useState("desc"); // desc=מוכן ביותר קודם
+  const [soldierSortDir,setSoldierSortDir]=useState("none"); // none=ללא מיון, desc=מוכן קודם
   const [filterSquad,setFilterSquad]=useState("הכל");
   const [selSoldier,setSelSoldier]=useState(null);
   const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
@@ -6363,7 +6368,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="soldiers"&&perms.canViewSoldiers!==false&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-              <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חיילים ({filtered.length})</h2>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חיילים ({filtered.length})</h2>
+                <button onClick={()=>setSoldierSortDir(d=>d==="desc"?"asc":"desc")}
+                  title={soldierSortDir==="desc"?"מוכן ביותר קודם":"פחות מוכן קודם"}
+                  style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:13,color:"var(--color-text-secondary)"}}>
+                  {soldierSortDir==="desc"?"↓ מוכן":"↑ פחות מוכן"}
+                </button>
+              </div>
               <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setAddModal(true)} style={{...S.btn("green"),fontSize:"var(--text-base)"}}>👤 הוסף חייל</button>
               {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),fontSize:"var(--text-base)"}}>➕ משיכה / החזרה</button>}
@@ -6382,7 +6394,18 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     {["#","מ. אישי","שם","פלוגה","נשקים","חתם",""].map(h=><th key={h} style={S.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {filtered.slice(0,100).map((s,_idx)=>{
+                    {(soldierSortDir!=="none"
+                      ? [...filtered].sort((a,b)=>{
+                          function solScore(s){
+                            const hasSig=!!db.signatures?.[s.id];
+                            const ts=getTestStatus(db,s.id);
+                            const ef=Object.values(db.exitForms||{}).filter(f=>f.soldierId===s.id);
+                            return (hasSig?1:0)+(ts.valid?1:0)+(ef.some(f=>f.soldierSig)?1:0)+(ef.some(f=>f.status==="אושר")?1:0);
+                          }
+                          return soldierSortDir==="desc"?solScore(b)-solScore(a):solScore(a)-solScore(b);
+                        })
+                      : filtered
+                    ).slice(0,100).map((s,_idx)=>{
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       // סקר נוכחות — בדוק האם יש סקר פתוח שהחייל ענה עליו
                       const latestPoll = Object.values(db.polls||{}).sort((a,b)=>b.createdAt>a.createdAt?1:-1)[0];
@@ -7773,7 +7796,7 @@ function ActivityLogTab({db}){
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
               <thead>
                 <tr style={{background:"var(--color-bg-canvas)"}}>
-                  {["שעה","תאריך","סוג","פרטים","מבצע"].map(h=>(
+                  {["#","שעה","תאריך","סוג","פרטים","מבצע"].map(h=>(
                     <th key={h} style={S.th}>{h}</th>
                   ))}
                 </tr>
@@ -7787,6 +7810,7 @@ function ActivityLogTab({db}){
                       style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)",borderBottom:"1px solid var(--color-border-muted)"}}
                       onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)"}>
+                      <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{i+1}</td>
                       <td style={{...S.td,fontFamily:"monospace",fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>{log.time||"—"}</td>
                       <td style={{...S.td,fontSize:"var(--text-sm)",color:"var(--color-text-muted)",whiteSpace:"nowrap"}}>{log.date||"—"}</td>
                       <td style={{...S.td,whiteSpace:"nowrap"}}>
@@ -10631,6 +10655,7 @@ function SummaryTables({db, soldiers}){
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)"}}>
               <thead>
                 <tr style={{background:"var(--color-bg-canvas)"}}>
+                  <th style={S.th}>#</th>
                   <th style={S.th}>מק"ט</th>
                   <th style={S.th}>אמצעי</th>
                   <th style={{...S.th,textAlign:"center",fontWeight:800}}>סהכ</th>
@@ -10640,6 +10665,7 @@ function SummaryTables({db, soldiers}){
               <tbody>
                 {qtyData.map(([name,v],idx)=>(
                   <tr key={name} style={{background:idx%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)"}}>
+                    <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{idx+1}</td>
                     <td style={{...S.td,fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{v.makat||"—"}</td>
                     <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(name)?700:400,color:WEAPON_KEYS.includes(name)?"var(--color-accent-fg)":"var(--color-text-primary)"}}>{name}</td>
                     <td style={{...S.td,textAlign:"center",fontWeight:800,fontSize:"var(--text-base)"}}>{v.total}</td>
