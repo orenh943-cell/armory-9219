@@ -6428,12 +6428,13 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               const ts=getTestStatus(db,s.id);
               if(!ts.valid) return false;
               const exitForms=db.exitForms||{};
-              return Object.values(exitForms).some(f=>f.soldierId===s.id&&f.status==="אושר");
+              // ממתין לאישור מפ"ד/מג"ד = מוכן להחתמה
+              return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="ממתין_מפ"||f.status==="ממתין_מגד"));
             }).length===0&&(
               <div style={{textAlign:"center",padding:"32px 16px",color:"var(--color-text-muted)"}}>
                 <div style={{fontSize:36,marginBottom:8}}>✍️</div>
                 <div style={{fontWeight:700,marginBottom:4}}>אין חיילים מוכנים להחתמה</div>
-                <div style={{fontSize:"var(--text-sm)"}}>חייל יופיע כאן רק לאחר: נשק משוייך + בוחן תקף + טופס יציאה מאושר</div>
+                <div style={{fontSize:"var(--text-sm)"}}>חייל יופיע כאן רק לאחר: נשק משוייך + בוחן תקף + טופס יציאה הממתין לאישור מפ"ד/מג"ד</div>
               </div>
             )}
           </div>
