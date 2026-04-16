@@ -6180,11 +6180,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   // badge = חיילים שעומדים בכל 3 תנאים ועדיין לא חתמו
   const unsigned=useMemo(()=>soldiers.filter(s=>{
     if(db.signatures?.[s.id]) return false;
-    if(!Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k))) return false;
+    const liveAsgn=db._assignmentsLoaded?(db.assignments?.[s.id]||{}):(db.assignments?.[s.id]||s.assigned||{});
+    if(!Object.keys(liveAsgn).some(k=>WEAPON_KEYS.includes(k))) return false;
     const ts=getTestStatus(db,s.id);
     if(!ts.valid) return false;
     const exitForms=db.exitForms||{};
-    return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="ממתין_מפ"||f.status==="ממתין_מגד"||f.status==="אושר"));
+    return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="אושר"||f.status==="ממתין_מפ"||f.status==="ממתין_מגד"));
   }).length,[soldiers,db]);
   const exitFormsCount=useMemo(()=>{
     const forms=db.exitForms||{};
@@ -6468,20 +6469,23 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               </select>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {(()=>{ const debugSoldier = soldiers.find(s=>s.id==="8369862"); if(debugSoldier){ const lA=db._assignmentsLoaded?(db.assignments?.[debugSoldier.id]||{}):(db.assignments?.[debugSoldier.id]||debugSoldier.assigned||{}); const ts=getTestStatus(db,debugSoldier.id); const ef=Object.values(db.exitForms||{}).filter(f=>f.soldierId===debugSoldier.id); console.log("[SIG_DEBUG] ליאור עזרא - נשק:", Object.keys(lA).filter(k=>WEAPON_KEYS.includes(k)), "בוחן תקף:", ts.valid, "טפסי יציאה:", ef.map(f=>f.status)); } return null; })()}
               {filtered.filter(s=>{
-                // חייב נשק
-                const hasWeapon=Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k));
+                // חייב נשק — מה-assignments החיים (Firebase), לא הסטטי
+                const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
+                const hasWeapon=Object.keys(liveAssigned).some(k=>WEAPON_KEYS.includes(k));
                 if(!hasWeapon) return false;
                 // חייב בוחן תקף
                 const ts=getTestStatus(db,s.id);
                 if(!ts.valid) return false;
-                // חייב טופס יציאה מאושר
+                // חייב טופס יציאה — ממתין לאישור או אושר
                 const exitForms=db.exitForms||{};
-                const hasApprovedExit=Object.values(exitForms).some(f=>f.soldierId===s.id&&f.status==="אושר");
-                if(!hasApprovedExit) return false;
+                const hasExit=Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="אושר"||f.status==="ממתין_מפ"||f.status==="ממתין_מגד"));
+                if(!hasExit) return false;
                 return true;
               }).map(s=>{
-                const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
+                const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
+                const weps=Object.entries(liveAssigned).filter(([k])=>WEAPON_KEYS.includes(k));
                 const sig=db.signatures?.[s.id];
                 return (
                   <div key={s.id} style={{...S.card,marginBottom:0,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
