@@ -8315,19 +8315,28 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
       Object.entries(asgn||{}).forEach(([k,v])=>{
         if(isSerial(v)){
-          rows.push({name:cleanItemName(k), serial:String(v), soldierName:s.name, soldierId:s.id, unit:s.unit, source:"assigned"});
+          rows.push({name:cleanItemName(k), serial:String(v), soldierName:s.name, soldierId:s.id, unit:s.unit, source:"assigned", key:null});
         }
       });
     });
-    // From ALL_SERIALS not assigned
     const usedSerials = new Set(rows.map(r=>r.serial));
+    // From unitItems (פנוי — not assigned to soldier) — includes key for editing
+    Object.entries(db.unitItems||{}).forEach(([key,v])=>{
+      const s=v.s||v.serial;
+      const t=v.t||v.assignedType||"unit";
+      if(s && isSerial(s) && t==="unit" && !usedSerials.has(String(s))){
+        usedSerials.add(String(s));
+        rows.push({name:cleanItemName(v.n||v.name||""), serial:String(s), soldierName:"—", soldierId:null, unit:v.u||v.unit||"גדודי", source:"free", key});
+      }
+    });
+    // From ALL_SERIALS not yet in rows
     ALL_SERIALS.forEach(s=>{
       if(!usedSerials.has(String(s.serial))){
-        rows.push({name:s.name, serial:String(s.serial), soldierName:"—", soldierId:null, unit:s.unit, source:"free"});
+        rows.push({name:s.name, serial:String(s.serial), soldierName:"—", soldierId:null, unit:s.unit, source:"free", key:null});
       }
     });
     return rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||a.serial.localeCompare(b.serial));
-  },[db.assignments, db.customSoldiers, soldiers]);
+  },[db.assignments, db.customSoldiers, db.unitItems, soldiers]);
 
   const filteredSerials = React.useMemo(()=>{
     return allSerialRows.filter(r=>{
@@ -8621,6 +8630,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                   <th style={{...S.th}}>חייל</th>
                   <th style={{...S.th,width:80}}>פלוגה</th>
                   <th style={{...S.th,width:80}}>סטטוס</th>
+                  <th style={{...S.th,width:120}}>פעולות</th>
                 </tr>
               </thead>
               <tbody>
@@ -8636,6 +8646,29 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                       <span style={{background:r.source==="assigned"?"var(--color-warning-bg)":"var(--color-success-bg)",color:r.source==="assigned"?"var(--color-warning-fg)":"var(--color-success-fg)",borderRadius:10,padding:"2px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>
                         {r.source==="assigned"?"👤 משוייך":"🟢 פנוי"}
                       </span>
+                    </td>
+                    <td style={{...S.td}}>
+                      {r.source==="free"&&r.key&&(
+                        <select defaultValue="" onChange={e=>{
+                          if(!e.target.value) return;
+                          const newUnit=e.target.value;
+                          e.target.value="";
+                          requirePin("העבר "+r.name+" ("+r.serial+") לפלוגה "+newUnit, ()=>{
+                            const nItems={...db.unitItems,[r.key]:{...db.unitItems[r.key],u:newUnit,unit:newUnit}};
+                            const ndb={...db,unitItems:nItems};
+                            saveDB(ndb); setDb(ndb);
+                            fbSet("db/unitItems/"+r.key+"/u", newUnit).catch(()=>{});
+                            fbSet("db/unitItems/"+r.key+"/unit", newUnit).catch(()=>{});
+                            logAction("שינוי_שיוך_פלוגה", r.name+" ("+r.serial+") הועבר לפלוגה "+newUnit, auth?.name);
+                          });
+                        }} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 6px",minWidth:100}}>
+                          <option value="">🔄 שנה שיוך...</option>
+                          {["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].filter(u=>u!==r.unit).map(u=>(
+                            <option key={u} value={u}>{u==="גדודי"?"🏛️ גדודי":"פלוגה "+u}</option>
+                          ))}
+                        </select>
+                      )}
+                      {r.source==="assigned"&&<span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>משוייך לחייל</span>}
                     </td>
                   </tr>
                 ))}
