@@ -7772,7 +7772,14 @@ function CabinetsTab({db, setDb, auth}){
       const unit = cabName.replace("כנה ","");
       const signedIds = new Set(Object.keys(db.signatures||{}));
       const items = [];
-      // 1. unitItems t=unit
+      // 1. unitItems t=unit — נשק בארמון (לא יצא לחייל)
+      // בנה סט של כל הצ שיצאו לחיילים (assignments)
+      const allSols2=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+      const assignedSerials=new Set();
+      allSols2.forEach(sol=>{
+        const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
+        Object.values(asgn||{}).forEach(val=>{ if(val&&val!==1) assignedSerials.add(String(val)); });
+      });
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
         const u=v.u||v.unit||"";
@@ -7780,6 +7787,8 @@ function CabinetsTab({db, setDb, auth}){
         if(!WEAPON_KEYS.includes(n)) return;
         if(u!==unit || t!=="unit") return;
         const serial=v.s||v.serial||null;
+        // אם הצ מופיע ב-assignments של חייל — הוא אצל החייל, לא בארמון
+        if(serial && assignedSerials.has(String(serial))) return;
         items.push({
           alias:n, fullname:n, qty:1,
           serial:serial?String(serial):null,
@@ -8291,7 +8300,7 @@ function VisutTab({db, setDb, soldiers, auth}){
       return n===cleanItemName(req.itemName)&&u===req.fromUnit&&t==="unit";
     }).map(([k])=>k);
     for(let i=0;i<Math.min(qty,sourceKeys.length);i++){
-      newUnitItems[sourceKeys[i]]={...newUnitItems[sourceKeys[i]],u:req.toUnit,unit:req.toUnit};
+      newUnitItems[sourceKeys[i]]={...newUnitItems[sourceKeys[i]],u:req.toUnit,unit:req.toUnit,t:"unit",assignedType:"unit"};
       moved++;
     }
     // עדכן סטטוס בקשה
@@ -9216,7 +9225,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                           const newUnit=e.target.value;
                           e.target.value="";
                           requirePin("העבר "+r.name+" ("+r.serial+") לפלוגה "+newUnit, ()=>{
-                            const nItems={...db.unitItems,[r.key]:{...db.unitItems[r.key],u:newUnit,unit:newUnit}};
+                            const nItems={...db.unitItems,[r.key]:{...db.unitItems[r.key],u:newUnit,unit:newUnit,t:"unit",assignedType:"unit"}};
                             const ndb={...db,unitItems:nItems};
                             saveDB(ndb); setDb(ndb);
                             fbSet("db/unitItems/"+r.key+"/u", newUnit).catch(()=>{});
@@ -9938,7 +9947,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         <select value="" onChange={e=>{
                           if(!e.target.value) return;
                           const newU=e.target.value;
-                          const nItems={...db.unitItems,[id]:{...db.unitItems[id],u:newU}};
+                          const nItems={...db.unitItems,[id]:{...db.unitItems[id],u:newU,unit:newU,t:"unit",assignedType:"unit"}};
                           const ndb={...db,unitItems:nItems};
                           saveDB(ndb); setDb(ndb);
                           fbSet("db/unitItems/"+id+"/u", newU).catch(()=>{});
