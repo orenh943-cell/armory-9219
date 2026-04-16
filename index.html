@@ -3124,10 +3124,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
             logAction("חתימה_לידי", "חתימה לידי של "+soldier.name+" ("+soldier.id+")", auth?.name);
             setShowSignHere(false);
           };
+          console.log("[DEBUG] issuerSigUsername:", issuerSigUsername, "auth.username:", auth?.username, "userSigs keys:", Object.keys(db.userSigs||{}));
           if(issuerSigUsername){
             fbGet("db/userSigs/"+issuerSigUsername).then(sig=>{
+              console.log("[DEBUG] fbGet result:", sig?"HAS_SIG":"NULL");
               _saveSignHere(sig || db.userSigs?.[issuerSigUsername] || null);
-            }).catch(()=>{ _saveSignHere(db.userSigs?.[issuerSigUsername]||null); });
+            }).catch((e)=>{ console.log("[DEBUG] fbGet err:",e); _saveSignHere(db.userSigs?.[issuerSigUsername]||null); });
           } else {
             _saveSignHere(null);
           }
