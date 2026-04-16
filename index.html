@@ -3115,13 +3115,22 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
             const entry=Object.entries(allU).find(([uname,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[uname]?._roleTitle==="אחראי ארמון"));
             if(entry){const [uname,u]=entry;issuerSigUsername=uname;issuerDisplay=u.name||uname;}
           }
-          const issuerSig=issuerSigUsername?(db.userSigs?.[issuerSigUsername]||null):null;
-          const sigEntry={sigData,signedAt,issuerName:issuerDisplay,...(issuerSig?{issuerSig}:{})};
-          const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
-          saveDB(ndb); onSave(ndb);
-          fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
-          logAction("חתימה_לידי", "חתימה לידי של "+soldier.name+" ("+soldier.id+")", auth?.name);
-          setShowSignHere(false);
+          // שלוף חתימה מ-Firebase ישירות (לא תלוי ב-db המקומי)
+          const _saveSignHere = (issuerSig) => {
+            const sigEntry={sigData,signedAt,issuerName:issuerDisplay,...(issuerSig?{issuerSig}:{})};
+            const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+            saveDB(ndb); onSave(ndb);
+            fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+            logAction("חתימה_לידי", "חתימה לידי של "+soldier.name+" ("+soldier.id+")", auth?.name);
+            setShowSignHere(false);
+          };
+          if(issuerSigUsername){
+            fbGet("db/userSigs/"+issuerSigUsername).then(sig=>{
+              _saveSignHere(sig || db.userSigs?.[issuerSigUsername] || null);
+            }).catch(()=>{ _saveSignHere(db.userSigs?.[issuerSigUsername]||null); });
+          } else {
+            _saveSignHere(null);
+          }
         }}/>
       </Modal>
     )}
@@ -3163,13 +3172,19 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 const entry2=Object.entries(allU2).find(([uname,u])=>(u.roleTitle==="אחראי ארמון")||(db.userPerms?.[uname]?._roleTitle==="אחראי ארמון"));
                 if(entry2){const [uname,u]=entry2;issuerSigUsername2=uname;issuerDisplay2=u.name||uname;}
               }
-              const issuerSig2=issuerSigUsername2?(db.userSigs?.[issuerSigUsername2]||null):null;
-              const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems),issuerName:issuerDisplay2,...(issuerSig2?{issuerSig:issuerSig2}:{})};
-              const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
-              saveDB(ndb); onSave(ndb);
-              fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
-              logAction("חתימה_חלקית", "חתימה חלקית של "+soldier.name+" על: "+Object.keys(partialItems).map(k=>cleanItemName(k)).join(", "), auth?.name);
-              setShowPartialSign(false); setPartialSel([]);
+              const _savePartial = (issuerSig2) => {
+                const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems),issuerName:issuerDisplay2,...(issuerSig2?{issuerSig:issuerSig2}:{})};
+                const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+                saveDB(ndb); onSave(ndb);
+                fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+                logAction("חתימה_חלקית", "חתימה חלקית של "+soldier.name+" על: "+Object.keys(partialItems).map(k=>cleanItemName(k)).join(", "), auth?.name);
+                setShowPartialSign(false); setPartialSel([]);
+              };
+              if(issuerSigUsername2){
+                fbGet("db/userSigs/"+issuerSigUsername2).then(sig=>{
+                  _savePartial(sig || db.userSigs?.[issuerSigUsername2] || null);
+                }).catch(()=>{ _savePartial(db.userSigs?.[issuerSigUsername2]||null); });
+              } else { _savePartial(null); }
             }}/>
           </div>
         )}
@@ -3386,15 +3401,21 @@ function InPersonSignModal({soldier, db, onSave, auth, onClose}){
         issuerDisplay=u.name||uname;
       }
     }
-    const issuerSig = issuerSigUsername ? (db.userSigs?.[issuerSigUsername]||null) : null;
-    const sigEntry = {sigData:sig, signedAt, issuerName:issuerDisplay, ...(issuerSig?{issuerSig}:{})};
-    fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
-    const ndb = {...db, signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
-    try{localStorage.setItem("armory_9219_v4",JSON.stringify(ndb));}catch(e){}
-    onSave(ndb);
-    logAction("חתימה", soldier.name+" חתם ליד על נשק", auth?.name||"מנהל");
-    setSigData(sig);
-    setDone(true);
+    const _saveInPerson = (issuerSig) => {
+      const sigEntry = {sigData:sig, signedAt, issuerName:issuerDisplay, ...(issuerSig?{issuerSig}:{})};
+      fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
+      const ndb = {...db, signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
+      try{localStorage.setItem("armory_9219_v4",JSON.stringify(ndb));}catch(e){}
+      onSave(ndb);
+      logAction("חתימה", soldier.name+" חתם ליד על נשק", auth?.name||"מנהל");
+      setSigData(sig);
+      setDone(true);
+    };
+    if(issuerSigUsername){
+      fbGet("db/userSigs/"+issuerSigUsername).then(sig2=>{
+        _saveInPerson(sig2 || db.userSigs?.[issuerSigUsername] || null);
+      }).catch(()=>{ _saveInPerson(db.userSigs?.[issuerSigUsername]||null); });
+    } else { _saveInPerson(null); }
   }
 
   if(done) return (
