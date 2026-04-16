@@ -768,7 +768,44 @@ function canSignAdmin(auth){
   const u=auth?.username||""; const n=auth?.name||"";
   return u==="אורן"||u==="מתן"||u==="יעקב"||n==="אורן חלפון"||n==="מתן ניסים דיין"||n==="יעקב שרון";
 }
-const ARMORY_DASH_PIN="7680832"; // מ.א אורן
+const ARMORY_DASH_PIN="7680832";
+
+// ===== הגנות שיוך =====
+function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
+  const warnings = [];
+  const allSols = [...Object.values(db.customSoldiers||{}), ...soldiers];
+
+  // 1. האם צ זה כבר משוייך למישהו?
+  if(serial && isSerial(serial)){
+    const serialStr = String(serial);
+    for(const s of allSols){
+      if(s.id === targetSoldier?.id) continue;
+      const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+      for(const [k,v] of Object.entries(asgn||{})){
+        if(isSerial(v) && String(v)===serialStr){
+          warnings.push({type:"serial_conflict", msg:"⚠️ צ/סידורי "+serialStr+" כבר משוייך ל"+s.name+" ("+s.id+") — "+cleanItemName(k), level:"error"});
+          break;
+        }
+      }
+    }
+  }
+
+  // 2. האם הפריט מוקצה לפלוגה שונה ב-unitItems?
+  if(targetSoldier){
+    const unitItems = Object.values(db.unitItems||{});
+    const relatedUnit = unitItems.find(v=>{
+      const n=v.n||v.name||"";
+      const u=v.u||v.unit||"";
+      return cleanItemName(n)===cleanItemName(itemName) && u && u!=="גדודי" && u!==targetSoldier.unit;
+    });
+    if(relatedUnit){
+      const unit=relatedUnit.u||relatedUnit.unit;
+      warnings.push({type:"unit_conflict", msg:"ℹ️ פריט זה מוקצה לפלוגה "+unit+" — האם לשייך לפלוגה "+targetSoldier.unit+"?", level:"warning"});
+    }
+  }
+
+  return warnings;
+} // מ.א אורן
 function canViewArmoryDash(auth,db){
   // אורן תמיד, + משתמשים שהוגדרו ב-db.armoryDashUsers
   const u=auth?.username||"";
@@ -2163,6 +2200,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const [locNote,setLocNote]=useState("");
   const [view,setView]=useState("profile");
   const [showDoc,setShowDoc]=useState(false);
+  const [guardWarnings,setGuardWarnings]=useState([]); // [{type,msg,level,onConfirm}]
   const [showSignHere,setShowSignHere]=useState(false);
   const [showPartialSign,setShowPartialSign]=useState(false);
   const [partialSel,setPartialSel]=useState([]);
@@ -2193,8 +2231,22 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
   const exitForms=db.exitForms||{};
   const soldierExitForms=Object.entries(exitForms).filter(([,f])=>f.soldierId===soldier.id).sort(([,a],[,b])=>b.createdAt?.localeCompare?.(a.createdAt)||0);
 
-  function doCheckout(){
+  function doCheckout(forceConfirmed=false){
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
+    // בדוק הגנות לפני ביצוע
+    if(!forceConfirmed){
+      const allSols=[...Object.values(db.customSoldiers||{}),...soldiers];
+      const allWarnings=[];
+      valid.forEach(i=>{
+        const serial=i.serial&&isSerial(i.serial)?i.serial:null;
+        const warns=checkAssignmentGuards(db,allSols,i.name,serial,soldier);
+        allWarnings.push(...warns);
+      });
+      if(allWarnings.length>0){
+        setGuardWarnings(allWarnings.map(w=>({...w, onConfirm:()=>{setGuardWarnings([]);doCheckout(true);}})));
+        return;
+      }
+    }
     const na={...assigned};
     valid.forEach(i=>{
       const qty=Math.max(1,parseInt(i.qty)||1);
@@ -2734,6 +2786,36 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
         </div>
       )}
     {showDoc&&<SignatureDocument soldier={soldier} db={db} onClose={()=>setShowDoc(false)}/>}
+    {guardWarnings.length>0&&(
+      <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{...S.card,maxWidth:440,width:"100%",padding:24}}>
+          <div style={{fontSize:36,textAlign:"center",marginBottom:8}}>⚠️</div>
+          <div style={{fontWeight:800,fontSize:"var(--text-lg)",textAlign:"center",marginBottom:14}}>אזהרת שיוך</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+            {guardWarnings.map((w,i)=>(
+              <div key={i} style={{padding:"10px 14px",borderRadius:8,
+                background:w.level==="error"?"var(--color-danger-bg)":"var(--color-warning-bg)",
+                border:`1px solid ${w.level==="error"?"var(--color-danger-fg)":"var(--color-warning-fg)"}`,
+                color:w.level==="error"?"var(--color-danger-fg)":"var(--color-warning-fg)",
+                fontSize:"var(--text-sm)",fontWeight:600}}>
+                {w.msg}
+              </div>
+            ))}
+          </div>
+          {guardWarnings.some(w=>w.level==="error")?(
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setGuardWarnings([])} style={{...S.btn("danger"),flex:1,padding:"10px 0",fontWeight:700}}>✕ ביטול</button>
+              <button onClick={guardWarnings[0]?.onConfirm} style={{...S.btn("warning"),flex:1,padding:"10px 0",fontWeight:700}}>⚠️ שייך בכל זאת</button>
+            </div>
+          ):(
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setGuardWarnings([])} style={{...S.btn("neutral"),flex:1,padding:"10px 0"}}>ביטול</button>
+              <button onClick={guardWarnings[0]?.onConfirm} style={{...S.btn("success"),flex:1,padding:"10px 0",fontWeight:700}}>✅ אישור ושיוך</button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     {showSignHere&&(
       <Modal title={"✍️ חתום לידי — "+soldier.name} onClose={()=>setShowSignHere(false)} wide>
         <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>חתימת החייל על כל הציוד המשוייך אליו</div>
@@ -5811,6 +5893,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     ...(perms.canViewBroken!==false?[{id:"broken",label:"תקולים",icon:"🔧"}]:[]),
     ...(perms.canViewDaily!==false?[{id:"daily",label:"יומי",icon:"📋"}]:[]),
     ...(perms.canViewInventory!==false?[{id:"inventory",label:"מלאי",icon:"📦"}]:[]),
+    ...(perms.canViewInventory!==false?[{id:"armorystock",label:"מלאי ארמון",icon:"📋"}]:[]),
     ...(canViewArmoryDash(auth,db)?[{id:"mystock",label:"דשבורד ארמון",icon:"🗄️"}]:[]),
     ...(perms.canViewCabinets!==false?[{id:"cabinets",label:"ארונות",icon:"🗄️"}]:[]),
     ...(perms.canFillExitForm||perms.canApproveExitForm||perms.canCommanderDecide?[{id:"exitform",label:"יציאה הביתה",icon:"🏠"}]:[]),
@@ -6170,6 +6253,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         )}
         {tab==="cabinets"&&(
           <CabinetsTab db={db} setDb={setDb} auth={auth}/>
+        )}
+        {tab==="armorystock"&&(
+          <MyStockTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="mystock"&&(
           canViewArmoryDash(auth,db)
@@ -8155,19 +8241,65 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       </div>
 
       {/* ---- STAT CARDS ---- */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
-        {[
-          {label:"סוגי פריטים",val:totalTypes,color:"var(--color-accent-fg)",icon:"📋"},
-          {label:"סהכ במלאי",val:totalItems,color:"var(--color-accent-fg)",icon:"📦"},
-          {label:"בשימוש",val:totalAssigned,color:"var(--color-warning-fg)",icon:"👤"},
-          {label:"פנוי",val:totalFree,color:"var(--color-success-fg)",icon:"🟢"},
-        ].map(s=>(
-          <div key={s.label} style={{...S.card,textAlign:"center",padding:"14px 8px",marginBottom:0,border:`1px solid var(--color-border-muted)`}}>
-            <div style={{fontSize:28,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4}}>{s.icon} {s.label}</div>
+      {(()=>{
+        // כפילויות צ/סידורי
+        const serialMap={};
+        const allSols2=[...Object.values(db.customSoldiers||{}),...soldiers];
+        allSols2.forEach(s=>{
+          const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+          Object.entries(asgn||{}).forEach(([k,v])=>{
+            if(isSerial(v)){
+              const key=cleanItemName(k)+"|"+String(v);
+              if(!serialMap[key]) serialMap[key]=[];
+              serialMap[key].push({soldierName:s.name,soldierId:s.id});
+            }
+          });
+        });
+        const duplicateSerials=Object.entries(serialMap).filter(([,arr])=>arr.length>1);
+
+        // פנוי = לא משוייך לאף חייל ולא לפלוגה (רק ארמון גדודי)
+        const gadudiFree = Math.max(0,
+          master.reduce((s,i)=>s+i.total,0)
+          - Object.values(liveAssigned).reduce((s,v)=>s+v,0)
+        );
+
+        const stats = [
+          {label:"סוגי פריטים",val:totalTypes,color:"var(--color-accent-fg)",icon:"📋",onClick:null},
+          {label:"סהכ במלאי",val:totalItems,color:"var(--color-accent-fg)",icon:"📦",onClick:null},
+          {label:"בשימוש",val:totalAssigned,color:"var(--color-warning-fg)",icon:"👤",onClick:null},
+          {label:"פנוי (ארמון גדודי)",val:gadudiFree,color:"var(--color-success-fg)",icon:"🟢",onClick:null},
+          {label:duplicateSerials.length>0?"כפילויות צ/סידורי ⚠️":"ללא כפילויות ✅",
+           val:duplicateSerials.length,
+           color:duplicateSerials.length>0?"var(--color-danger-fg)":"var(--color-success-fg)",
+           icon:duplicateSerials.length>0?"🔴":"✅",
+           onClick:duplicateSerials.length>0?()=>setView("serials"):null,
+           extra:duplicateSerials},
+        ];
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8,marginBottom:16}}>
+            {stats.map(s=>(
+              <div key={s.label} onClick={s.onClick||undefined}
+                style={{...S.card,textAlign:"center",padding:"14px 8px",marginBottom:0,
+                  border:`1px solid ${s.color}40`,
+                  cursor:s.onClick?"pointer":"default",
+                  background:s.extra?.length>0?"var(--color-danger-bg)":undefined}}>
+                <div style={{fontSize:28,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div>
+                <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4}}>{s.icon} {s.label}</div>
+                {s.extra?.length>0&&(
+                  <div style={{marginTop:6,fontSize:9,color:"var(--color-danger-fg)"}}>
+                    {s.extra.slice(0,2).map(([key,arr])=>(
+                      <div key={key} style={{marginBottom:2}}>
+                        {key.split("|")[0]} צ:{key.split("|")[1]} — {arr.map(x=>x.soldierName).join(", ")}
+                      </div>
+                    ))}
+                    {s.extra.length>2&&<div>+{s.extra.length-2} נוספים</div>}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* ---- USERS VIEW ---- */}
       {view==="users"&&(
