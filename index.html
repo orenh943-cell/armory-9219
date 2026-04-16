@@ -4219,7 +4219,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:"var(--color-bg-subtle)"}}>
-                  {["אמצעי","סידורי","חייל","מ.א","פלוגה","סטטוס"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                  {["#","אמצעי","סידורי","חייל","מ.א","פלוגה","סטטוס"].map(h=><th key={h} style={S.th}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -4229,6 +4229,7 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
                   return true;
                 }).map((r,i)=>(
                   <tr key={r.key} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)",borderBottom:"1px solid var(--color-border-muted)"}}>
+                    <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{i+1}</td>
                     <td style={{...S.td,fontWeight:700}}>{r.wepName}</td>
                     <td style={{...S.td,fontFamily:"monospace",fontSize:"var(--text-sm)"}}>{r.serial&&r.serial!=="—"?r.serial:"—"}</td>
                     <td style={S.td}>{r.s.name}</td>
@@ -6116,7 +6117,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(names) setDb(prev=>({...prev, cabinetNames: names}));
     });
     const off11b = fbOn("db/exitForms", (ef)=>{
-      setDb(prev=>({...prev, exitForms: ef||{}}));
+      setDb(prev=>({...prev, exitForms: ef||{}, _exitFormsLoaded:true}));
     });
     fbOn("db/assignmentMeta", (meta)=>{
       setDb(prev=>({...prev, assignmentMeta: meta||{}}));
@@ -6144,6 +6145,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   },[]);
   const [search,setSearch]=useState("");
   const [filterUnit,setFilterUnit]=useState("הכל");
+  const [sigSortDir,setSigSortDir]=useState("desc"); // desc=מוכן ביותר קודם
   const [filterSquad,setFilterSquad]=useState("הכל");
   const [selSoldier,setSelSoldier]=useState(null);
   const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
@@ -6377,10 +6379,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",minWidth:450}}>
                   <thead><tr style={{background:"var(--color-bg-canvas)"}}>
-                    {["מ. אישי","שם","פלוגה","נשקים","חתם",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+                    {["#","מ. אישי","שם","פלוגה","נשקים","חתם",""].map(h=><th key={h} style={S.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {filtered.slice(0,100).map(s=>{
+                    {filtered.slice(0,100).map((s,_idx)=>{
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       // סקר נוכחות — בדוק האם יש סקר פתוח שהחייל ענה עליו
                       const latestPoll = Object.values(db.polls||{}).sort((a,b)=>b.createdAt>a.createdAt?1:-1)[0];
@@ -6389,6 +6391,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                       const rowBgHover = pollStatus==="yes"?"rgba(63,185,80,0.18)":pollStatus==="no"?"rgba(248,81,73,0.13)":"var(--color-bg-subtle)";
                       return (
                         <tr key={s.id} style={{background:rowBg,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=rowBgHover} onMouseLeave={e=>e.currentTarget.style.background=rowBg}>
+                          <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{_idx+1}</td>
                           <td style={{...S.td,color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-sm)"}}>{s.id}</td>
                           <td style={{...S.td,fontWeight:600}}>
                             <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -6456,7 +6459,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="signatures"&&perms.canViewSignatures!==false&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-              <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חתימות</h2>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חתימות</h2>
+                <button onClick={()=>setSigSortDir(d=>d==="desc"?"asc":"desc")}
+                  title={sigSortDir==="desc"?"מוכן ביותר קודם":"פחות מוכן קודם"}
+                  style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:13,color:"var(--color-text-secondary)"}}>
+                  {sigSortDir==="desc"?"↓ מוכן":"↑ פחות מוכן"}
+                </button>
+              </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {perms.canSign&&<button onClick={()=>setBulkSendModal(true)} style={{...S.btn("wa")}}>📤 שליחה מרוכזת WA</button>}
                 {perms.canBulkSign&&<button onClick={()=>setBulkModal(true)} style={{...S.btn("purple")}}>✍️ החתמה מרוכזת</button>}
@@ -6469,26 +6479,38 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               </select>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {(()=>{ const debugSoldier = soldiers.find(s=>s.id==="8369862"); if(debugSoldier){ const lA=db._assignmentsLoaded?(db.assignments?.[debugSoldier.id]||{}):(db.assignments?.[debugSoldier.id]||debugSoldier.assigned||{}); const ts=getTestStatus(db,debugSoldier.id); const ef=Object.values(db.exitForms||{}).filter(f=>f.soldierId===debugSoldier.id); console.log("[SIG_DEBUG] ליאור עזרא - נשק:", Object.keys(lA).filter(k=>WEAPON_KEYS.includes(k)), "בוחן תקף:", ts.valid, "טפסי יציאה:", ef.map(f=>f.status)); } return null; })()}
-              {filtered.filter(s=>{
-                // חייב נשק — מה-assignments החיים (Firebase), לא הסטטי
-                const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
-                const hasWeapon=Object.keys(liveAssigned).some(k=>WEAPON_KEYS.includes(k));
-                if(!hasWeapon) return false;
-                // חייב בוחן תקף
-                const ts=getTestStatus(db,s.id);
-                if(!ts.valid) return false;
-                // חייב טופס יציאה — ממתין לאישור או אושר
-                const exitForms=db.exitForms||{};
-                const hasExit=Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="אושר"||f.status==="ממתין_מפ"||f.status==="ממתין_מגד"));
-                if(!hasExit) return false;
-                return true;
-              }).map(s=>{
+              {!db._exitFormsLoaded && <div style={{textAlign:"center",padding:12,color:"var(--color-text-muted)",fontSize:"var(--text-sm)"}}>⏳ טוען נתונים...</div>}
+              {db._exitFormsLoaded && (()=>{
+                // פונקציה לחישוב ציון מוכנות (0-4)
+                function getReadyScore(s){
+                  const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
+                  let score=0;
+                  if(Object.keys(liveAssigned).some(k=>WEAPON_KEYS.includes(k))) score++;
+                  const ts=getTestStatus(db,s.id);
+                  if(ts.valid) score++;
+                  const ef=Object.values(db.exitForms||{}).filter(f=>f.soldierId===s.id);
+                  if(ef.some(f=>f.status==="ממתין_מפ"||f.status==="ממתין_מגד")) score++;
+                  if(ef.some(f=>f.status==="אושר")) score++;
+                  return score;
+                }
+                return filtered
+                  .filter(s=>{
+                    const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
+                    if(!Object.keys(liveAssigned).some(k=>WEAPON_KEYS.includes(k))) return false;
+                    return true; // הצג את כולם עם נשק, מיין לפי ציון
+                  })
+                  .sort((a,b)=>sigSortDir==="desc"?getReadyScore(b)-getReadyScore(a):getReadyScore(a)-getReadyScore(b))
+                  .map(s=>{
+                const readyScore = getReadyScore(s);
                 const liveAssigned = db._assignmentsLoaded ? (db.assignments?.[s.id]||{}) : (db.assignments?.[s.id]||s.assigned||{});
                 const weps=Object.entries(liveAssigned).filter(([k])=>WEAPON_KEYS.includes(k));
                 const sig=db.signatures?.[s.id];
                 return (
                   <div key={s.id} style={{...S.card,marginBottom:0,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{flex:"0 0 auto",background:readyScore>=3?"var(--color-success-bg)":readyScore>=2?"var(--color-warning-bg)":"var(--color-bg-subtle)",border:`1px solid ${readyScore>=3?"var(--color-success-fg)":readyScore>=2?"var(--color-warning-fg)":"var(--color-border-muted)"}`,borderRadius:8,padding:"4px 10px",textAlign:"center",minWidth:36}}>
+                      <div style={{fontWeight:800,fontSize:16,color:readyScore>=3?"var(--color-success-fg)":readyScore>=2?"var(--color-warning-fg)":"var(--color-text-muted)"}}>{readyScore}</div>
+                      <div style={{fontSize:9,color:"var(--color-text-muted)"}}>מ-4</div>
+                    </div>
                     <div style={{flex:1,minWidth:150}}>
                       <div style={{fontWeight:700,fontSize:"var(--text-base)"}}>{s.name} <span style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}}>({s.id})</span></div>
                       <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginTop:1}}>פלוגה {s.unit} • {weps.map(([k])=>nameWithMakat(k)).join(" | ")}</div>
@@ -6514,7 +6536,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                     </div>
                   </div>
                 );
-              })}
+              })
+              })()} 
             </div>
             {filtered.filter(s=>{
               const hasWeapon=Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k));
@@ -6593,14 +6616,15 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",minWidth:450}}>
                   <thead><tr style={{background:"var(--color-bg-canvas)"}}>
-                    {["מ. אישי","שם","פלוגה","נשק","חתם ב-","חתימה",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+                    {["#","מ. אישי","שם","פלוגה","נשק","חתם ב-","חתימה",""].map(h=><th key={h} style={S.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {filtered.filter(s=>s.signature).map(s=>{
+                    {filtered.filter(s=>s.signature).map((s,_idx)=>{
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       const sig=db.signatures?.[s.id];
                       return (
                         <tr key={s.id} style={{background:"var(--color-bg-default)"}} onMouseEnter={e=>e.currentTarget.style.background="var(--color-bg-subtle)"} onMouseLeave={e=>e.currentTarget.style.background="var(--color-bg-default)"}>
+                          <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{_idx+1}</td>
                           <td style={{...S.td,color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-sm)"}}>{s.id}</td>
                           <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
@@ -6757,14 +6781,15 @@ function ViewerApp({auth, onLogout, db}){
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:400}}>
               <thead><tr style={{background:"var(--color-bg-canvas)"}}>
-                {["מ. אישי","שם","פלוגה","נשק","סטטוס","חתם ב-"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                {["#","מ. אישי","שם","פלוגה","נשק","סטטוס","חתם ב-"].map(h=><th key={h} style={S.th}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {filtered.map(s=>{
+                {filtered.map((s,_idx)=>{
                   const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                   const sig=db.signatures?.[s.id];
                   return (
                     <tr key={s.id} style={{background:"var(--color-bg-default)"}}>
+                      <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",textAlign:"center",width:28}}>{_idx+1}</td>
                       <td style={{...S.td,color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-sm)"}}>{s.id}</td>
                       <td style={{...S.td,fontWeight:600}}>{s.name}</td>
                       <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
@@ -7588,7 +7613,7 @@ function LoginLogTab({db}){
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:"var(--color-bg-canvas)"}}>
-                {["שם","תפקיד","שם משתמש","תאריך ושעה"].map(h=>(
+                {["#","שם","תפקיד","כניסה","יציאה","משך"].map(h=>(
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
@@ -7596,6 +7621,7 @@ function LoginLogTab({db}){
             <tbody>
               {entries.map((e,i)=>(
                 <tr key={i} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)"}}>
+                  <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)",width:32,textAlign:"center"}}>{i+1}</td>
                   <td style={{...S.td,fontWeight:600}}>{e.name||e.username||"?"}</td>
                   <td style={S.td}>
                     <span style={{
@@ -7603,8 +7629,9 @@ function LoginLogTab({db}){
                       fontSize:"var(--text-sm)",fontWeight:600
                     }}>{ROLE_LABELS[e.role]||e.role||"?"}</span>
                   </td>
-                  <td style={{...S.td,color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-sm)"}}>{e.username||"?"}</td>
                   <td style={{...S.td,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>{e.loginAt||"?"}</td>
+                  <td style={{...S.td,fontSize:"var(--text-sm)",color:e.logoutAt?"var(--color-text-secondary)":"var(--color-text-muted)"}}>{e.logoutAt||"—"}</td>
+                  <td style={{...S.td,fontSize:"var(--text-sm)",color:"var(--color-accent-fg)",fontWeight:e.duration?600:400}}>{e.duration||"—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -14211,17 +14238,30 @@ function App(){
       try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v4"}));}catch(e){}
     }
     // Log login to Firebase
+    const loginTs = Date.now();
     const logEntry = {
       username: a.username||a.name||"",
       name: a.name||"",
       role: a.role||"",
       loginAt: new Date().toLocaleString("he-IL"),
-      ts: Date.now()
+      ts: loginTs,
+      logoutAt: null,
     };
-    fbSet("db/loginLog/"+Date.now(), logEntry).catch(()=>{});
+    fbSet("db/loginLog/"+loginTs, logEntry).catch(()=>{});
+    try{sessionStorage.setItem("login_ts", String(loginTs));}catch(e){}
     setAuth(a);
   }
   function handleLogout(){
+    // רשום זמן יציאה
+    try{
+      const loginTs=sessionStorage.getItem("login_ts");
+      if(loginTs){
+        const logoutStr=new Date().toLocaleString("he-IL");
+        fbSet("db/loginLog/"+loginTs+"/logoutAt", logoutStr).catch(()=>{});
+        fbSet("db/loginLog/"+loginTs+"/duration", Math.round((Date.now()-parseInt(loginTs))/60000)+"m").catch(()=>{});
+        sessionStorage.removeItem("login_ts");
+      }
+    }catch(e){}
     try{sessionStorage.removeItem("armory_session");}catch(e){}
     try{["link_sign","link_testcert","link_bulksign","link_exit"].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
     setAuth(null);
@@ -14231,7 +14271,22 @@ function App(){
   const [globalLightbox,setGlobalLightbox]=useState(null);
   React.useEffect(()=>{
     window._showLightbox=(src)=>setGlobalLightbox(src);
-    return()=>{window._showLightbox=null;};
+    // רשום יציאה כשהטאב נסגר
+    function handleUnload(){
+      try{
+        const loginTs=sessionStorage.getItem("login_ts");
+        if(loginTs){
+          const logoutStr=new Date().toLocaleString("he-IL");
+          // navigator.sendBeacon is more reliable on unload
+          const url="https://armory-9219-default-rtdb.firebaseio.com/db/loginLog/"+loginTs+".json";
+          const data=JSON.stringify({logoutAt:logoutStr,duration:Math.round((Date.now()-parseInt(loginTs))/60000)+"m"});
+          // Use fetch with keepalive
+          fetch(url,{method:"PATCH",body:data,headers:{"Content-Type":"application/json"},keepalive:true}).catch(()=>{});
+        }
+      }catch(e){}
+    }
+    window.addEventListener("beforeunload", handleUnload);
+    return()=>{window._showLightbox=null; window.removeEventListener("beforeunload",handleUnload);};
   },[]);
 
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
