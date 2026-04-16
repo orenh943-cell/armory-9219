@@ -6096,7 +6096,15 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
 
   const withWeapons=useMemo(()=>soldiers.filter(s=>Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k))).length,[soldiers]);
   const signedCount=useMemo(()=>soldiers.filter(s=>s.signature).length,[soldiers]);
-  const unsigned=withWeapons-signedCount;
+  // badge = חיילים שעומדים בכל 3 תנאים ועדיין לא חתמו
+  const unsigned=useMemo(()=>soldiers.filter(s=>{
+    if(db.signatures?.[s.id]) return false;
+    if(!Object.keys(s.assigned||{}).some(k=>WEAPON_KEYS.includes(k))) return false;
+    const ts=getTestStatus(db,s.id);
+    if(!ts.valid) return false;
+    const exitForms=db.exitForms||{};
+    return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="ממתין_מפ"||f.status==="ממתין_מגד"||f.status==="אושר"));
+  }).length,[soldiers,db]);
   const exitFormsCount=useMemo(()=>{
     const forms=db.exitForms||{};
     const ids=new Set(Object.values(forms).filter(f=>f.soldierSig).map(f=>f.soldierId));
@@ -6428,8 +6436,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
               const ts=getTestStatus(db,s.id);
               if(!ts.valid) return false;
               const exitForms=db.exitForms||{};
-              // ממתין לאישור מפ"ד/מג"ד = מוכן להחתמה
-              return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="ממתין_מפ"||f.status==="ממתין_מגד"));
+              // ממתין לאישור מפ"ד/מג"ד, או אושר = מוכן להחתמה
+              return Object.values(exitForms).some(f=>f.soldierId===s.id&&(f.status==="ממתין_מפ"||f.status==="ממתין_מגד"||f.status==="אושר"));
             }).length===0&&(
               <div style={{textAlign:"center",padding:"32px 16px",color:"var(--color-text-muted)"}}>
                 <div style={{fontSize:36,marginBottom:8}}>✍️</div>
@@ -8145,6 +8153,7 @@ function VisutTab({db, setDb, soldiers, auth}){
   const [reqQty, setReqQty] = React.useState("1");
   const [reqNote, setReqNote] = React.useState("");
   const [showUserMgmt, setShowUserMgmt] = React.useState(false);
+  const [itemSearch, setItemSearch] = React.useState("");
   const [newUser, setNewUser] = React.useState("");
 
   const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
@@ -8437,9 +8446,15 @@ function VisutTab({db, setDb, soldiers, auth}){
             </div>
           )}
 
+          {/* חיפוש פריט */}
+          <div style={{marginBottom:10}}>
+            <input value={itemSearch} onChange={e=>setItemSearch(e.target.value)}
+              placeholder="🔍 חפש פריט..."
+              style={{...S.input,marginBottom:0,width:"100%",maxWidth:320}}/>
+          </div>
           {/* Tiles */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8,marginBottom:12}}>
-            {liveData.map(item=>{
+            {liveData.filter(item=>!itemSearch.trim()||item.name.includes(itemSearch.trim())).map(item=>{
               const count = filterUnit==="הכל"
                 ? item.liveTotal
                 : getUnitCount(item, filterUnit, filterType==="הכל"?"all":filterType);
