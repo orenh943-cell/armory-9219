@@ -768,6 +768,8 @@ function canSignAdmin(auth){
 const ARMORY_DASH_PIN="7680832";
 function canViewVisut(auth,db){
   if(auth?.username==="אורן"||auth?.name==="אורן חלפון") return true;
+  const perms = db?.userPerms?.[auth?.username||""]||{};
+  if(perms.canViewVisut) return true;
   return !!(db?.visutUsers||{})[auth?.username||""];
 }
 
@@ -918,7 +920,9 @@ function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
   return warnings;
 } // מ.א אורן
 function canViewArmoryDash(auth,db){
-  // אורן תמיד, + משתמשים שהוגדרו ב-db.armoryDashUsers
+  // אורן תמיד, + הרשאת canViewArmoryDash בuserPerms + armoryDashUsers
+  const perms = db?.userPerms?.[auth?.username||""]||{};
+  if(perms.canViewArmoryDash) return true;
   const u=auth?.username||"";
   if(u==="אורן"||auth?.name==="אורן חלפון") return true;
   const allowed=db?.armoryDashUsers||{};
@@ -6287,7 +6291,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           />
         )}
 
-        {tab==="soldiers"&&(
+        {tab==="soldiers"&&perms.canViewSoldiers!==false&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
               <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חיילים ({filtered.length})</h2>
@@ -6382,7 +6386,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           </div>
         )}
 
-        {tab==="signatures"&&(
+        {tab==="signatures"&&perms.canViewSignatures!==false&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
               <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>חתימות</h2>
@@ -6460,7 +6464,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           </div>
         )}
 
-        {tab==="daily"&&(
+        {tab==="daily"&&perms.canViewDaily!==false&&(
           <div>
             <h2 style={{marginBottom:16,fontSize:"var(--text-xl)",fontWeight:800}}>טופס יומי</h2>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -6476,7 +6480,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           </div>
         )}
 
-        {tab==="signed"&&(
+        {tab==="signed"&&perms.canViewSignatures!==false&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
               <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>✅ חתומים ({soldiers.filter(s=>s.signature).length})</h2>
@@ -6552,10 +6556,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           </div>
         )}
 
-        {tab==="broken"&&(
+        {tab==="broken"&&perms.canViewBroken!==false&&(
           <BrokenEquipmentTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
-        {tab==="inspection"&&(
+        {tab==="inspection"&&perms.canViewInspection!==false&&(
           <InspectionTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="loginlog"&&auth.role==="admin"&&(
@@ -6564,16 +6568,16 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="perms"&&auth.role==="admin"&&(
           <PermissionsTab db={db} setDb={setDb} auth={auth}/>
         )}
-        {tab==="inventory"&&(
+        {tab==="inventory"&&perms.canViewInventory!==false&&(
           <InventoryTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="loginlog"&&auth.role==="admin"&&(
           <LoginLogTab db={db}/>
         )}
-        {tab==="cabinets"&&(
+        {tab==="cabinets"&&perms.canViewCabinets!==false&&(
           <CabinetsTab db={db} setDb={setDb} auth={auth}/>
         )}
-        {tab==="armorystock"&&(
+        {tab==="armorystock"&&perms.canViewInventory!==false&&(
           <MyStockTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="mystock"&&(
@@ -6589,7 +6593,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         {tab==="actlog"&&auth.role==="admin"&&(
           <ActivityLogTab db={db}/>
         )}
-        {tab==="guarantors"&&(
+        {tab==="guarantors"&&perms.canViewSignatures!==false&&(
           <GuarantorsTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="reset"&&auth.role==="admin"&&(
@@ -12270,6 +12274,8 @@ const PERM_LABELS = {
   // מלאי
   canViewInventory:"📦 צפייה במלאי", canViewBroken:"🔧 צפייה בתקולים",
   canDownload:"⬇️ הורדת טפסים",
+  canViewArmoryDash:"🗄️ דשבורד ארמון",
+  canViewVisut:"⚖️ מסך ויסות",
   // יציאה הביתה
   canFillExitForm:'📝 מילוי טופס יציאה (מ"פ)',
   canApproveExitForm:'✅ אישור סעיף 3 (מ"פ)',
@@ -12287,6 +12293,7 @@ const PERM_GROUPS = [
   {label:"✏️ עריכה ושיוך",    perms:["canEdit","canCheckout","canReturn","canDownload"]},
   {label:"✍️ חתימות נשק",     perms:["canSign","canBulkSign","canSendToUnit"]},
   {label:"🔍 בחינות ודוחות",  perms:["canViewInspection","canViewActLog","canViewDaily","canViewCabinets"]},
+  {label:"⚙️ מערכות מתקדמות", perms:["canViewArmoryDash","canViewVisut"]},
   {label:"🏠 יציאה הביתה",    perms:["canFillExitForm","canApproveExitForm","canCommanderDecide","isMagad"]},
 ];
 
