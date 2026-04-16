@@ -2918,8 +2918,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                     <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",whiteSpace:"nowrap"}}>/{maxQty}</span>
                   </div>
                 );
-              })()
-              )}
+              })()}
               {newItems.length>1&&<button onClick={()=>setNewItems(p=>p.filter((_,x)=>x!==i))} style={{...S.btn("red"),padding:"8px"}}>✕</button>}
             </div>
             {/* ארון */}
