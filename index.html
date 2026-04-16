@@ -770,6 +770,49 @@ function canSignAdmin(auth){
 }
 const ARMORY_DASH_PIN="7680832";
 
+// ===== פונקציית ארונות מרכזית =====
+function getAllCabinets(db, soldierUnit){
+  const seen=new Set(); const all=[];
+  // ארמון גדודי ראשון
+  const gadudi=["ארמון 2","ארמון 3","ארמון 4","ארון גדודי"];
+  gadudi.forEach(n=>{if(!seen.has(n)){seen.add(n);all.push({n,unit:"גדודי",group:"🏛️ ארמון גדודי"});}});
+  // כנות כל הפלוגות
+  const units=["א","ב","ג","מסייעת","אגמ","פלסמ"];
+  units.forEach(u=>{
+    const k="כנה "+u;
+    if(!seen.has(k)){seen.add(k);all.push({n:k,unit:u,group:"כנה פלוגה "+u});}
+  });
+  // ארונות מ-db.cabinets האמיתיים
+  Object.keys(db.cabinets||{}).forEach(cabName=>{
+    const dec=decodeURIComponent(cabName);
+    if(!seen.has(dec)){
+      seen.add(dec);
+      let unit="גדודי";
+      Object.entries(db.cabinetNames||{}).forEach(([u,names])=>{if((names||[]).includes(dec)) unit=u;});
+      all.push({n:dec,unit,group:"ארון פלוגה "+unit});
+    }
+  });
+  // ארונות מ-cabinetNames
+  Object.entries(db.cabinetNames||{}).forEach(([unit,names])=>{
+    (names||[]).forEach(n=>{
+      if(n&&!seen.has(n)){seen.add(n);all.push({n,unit,group:"ארון פלוגה "+unit});}
+    });
+  });
+  // מיון: פלוגת החייל קודם, אחר כך שאר הפלוגות, ארמון גדודי אחרון
+  all.sort((a,b)=>{
+    if(soldierUnit){
+      if(a.unit===soldierUnit&&b.unit!==soldierUnit) return -1;
+      if(a.unit!==soldierUnit&&b.unit===soldierUnit) return 1;
+    }
+    if(a.unit==="גדודי"&&b.unit!=="גדודי") return 1;
+    if(a.unit!=="גדודי"&&b.unit==="גדודי") return -1;
+    if(a.n.startsWith("כנה")&&!b.n.startsWith("כנה")) return -1;
+    if(!a.n.startsWith("כנה")&&b.n.startsWith("כנה")) return 1;
+    return a.n.localeCompare(b.n,"he");
+  });
+  return all;
+}
+
 // ===== הגנות שיוך =====
 function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
   const warnings = [];
@@ -2191,7 +2234,7 @@ function SignatureDocument({soldier, db, onClose}){
   );
 }
 
-function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
+function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,soldiers=[]}){
   const [editingLocation,setEditingLocation]=useState(false);
   const [editingSerial,setEditingSerial]=useState(null);
   const [newSerialVal,setNewSerialVal]=useState("");
@@ -2614,6 +2657,19 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                     </div>
                     {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700,marginLeft:6}}>×{g.qty}</span>}
                     <span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-xs)"}}>{g.serial||"—"}</span>
+                    {canDelete(auth)&&g.qty>1&&(
+                      <button onClick={e=>{e.stopPropagation();
+                        // מחק כפילויות — השאר רק מופע אחד
+                        const keys=Object.keys(assigned).filter(k=>cleanItemName(k)===name&&(g.serial?isSerial(assigned[k])&&String(assigned[k])===g.serial:!isSerial(assigned[k])));
+                        const toDelete=keys.slice(1); // השאר את הראשון
+                        const na={...assigned}; toDelete.forEach(k=>delete na[k]);
+                        const ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}},soldier.id);
+                        saveDB(ndb);onSave(ndb);
+                        logAction("מחיקת_כפילויות","הוסרו כפילויות של "+name+" מ"+soldier.name,auth?.name);
+                      }} style={{...S.btn("danger"),padding:"2px 8px",fontSize:9,marginRight:4,marginLeft:4}}>
+                        🗑️ כפילויות
+                      </button>
+                    )}
                   </div>
                 ))}
             </div>
@@ -2673,14 +2729,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                   🗄️ בארון?
                 </label>
                 {item.inCabinet&&(
-                  <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:80}}>
-                    <option value="">— ארון —</option>
-                    {(()=>{
-                      const seen=new Set(); const opts=[];
-                      Object.keys(db.cabinets||{}).forEach(k=>{const d=decodeURIComponent(k);if(!seen.has(d)){seen.add(d);opts.push(d);}});
-                      Object.values(db.cabinetNames||{}).flat().forEach(n=>{if(n&&!seen.has(n)){seen.add(n);opts.push(n);}});
-                      return opts.sort((a,b)=>a.localeCompare(b,"he")).map(n=><option key={n} value={n}>{n}</option>);
-                    })()}
+                  <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
+                    <option value="">— בחר מיקום —</option>
+                    {getAllCabinets(db,soldier.unit).map(({n})=><option key={n} value={n}>{n}</option>)}
                   </select>
                 )}
               </div>
@@ -2731,42 +2782,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth}){
                         onClick={e=>e.stopPropagation()}
                         onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};rowKeys.forEach(k=>{u[k]=cab;});u[rowKey]=cab;return u;});}}
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120,maxHeight:"none"}}>
-                        <option value="">— בחר ארון —</option>
-                        {(()=>{
-                          // All cabinets: from db.cabinets (actual) + cabinetNames (by unit)
-                          const seen=new Set(); const all=[];
-                          const solUnit=soldier.unit||"";
-                          // כנה של הפלוגה — ראשון
-                          if(solUnit) all.push({n:"כנה "+solUnit,unit:solUnit});
-                          seen.add("כנה "+solUnit);
-                          // כל הארונות האמיתיים מ-db.cabinets
-                          Object.keys(db.cabinets||{}).forEach(cabName=>{
-                            const dec=decodeURIComponent(cabName);
-                            if(!seen.has(dec)){seen.add(dec);
-                              // נסה לשייך לפלוגה לפי cabinetNames
-                              let unit="גדודי";
-                              Object.entries(db.cabinetNames||{}).forEach(([u,names])=>{if(names.includes(dec)) unit=u;});
-                              all.push({n:dec,unit});
-                            }
-                          });
-                          // כנות שאר הפלוגות
-                          ["א","ב","ג","מסייעת","אגמ","פלסמ"].forEach(u=>{
-                            const k="כנה "+u;
-                            if(!seen.has(k)){seen.add(k);all.push({n:k,unit:u});}
-                          });
-                          // ארונות מ-cabinetNames שלא ב-db.cabinets
-                          Object.entries(db.cabinetNames||{}).forEach(([unit,names])=>{
-                            (names||[]).forEach(n=>{if(n&&!seen.has(n)){seen.add(n);all.push({n,unit});}});
-                          });
-                          all.sort((a,b)=>{
-                            if(a.unit===solUnit&&b.unit!==solUnit) return -1;
-                            if(a.unit!==solUnit&&b.unit===solUnit) return 1;
-                            if(a.n.startsWith("כנה")&&!b.n.startsWith("כנה")) return -1;
-                            if(!a.n.startsWith("כנה")&&b.n.startsWith("כנה")) return 1;
-                            return a.n.localeCompare(b.n,"he");
-                          });
-                          return all.map(({n})=><option key={n} value={n}>{n}</option>);
-                        })()}
+                        <option value="">— בחר מיקום —</option>
+                        {getAllCabinets(db,soldier.unit).map(({n})=><option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                   )}
@@ -3156,8 +3173,19 @@ function QuickModal({soldiers,db,onSave,onClose}){
   const soldier=soldiers.find(s=>s.id===sid);
   const assigned=soldier?(db.assignments[soldier.id]??soldier.assigned??{}):{};
 
-  function doCheckout(){
+  function doCheckout(forceConfirmed=false){
     const valid=items.filter(i=>i.name);if(!valid.length||!soldier)return;
+    if(!forceConfirmed){
+      const allSols2=[...Object.values(db.customSoldiers||{}),...soldiers];
+      const allW=[];
+      valid.forEach(i=>{
+        const serial=i.serial&&isSerial(i.serial)?i.serial:null;
+        allW.push(...checkAssignmentGuards(db,allSols2,i.name,serial,soldier));
+      });
+      if(allW.length>0){
+        if(!window.confirm(allW.map(w=>w.msg).join("\n")+"\n\nלהמשיך בכל זאת?")) return;
+      }
+    }
     const na={...assigned};valid.forEach(i=>{na[i.name]=i.serial||1;});
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
     delete ndb.signatures[soldier.id];fbDelete("db/signatures/"+soldier.id).catch(()=>{});saveDB(ndb);onSave(ndb);onClose();
@@ -6283,7 +6311,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       </main>
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
-      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth}/>}
+      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth} soldiers={soldiers}/>}
       {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
