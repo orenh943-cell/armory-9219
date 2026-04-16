@@ -2315,7 +2315,11 @@ function SignatureDocument({soldier, db, onClose}){
           </div>
           <div style={{flex:1,border:"1px solid #000",padding:"6px 8px",minHeight:70}}>
             <div style={{fontSize:10,fontWeight:"bold",marginBottom:4}}>חתימת מנפק</div>
-            <div style={{height:50}}></div>
+            {sig?.issuerSig
+              ? <img src={sig.issuerSig} style={{height:50,maxWidth:"100%"}} alt="חתימת מנפק"/>
+              : <div style={{height:50,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--color-text-muted)",fontSize:10}}>—</div>
+            }
+            <div style={{fontSize:9,color:"var(--color-text-secondary)",marginTop:2}}>{sig?.issuerName||""}</div>
           </div>
         </div>
 
@@ -3124,12 +3128,11 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
             logAction("חתימה_לידי", "חתימה לידי של "+soldier.name+" ("+soldier.id+")", auth?.name);
             setShowSignHere(false);
           };
-          console.log("[DEBUG] issuerSigUsername:", issuerSigUsername, "auth.username:", auth?.username, "userSigs keys:", Object.keys(db.userSigs||{}));
           if(issuerSigUsername){
             fbGet("db/userSigs/"+issuerSigUsername).then(sig=>{
-              console.log("[DEBUG] fbGet result:", sig?"HAS_SIG":"NULL");
               _saveSignHere(sig || db.userSigs?.[issuerSigUsername] || null);
-            }).catch((e)=>{ console.log("[DEBUG] fbGet err:",e); _saveSignHere(db.userSigs?.[issuerSigUsername]||null); });
+            }).catch((e)=>{
+ _saveSignHere(db.userSigs?.[issuerSigUsername]||null); });
           } else {
             _saveSignHere(null);
           }
