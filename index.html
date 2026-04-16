@@ -772,43 +772,29 @@ const ARMORY_DASH_PIN="7680832";
 
 // ===== פונקציית ארונות מרכזית =====
 function getAllCabinets(db, soldierUnit){
+  // המקור היחיד = db.cabinetNames (מה שמוגדר בטאב ארונות)
+  // + ארמון גדודי כ-fallback
   const seen=new Set(); const all=[];
-  // ארמון גדודי ראשון
-  const gadudi=["ארמון 2","ארמון 3","ארמון 4","ארון גדודי"];
-  gadudi.forEach(n=>{if(!seen.has(n)){seen.add(n);all.push({n,unit:"גדודי",group:"🏛️ ארמון גדודי"});}});
-  // כנות כל הפלוגות
-  const units=["א","ב","ג","מסייעת","אגמ","פלסמ"];
-  units.forEach(u=>{
-    const k="כנה "+u;
-    if(!seen.has(k)){seen.add(k);all.push({n:k,unit:u,group:"כנה פלוגה "+u});}
+  const UNIT_CABINETS_DEF={"א":["כנה א"],"ב":["כנה ב"],"ג":["כנה ג"],"מסייעת":["כנה מסייעת"],"אגמ":["כנה אגמ"],"פלסמ":["כנה פלסמ"],"גדודי":["ארון גדודי","ארמון 2","ארמון 3","ארמון 4"]};
+  const cabSrc=Object.keys(db.cabinetNames||{}).length>0 ? db.cabinetNames : UNIT_CABINETS_DEF;
+  // בנה רשימה לפי הסדר: פלוגת החייל קודם, שאר הפלוגות, גדודי אחרון
+  const UNIT_ORDER=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const sorted=[...(soldierUnit?[soldierUnit]:[]),...UNIT_ORDER.filter(u=>u!==soldierUnit)];
+  sorted.forEach(unit=>{
+    const names=cabSrc[unit]||[];
+    names.forEach(n=>{
+      if(n&&!seen.has(n)){seen.add(n);all.push({n,unit});}
+    });
   });
-  // ארונות מ-db.cabinets האמיתיים
+  // ארונות שב-db.cabinets אבל לא ב-cabinetNames
   Object.keys(db.cabinets||{}).forEach(cabName=>{
     const dec=decodeURIComponent(cabName);
     if(!seen.has(dec)){
       seen.add(dec);
       let unit="גדודי";
-      Object.entries(db.cabinetNames||{}).forEach(([u,names])=>{if((names||[]).includes(dec)) unit=u;});
-      all.push({n:dec,unit,group:"ארון פלוגה "+unit});
+      Object.entries(cabSrc).forEach(([u,names])=>{if((names||[]).includes(dec)) unit=u;});
+      all.push({n:dec,unit});
     }
-  });
-  // ארונות מ-cabinetNames
-  Object.entries(db.cabinetNames||{}).forEach(([unit,names])=>{
-    (names||[]).forEach(n=>{
-      if(n&&!seen.has(n)){seen.add(n);all.push({n,unit,group:"ארון פלוגה "+unit});}
-    });
-  });
-  // מיון: פלוגת החייל קודם, אחר כך שאר הפלוגות, ארמון גדודי אחרון
-  all.sort((a,b)=>{
-    if(soldierUnit){
-      if(a.unit===soldierUnit&&b.unit!==soldierUnit) return -1;
-      if(a.unit!==soldierUnit&&b.unit===soldierUnit) return 1;
-    }
-    if(a.unit==="גדודי"&&b.unit!=="גדודי") return 1;
-    if(a.unit!=="גדודי"&&b.unit==="גדודי") return -1;
-    if(a.n.startsWith("כנה")&&!b.n.startsWith("כנה")) return -1;
-    if(!a.n.startsWith("כנה")&&b.n.startsWith("כנה")) return 1;
-    return a.n.localeCompare(b.n,"he");
   });
   return all;
 }
@@ -816,19 +802,36 @@ function getAllCabinets(db, soldierUnit){
 // ===== הגנות שיוך =====
 function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
   const warnings = [];
-  const allSols = [...Object.values(db.customSoldiers||{}), ...soldiers];
+  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
 
-  // 1. האם צ זה כבר משוייך למישהו?
+  // 1. האם צ זה כבר משוייך למישהו? — בדוק בכל המקורות
   if(serial && isSerial(serial)){
-    const serialStr = String(serial);
+    const serialStr = String(serial).trim();
+    // בדוק ב-assignments + RAW_SOLDIERS
     for(const s of allSols){
       if(s.id === targetSoldier?.id) continue;
-      const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+      const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : (s.assigned||{});
       for(const [k,v] of Object.entries(asgn||{})){
-        if(isSerial(v) && String(v)===serialStr){
-          warnings.push({type:"serial_conflict", msg:"⚠️ צ/סידורי "+serialStr+" כבר משוייך ל"+s.name+" ("+s.id+") — "+cleanItemName(k), level:"error"});
+        if(v && String(v).trim()===serialStr && isSerial(v)){
+          warnings.push({
+            type:"serial_conflict",
+            msg:"🚫 צ/סידורי "+serialStr+" כבר רשום על "+s.name+" ("+s.id+") — "+cleanItemName(k),
+            level:"error"
+          });
           break;
         }
+      }
+    }
+    // בדוק גם ב-ALL_SERIALS (אם צ קיים במערכת ומשוייך)
+    const staticEntry = ALL_SERIALS.find(s=>String(s.serial)===serialStr);
+    if(staticEntry && staticEntry.assignedToSoldier){
+      const alreadyFound = warnings.some(w=>w.type==="serial_conflict");
+      if(!alreadyFound){
+        warnings.push({
+          type:"serial_conflict",
+          msg:"🚫 צ/סידורי "+serialStr+" רשום כמשוייך לחייל בפלוגה "+staticEntry.unit,
+          level:"error"
+        });
       }
     }
   }
@@ -843,7 +846,11 @@ function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
     });
     if(relatedUnit){
       const unit=relatedUnit.u||relatedUnit.unit;
-      warnings.push({type:"unit_conflict", msg:"ℹ️ פריט זה מוקצה לפלוגה "+unit+" — האם לשייך לפלוגה "+targetSoldier.unit+"?", level:"warning"});
+      warnings.push({
+        type:"unit_conflict",
+        msg:"⚠️ פריט זה מוקצה לפלוגה "+unit+" — האם לשייך לפלוגה "+targetSoldier.unit+"?",
+        level:"warning"
+      });
     }
   }
 
@@ -8019,6 +8026,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
   const [pinInput, setPinInput] = React.useState("");
   const [pinError, setPinError] = React.useState("");
   const [view, setView] = React.useState("grid"); // grid | serials | users
+  const [showDuplicates, setShowDuplicates] = React.useState(false);
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [editName, setEditName] = React.useState("");
   const [editMakat, setEditMakat] = React.useState("");
@@ -8300,7 +8308,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
            val:duplicateSerials.length,
            color:duplicateSerials.length>0?"var(--color-danger-fg)":"var(--color-success-fg)",
            icon:duplicateSerials.length>0?"🔴":"✅",
-           onClick:duplicateSerials.length>0?()=>setView("serials"):null,
+           onClick:duplicateSerials.length>0?()=>setShowDuplicates(true):null,
            extra:duplicateSerials},
         ];
         return (
@@ -8522,6 +8530,71 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
           </button>
         </Modal>
       )}
+
+      {/* ---- DUPLICATES MODAL ---- */}
+      {showDuplicates&&(()=>{
+        // בנה רשימת כפולים כאן
+        const serialMap2={};
+        const allSols3=[...soldiers,...Object.values(db.customSoldiers||{})];
+        allSols3.forEach(s=>{
+          const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+          Object.entries(asgn||{}).forEach(([k,v])=>{
+            if(isSerial(v)){
+              const key=cleanItemName(k)+"||"+String(v);
+              if(!serialMap2[key]) serialMap2[key]=[];
+              serialMap2[key].push({soldierName:s.name,soldierId:s.id,unit:s.unit});
+            }
+          });
+        });
+        const dups=Object.entries(serialMap2).filter(([,arr])=>arr.length>1);
+        return (
+          <div style={{position:"fixed",inset:0,zIndex:3000,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{...S.card,maxWidth:560,width:"100%",maxHeight:"80vh",overflow:"hidden",display:"flex",flexDirection:"column",border:"2px solid var(--color-danger-fg)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-danger-fg)"}}>🔴 צ/סידוריים כפולים ({dups.length})</div>
+                <button onClick={()=>setShowDuplicates(false)} style={{...S.btn("neutral"),padding:"4px 10px"}}>✕</button>
+              </div>
+              <div style={{overflowY:"auto",flex:1}}>
+                {dups.map(([key,arr])=>{
+                  const [itemName,serial]=key.split("||");
+                  return (
+                    <div key={key} style={{background:"var(--color-danger-bg)",border:"1px solid var(--color-danger-fg)",borderRadius:8,padding:"10px 14px",marginBottom:8}}>
+                      <div style={{fontWeight:700,marginBottom:6,color:"var(--color-danger-fg)"}}>
+                        {itemName} — צ/סידורי: <span style={{fontFamily:"monospace"}}>{serial}</span>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                        {arr.map((a,i)=>(
+                          <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"var(--color-bg-default)",borderRadius:6,padding:"6px 10px"}}>
+                            <span style={{fontWeight:600}}>{a.soldierName}</span>
+                            <span style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}}>{a.soldierId} · פלוגה {a.unit}</span>
+                            <button onClick={()=>{
+                              // מחק את השיוך של הצ הזה מהחייל הזה
+                              requirePin("הסרת "+itemName+" ("+serial+") מ"+a.soldierName, ()=>{
+                                const asgn={...(db.assignments?.[a.soldierId]||{})};
+                                // מצא את המפתח הספציפי עם הצ הזה
+                                const keyToDel=Object.keys(asgn).find(k=>cleanItemName(k)===itemName&&String(asgn[k])===serial);
+                                if(keyToDel) delete asgn[keyToDel];
+                                const ndb={...db,assignments:{...(db.assignments||{}),[a.soldierId]:asgn}};
+                                saveDB(ndb); setDb(ndb);
+                                fbSet("db/assignments/"+a.soldierId, asgn).catch(()=>{});
+                                logAction("תיקון_כפילות","הוסר "+itemName+" ("+serial+") מ"+a.soldierName,auth?.name);
+                                setShowDuplicates(false);
+                              });
+                            }} style={{...S.btn("danger"),padding:"3px 10px",fontSize:"var(--text-xs)"}}>
+                              🗑️ הסר
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {dups.length===0&&<div style={{textAlign:"center",padding:24,color:"var(--color-success-fg)",fontWeight:700}}>✅ אין כפילויות!</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ---- PIN CONFIRM MODAL ---- */}
       {pinAction&&(
