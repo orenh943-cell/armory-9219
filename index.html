@@ -741,6 +741,7 @@ const DEFAULT_PERMS = {
   admin:   {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:true, canManagePerms:true, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:true, isMagad:true, canViewInspection:true, canViewActLog:true, canViewDaily:true, canViewCabinets:true},
   manager: {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:false, canManagePerms:false, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:false, isMagad:false, canViewInspection:true, canViewActLog:false, canViewDaily:true, canViewCabinets:true},
   viewer:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:false, canViewSignatures:false, canViewBroken:false, canViewInventory:false, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:false, canViewActLog:false, canViewDaily:false, canViewCabinets:false},
+  custom:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:false, canViewSignatures:false, canViewBroken:false, canViewInventory:false, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:false, canViewActLog:false, canViewDaily:false, canViewCabinets:false, canViewArmoryDash:false, canViewVisut:false},
 };
 function getPerms(auth, db){
   const base = DEFAULT_PERMS[auth.role]||DEFAULT_PERMS.viewer;
@@ -7555,7 +7556,7 @@ function LoginLogTab({db}){
       .slice(0, 200);
   },[db.loginLog]);
 
-  const ROLE_LABELS = {admin:"מנהל",manager:"מנפק",viewer:"צפייה"};
+  const ROLE_LABELS = {admin:"מנהל",manager:"מנפק",viewer:"צפייה",custom:"מותאם"};
 
   function clearLog(){
     if(!window.confirm("למחוק את כל לוג הכניסות?")) return;
@@ -12565,6 +12566,8 @@ function PermissionsTab({db, setDb, auth}){
   const [editPassVal, setEditPassVal] = useState("");
   const [editRankUser, setEditRankUser] = useState(null);
   const [editRankVal, setEditRankVal] = useState("");
+  const [editRoleUser, setEditRoleUser] = useState(null);
+  const [editRoleVal, setEditRoleVal] = useState("");
   const [editPhoneUser, setEditPhoneUser] = useState(null);
   const [editPhoneVal, setEditPhoneVal] = useState("");
   const [shareUser, setShareUser] = useState(null);
@@ -12612,7 +12615,7 @@ function PermissionsTab({db, setDb, auth}){
     fbSet("db/deletedUsers/"+username, true).catch(()=>{});
   }
 
-  const ROLE_LABELS = {admin:"מנהל ראשי",manager:"מנהל",viewer:"צפייה בלבד"};
+  const ROLE_LABELS = {admin:"מנהל ראשי",manager:"מנהל",viewer:"צפייה בלבד",custom:"🎛️ מותאם אישית"};
   const UNIT_OPTS = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
 
   return (
@@ -12675,8 +12678,9 @@ function PermissionsTab({db, setDb, auth}){
             <div>
               <label style={S.label}>תפקיד</label>
               <select value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})} style={S.input}>
-                <option value="viewer">צפייה בלבד</option>
-                <option value="manager">מנהל</option>
+                <option value="custom">🎛️ מותאם אישית (הכל סגור)</option>
+                <option value="viewer">👁️ צפייה בלבד</option>
+                <option value="manager">🔑 מנהל (הכל פתוח)</option>
               </select>
             </div>
             <div>
@@ -12761,6 +12765,10 @@ function PermissionsTab({db, setDb, auth}){
                   style={{...S.btn("blue"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🔑 סיסמה</button>
                 <button onClick={()=>{setEditRankUser(username);setEditRankVal(u.rank||"");}}
                   style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>🎖️ דרגה</button>
+                {isDynamic&&<button onClick={()=>{setEditRoleUser(username);setEditRoleVal(u.role||"viewer");}}
+                  style={{...S.btn("purple"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>
+                  🎛️ תפקיד: {ROLE_LABELS[u.role]||u.role}
+                </button>}
                 <button onClick={()=>{setEditPhoneUser(username);setEditPhoneVal(u.phone||"");}}
                   style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>📱 טלפון</button>
                 <button onClick={()=>{
@@ -12811,6 +12819,30 @@ function PermissionsTab({db, setDb, auth}){
                     }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
                     <button onClick={()=>setEditRankUser(null)}
                       style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
+                  </div>
+                </div>
+              )}
+
+              {editRoleUser===username&&isDynamic&&(
+                <div style={{marginTop:8,background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-fg)",borderRadius:8,padding:"10px 12px"}}>
+                  <label style={{...S.label,fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",fontWeight:700}}>🎛️ שינוי תפקיד בסיסי</label>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:6}}>
+                    "מותאם אישית" = הכל סגור, רק מה שמסמנים נפתח ✅
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <select value={editRoleVal} onChange={e=>setEditRoleVal(e.target.value)}
+                      style={{...S.input,flex:1,marginBottom:0}}>
+                      <option value="custom">🎛️ מותאם אישית (הכל סגור)</option>
+                      <option value="viewer">👁️ צפייה בלבד</option>
+                      <option value="manager">🔑 מנהל (הכל פתוח)</option>
+                    </select>
+                    <button onClick={()=>{
+                      const ndb={...db,dynamicUsers:{...db.dynamicUsers,[username]:{...db.dynamicUsers[username],role:editRoleVal}}};
+                      saveDB(ndb); setDb(ndb);
+                      fbSet("db/dynamicUsers/"+username+"/role", editRoleVal).catch(()=>{});
+                      setEditRoleUser(null);
+                    }} style={{...S.btn("green"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>שמור</button>
+                    <button onClick={()=>setEditRoleUser(null)} style={{...S.btn("gray"),padding:"4px 8px",fontSize:"var(--text-xs)"}}>ביטול</button>
                   </div>
                 </div>
               )}
