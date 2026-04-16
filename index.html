@@ -1911,27 +1911,26 @@ function DailyModal({db,onClose,type,auth}){
   const [soferRank, setSoferRank] = useState("");
 
   // חישוב מלאי יומי
-  // מלאי כולל = DAILY_ITEMS (מספרים קבועים שהוגדרו) + armoryMaster מ-Firebase
-  const totalMap = {};  // name -> total (קבוע)
-  const loansMap = {};  // name -> השאלות (אצל חיילים חתומים)
-  const stockMap = {};  // name -> מצאי (לא חתומים + בארמון)
-
+  const loansMap = {};  // alias -> השאלות (חיילים חתומים)
+  const stockMap = {};  // alias -> מצאי (לא חתומים + בארמון)
   const signedIds = new Set(Object.keys(db.signatures||{}));
-
-  // מלאי כולל — מ-DAILY_ITEMS (מספרים קבועים) או armoryMaster
   const armoryMaster = db.armoryMaster||{};
+
+  // בנה מפת alias→שם-ב-armoryMaster לכל פריט בדוח
+  // armoryMaster שומר לפי alias (M4, מאג וכו)
+  // DAILY_ITEMS שומר לפי name (אותו alias)
+  // בונים totalMap: alias -> מספר קבוע
+  const totalMap = {};
   [...DAILY_LEFT, ...DAILY_RIGHT].forEach(item=>{
-    const alias = item.alias||item.name||""; if(!alias) return;
-    // מlאי קבוע: מה שהוגדר ב-DAILY_ITEMS או armoryMaster
-    const dailyItem = DAILY_ITEMS.find(d=>d.name===alias);
-    const masterItem = armoryMaster[alias];
-    const fixedTotal = (masterItem?.total) || (dailyItem?.total) || 0;
-    totalMap[alias] = fixedTotal;
+    const alias = (item.alias||item.name||"").trim();
+    if(!alias) return;
+    // נסה armoryMaster קודם, אחר כך DAILY_ITEMS
+    const masterVal = armoryMaster[alias]?.total;
+    const dailyVal = DAILY_ITEMS.find(d=>d.name===alias)?.total;
+    totalMap[alias] = (masterVal!=null&&masterVal>0)?masterVal:(dailyVal||0);
   });
 
-  // השאלות = חיילים חתומים עם הפריט
-  // מצאי = חיילים לא חתומים + unitItems t=unit (בארמון)
-  // מ-assignments
+  // חשב השאלות ומצאי מ-assignments + unitItems
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
     Object.keys(asgn||{}).forEach(rawName=>{
       const name=cleanItemName(rawName);
@@ -1942,22 +1941,24 @@ function DailyModal({db,onClose,type,auth}){
       }
     });
   });
-  // unitItems t=unit (בארמון, לא משוייך לחייל) — רק אלה שלא ב-assignments
+  // unitItems t=unit בלבד (בארמון, לא כפילות)
   Object.values(db.unitItems||{}).forEach(item=>{
     const name=cleanItemName(item.n||item.name||""); if(!name) return;
     const t=item.t||item.assignedType||"unit";
     if(t==="unit"){
       stockMap[name]=(stockMap[name]||0)+1;
     }
-    // t=soldier כבר נספר ב-assignments — לא כופלים
   });
 
   function calcItem(item){
-    const alias = item.alias||item.name;
-    const total = totalMap[alias]||0;
-    const loans = loansMap[alias]||0;
-    const stock = stockMap[alias]||0;
-    return {...item, alias, total, loans, stock, ok:true};
+    const alias = (item.alias||item.name||"").trim();
+    // נסה למצוא ב-totalMap: ישיר, cleanItemName, partial match
+    const total = totalMap[alias] ?? totalMap[cleanItemName(alias)] ?? 0;
+    // עבור loans/stock נסה גם cleanItemName
+    const loans = (loansMap[alias]||0) + (alias!==cleanItemName(alias)?(loansMap[cleanItemName(alias)]||0):0);
+    const stock = (stockMap[alias]||0) + (alias!==cleanItemName(alias)?(stockMap[cleanItemName(alias)]||0):0);
+    const ok = total>0 ? stock<=total : null;
+    return {...item, alias, total, loans, stock, ok};
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
@@ -6155,6 +6156,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
+    });
+    fbOn("db/armoryMaster", (master)=>{
+      if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
     const off8 = fbOn("db/unitItems", (unitItems)=>{
       const items = unitItems||{};
