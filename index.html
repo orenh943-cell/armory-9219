@@ -7482,9 +7482,14 @@ function InventoryTab({db, setDb, soldiers, auth}){
   }
 
   function deleteItem(id){
-    if(!window.confirm("למחוק פריט זה?")) return;
+    if(!canDelete(auth)){alert("אין הרשאה למחיקה");return;}
+    const item=db.unitItems[id];
+    const pin=window.prompt("הכנס קוד אישי למחיקת "+(item?.n||item?.name||"פריט")+" צ "+(item?.s||item?.serial||"—")+":");
+    if(pin!==ARMORY_DASH_PIN){alert("קוד שגוי");return;}
+    fbDelete("db/unitItems/"+id).catch(()=>{});
     const newItems={...db.unitItems}; delete newItems[id];
     const ndb={...db,unitItems:newItems}; saveDB(ndb); setDb(ndb);
+    logAction("מחיקת_פריט","נמחק "+(item?.n||"?")+" צ "+(item?.s||"—"),auth?.name);
   }
 
   function downloadReport(){
@@ -9114,6 +9119,10 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
   const [addName, setAddName] = React.useState("");
   const [addMakat, setAddMakat] = React.useState("");
   const [addQty, setAddQty] = React.useState("1");
+  const [addSerial, setAddSerial] = React.useState("");
+  const [addUnit, setAddUnit] = React.useState("א");
+  const [addNameSearch, setAddNameSearch] = React.useState("");
+  const [addMode, setAddMode] = React.useState("existing"); // existing=מרשימה, new=פריט חדש
   const [serialSearch, setSerialSearch] = React.useState("");
   const [editSerialItem, setEditSerialItem] = React.useState(null);
   const [editSerialVal, setEditSerialVal] = React.useState("");
@@ -9208,19 +9217,39 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
 
   function doAddItem(){
     if(!addName.trim()) return;
-    requirePin("הוספת פריט: "+addName, ()=>{
-      const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
-      master2[addName.trim()]={makat:addMakat.trim()||null, total:parseInt(addQty)||1};
-      if(addMakat.trim()&&!NAME_TO_MAKAT[addName.trim()]){
-        NAME_TO_MAKAT[addName.trim()]=parseInt(addMakat)||addMakat;
-        window._makatCache=window._makatCache||{}; window._makatCache[addName.trim()]=String(addMakat);
+    const serialVal = addSerial.trim();
+    // בדוק כפילות
+    if(serialVal){
+      const existing = Object.values(db.unitItems||{}).find(v=>String(v.s||v.serial||"")===serialVal);
+      const inAssignments = Object.values(db.assignments||{}).some(asgn=>Object.values(asgn).some(v=>String(v)===serialVal));
+      if(existing||inAssignments){
+        alert("⚠️ צ "+serialVal+" כבר קיים במערכת!"); return;
       }
-      const ndb={...db, armoryMaster:master2, _armoryMasterLoaded:true};
-      saveDB(ndb); setDb(ndb);
+    }
+    requirePin("הוספת פריט: "+addName+(serialVal?" צ "+serialVal:""), ()=>{
+      const nItems={...db.unitItems};
+      const newDb={...db};
+      // אם יש צ סידורי — צור unitItem
+      if(serialVal){
+        const itemKey="ui_"+Date.now()+"_"+serialVal;
+        const newItem={n:addName.trim(), s:serialVal, u:addUnit, t:"unit",
+          makat:addMakat.trim()||getMakat(addName.trim())||null, addedAt:new Date().toLocaleDateString("he-IL")};
+        nItems[itemKey]=newItem;
+        newDb.unitItems=nItems;
+        fbSet("db/unitItems/"+itemKey, newItem).catch(()=>{});
+      }
+      // עדכן armoryMaster
+      const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
+      const existing2=master2[addName.trim()]||{};
+      // אם יש צ — הכמות עולה ב-1, אחרת לפי addQty
+      const newTotal = serialVal ? (existing2.total||0)+1 : (parseInt(addQty)||1);
+      const makatVal = addMakat.trim()||existing2.makat||getMakat(addName.trim())||null;
+      master2[addName.trim()]={...existing2, makat:makatVal, total:newTotal};
+      newDb.armoryMaster=master2;
+      saveDB(newDb); setDb(newDb);
       fbSet("db/armoryMaster/"+addName.trim(), master2[addName.trim()]).catch(()=>{});
-      fbSet("db/armoryMasterSeededV2", true).catch(()=>{});
-      logAction("הוספת_פריט_ארמון", "נוסף: "+addName+" מקט:"+addMakat+" כמות:"+addQty, auth?.name);
-      setAddItemModal(false); setAddName(""); setAddMakat(""); setAddQty("1");
+      logAction("הוספת_פריט_ארמון", "נוסף: "+addName+(serialVal?" צ "+serialVal:"")+" פלוגה "+addUnit, auth?.name);
+      setAddItemModal(false); setAddName(""); setAddMakat(""); setAddQty("1"); setAddSerial(""); setAddNameSearch("");
     });
   }
 
@@ -9616,20 +9645,70 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
 
       {/* ---- ADD ITEM MODAL ---- */}
       {addItemModal&&(
-        <Modal title={"➕ הוספת פריט למלאי ארמון"} onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");}}>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט *</div>
-            <input value={addName} onChange={e=>setAddName(e.target.value)} placeholder="שם..." style={{...S.input}} autoFocus/>
+        <Modal title={"➕ הוספת פריט למלאי ארמון"} onClose={()=>{setAddItemModal(false);setAddName("");setAddMakat("");setAddQty("1");setAddSerial("");setAddNameSearch("");}}>
+          {/* toggle קיים / חדש */}
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <button onClick={()=>setAddMode("existing")}
+              style={{...S.btn(addMode==="existing"?"blue":"neutral"),flex:1,padding:"7px 0",fontSize:"var(--text-sm)"}}>
+              📋 פריט קיים
+            </button>
+            <button onClick={()=>setAddMode("new")}
+              style={{...S.btn(addMode==="new"?"purple":"neutral"),flex:1,padding:"7px 0",fontSize:"var(--text-sm)"}}>
+              ✨ פריט חדש
+            </button>
           </div>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>מקט</div>
+          {/* בחירת פריט מרשימה */}
+          {addMode==="existing"&&<div style={{marginBottom:10}}>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>🔍 חפש פריט קיים *</div>
+            <input value={addNameSearch} onChange={e=>{setAddNameSearch(e.target.value);setAddName("");}}
+              placeholder="הקלד שם פריט..." style={{...S.input}} autoFocus/>
+            {addNameSearch.length>0&&(()=>{
+              const opts=Object.keys(window.NAME_TO_MAKAT_DATA||{}).filter(n=>n.includes(addNameSearch)).slice(0,10);
+              return opts.length>0?(
+                <div style={{border:"1px solid var(--color-border-muted)",borderRadius:6,marginTop:4,maxHeight:160,overflowY:"auto"}}>
+                  {opts.map(n=>(
+                    <div key={n} onClick={()=>{
+                      setAddName(n);
+                      setAddMakat(String(window.NAME_TO_MAKAT_DATA[n]||""));
+                      setAddNameSearch(n);
+                    }} style={{padding:"7px 12px",cursor:"pointer",borderBottom:"1px solid var(--color-border-muted)",
+                      background:addName===n?"var(--color-accent-subtle)":"var(--color-bg-default)"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="var(--color-bg-subtle)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=addName===n?"var(--color-accent-subtle)":"var(--color-bg-default)"}>
+                      <span style={{fontWeight:600}}>{n}</span>
+                      <span style={{fontSize:10,color:"var(--color-text-muted)",marginRight:8,fontFamily:"monospace"}}>{window.NAME_TO_MAKAT_DATA[n]}</span>
+                    </div>
+                  ))}
+                </div>
+              ):null;
+            })()}
+          </div>
+          </div>}
+          {addMode==="new"&&<div style={{marginBottom:10}}>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>שם פריט חדש *</div>
+            <input value={addName} onChange={e=>setAddName(e.target.value)} placeholder="שם הפריט..." style={{...S.input}} autoFocus={addMode==="new"}/>
+            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3,marginTop:8}}>מק"ט</div>
             <input value={addMakat} onChange={e=>setAddMakat(e.target.value)} placeholder="מספר מקט..." style={{...S.input,fontFamily:"monospace"}}/>
+          </div>}
+          {addName&&<div style={{background:"var(--color-success-bg)",border:"1px solid var(--color-success-fg)",borderRadius:6,padding:"6px 10px",marginBottom:10,fontSize:"var(--text-sm)",fontWeight:700}}>
+            ✅ {addMode==="existing"?"נבחר":"פריט חדש"}: {addName} {addMakat&&<span style={{fontFamily:"monospace",color:"var(--color-text-muted)",fontWeight:400}}>מק"ט {addMakat}</span>}
+          </div>}
+          {/* צ סידורי + פלוגה */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>צ סידורי *</div>
+              <input value={addSerial} onChange={e=>setAddSerial(e.target.value)}
+                placeholder="מספר סידורי..." style={{...S.input,marginBottom:0,fontFamily:"monospace"}} inputMode="numeric"/>
+            </div>
+            <div>
+              <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>פלוגה</div>
+              <select value={addUnit} onChange={e=>setAddUnit(e.target.value)} style={{...S.input,marginBottom:0}}>
+                {["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
           </div>
-          <div style={{marginBottom:20}}>
-            <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:3}}>כמות</div>
-            <input type="number" min="1" value={addQty} onChange={e=>setAddQty(e.target.value)} style={{...S.input,width:100}}/>
-          </div>
-          <button onClick={doAddItem} disabled={!addName.trim()} style={{...S.btn("success"),width:"100%",padding:"11px 0",fontWeight:700,opacity:addName.trim()?1:0.5}}>
+          <button onClick={doAddItem} disabled={!addName.trim()||!addSerial.trim()}
+            style={{...S.btn("success"),width:"100%",padding:"11px 0",fontWeight:700,opacity:(addName.trim()&&addSerial.trim())?1:0.5}}>
             ➕ הוסף פריט (ידרש קוד אישי)
           </button>
         </Modal>
