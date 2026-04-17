@@ -9317,11 +9317,17 @@ function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDo
   const [search, setSearch] = React.useState("");
   const [soldierId, setSoldierId] = React.useState("");
   const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const VALID_UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const effectiveUnit = VALID_UNITS.includes(unit) ? unit : null;
   const matched = React.useMemo(()=>{
     if(!search.trim()) return [];
     const q=search.toLowerCase();
-    return allSols.filter(s=>s.unit===unit&&(s.name.toLowerCase().includes(q)||s.id.includes(q))).slice(0,6);
-  },[search,allSols,unit]);
+    // אם פלוגה לא תקינה — חפש בכל הפלוגות
+    const base = effectiveUnit
+      ? allSols.filter(s=>s.unit===effectiveUnit)
+      : allSols;
+    return base.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)).slice(0,6);
+  },[search,allSols,effectiveUnit]);
   const selectedSol = allSols.find(s=>s.id===soldierId);
 
   function assign(){
