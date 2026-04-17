@@ -1979,14 +1979,24 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   // בנה: name -> total מ-DAILY_ITEMS
   const nameToDefaultTotal = {};
   DAILY_ITEMS.forEach(d=>{ nameToDefaultTotal[d.name]=d.total; });
+  // בנה גם: makat -> total מ-DAILY_ITEMS (fallback לפי מק"ט)
+  const makatToDefaultTotal = {};
+  const nameToMakat2 = window.NAME_TO_MAKAT_DATA||{};
+  DAILY_ITEMS.forEach(d=>{
+    const mk = nameToMakat2[d.name];
+    if(mk) makatToDefaultTotal[String(mk)] = d.total;
+  });
 
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
     if(!alias) return {...item, alias, total:0, loans:0, stock:0, ok:null};
-    // total: armoryMaster[alias] > DAILY_ITEMS[alias]
+    const makat = String(item.makat||"");
+    // total: armoryMaster[alias] > DAILY_ITEMS[alias] > DAILY_ITEMS[makat]
     const info = masterData[alias]||{};
     const masterTotal = info.total||0;
-    const dailyTotal = nameToDefaultTotal[alias]||0;
+    const dailyByName = nameToDefaultTotal[alias]||0;
+    const dailyByMakat = makat ? (makatToDefaultTotal[makat]||0) : 0;
+    const dailyTotal = dailyByName>0 ? dailyByName : dailyByMakat;
     const total = masterTotal>0 ? masterTotal : dailyTotal;
     // השאלות = חיילים חתומים
     const loans = dailyLoans[alias]||0;
