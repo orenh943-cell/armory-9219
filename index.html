@@ -1956,50 +1956,40 @@ function DailyModal({db,onClose,type,auth}){
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
-  // ===== חישוב מלאי יומי — הכל לפי מק"ט =====
+  // ===== חישוב מלאי יומי — לפי liveData (אותה לוגיקה כמו מלאי ארמון) =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
   const armoryMaster = db.armoryMaster||{};
-  const nameToMakat = window.NAME_TO_MAKAT_DATA||{};
+  const masterData = Object.keys(armoryMaster).length>0 ? armoryMaster : {};
+  const allSolsDaily = [...Object.values(db.customSoldiers||{}),...soldiers];
 
-  // בנה: makat(string) -> total מ-armoryMaster (Firebase)
-  const makatToTotal = {};
-  Object.values(armoryMaster).forEach(entry=>{
-    if(entry.makat!=null && entry.total!=null)
-      makatToTotal[String(entry.makat)] = entry.total;
-  });
-
-  // בנה: makat(string) -> total מ-DAILY_ITEMS (ברירת מחדל)
-  const makatToDaily = {};
-  DAILY_ITEMS.forEach(d=>{
-    const mk = nameToMakat[d.name];
-    if(mk) makatToDaily[String(mk)] = d.total;
-  });
-
-  // בנה: makat(string) -> loans (חיילים חתומים)
-  const makatToLoans = {};
-  Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
-    if(!signedIds.has(solId)) return; // רק חתומים = השאלות
+  // בנה assigned: name -> count מוחזרים (חתומים) ו-loans (חתומים)
+  const dailyAssigned = {}; // name -> total count (כל השיוכים)
+  const dailyLoans = {};    // name -> count חתומים בלבד
+  allSolsDaily.forEach(s=>{
+    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
     Object.keys(asgn||{}).forEach(rawName=>{
       const name = cleanItemName(rawName);
-      // נסה מק"ט לפי שם נקי ולפי שם מקורי
-      const mk = nameToMakat[name] || nameToMakat[rawName] || 
-                 nameToMakat[name.replace(/[″′"']/g,'"')] ||
-                 nameToMakat[name.replace(/[″′"']/g,"'")];
-      if(mk){
-        makatToLoans[String(mk)] = (makatToLoans[String(mk)]||0)+1;
+      dailyAssigned[name] = (dailyAssigned[name]||0)+1;
+      if(signedIds.has(s.id)){
+        dailyLoans[name] = (dailyLoans[name]||0)+1;
       }
     });
   });
 
+  // בנה: name -> total מ-DAILY_ITEMS
+  const nameToDefaultTotal = {};
+  DAILY_ITEMS.forEach(d=>{ nameToDefaultTotal[d.name]=d.total; });
+
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
-    const makat = String(item.makat||"");
-    // מלאי כולל: DAILY_ITEMS (ברירת מחדל) — armoryMaster Firebase עוקף אם קיים ו>0
-    const dailyTotal = makat ? (makatToDaily[makat]||0) : 0;
-    const masterTotal = makat ? (makatToTotal[makat]||0) : 0;
+    if(!alias) return {...item, alias, total:0, loans:0, stock:0, ok:null};
+    // total: armoryMaster[alias] > DAILY_ITEMS[alias]
+    const info = masterData[alias]||{};
+    const masterTotal = info.total||0;
+    const dailyTotal = nameToDefaultTotal[alias]||0;
     const total = masterTotal>0 ? masterTotal : dailyTotal;
-    // השאלות: חיילים חתומים עם הפריט (לפי מק"ט)
-    const loans = makat ? (makatToLoans[makat]||0) : 0;
+    // השאלות = חיילים חתומים
+    const loans = dailyLoans[alias]||0;
     // מצאי = מלאי כולל - השאלות
     const stock = total - loans;
     const ok = total>0 ? (stock>=0) : null;
