@@ -1938,7 +1938,7 @@ const CABINETS_DATA = window.CABINETS_DATA_DATA;
 const DAILY_LEFT = window.DAILY_LEFT_DATA;
 const DAILY_RIGHT = window.DAILY_RIGHT_DATA;
 
-function DailyModal({db,onClose,type,auth}){
+function DailyModal({db,onClose,type,auth,soldiers=[]}){
   // תאריך ושעה עם אפשרות עריכה
   const now = new Date();
   const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
@@ -6888,7 +6888,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
-      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth}/>}
+      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
       {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
