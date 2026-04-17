@@ -9658,6 +9658,65 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 <div style={{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-danger-fg)"}}>🔴 צ/סידוריים כפולים ({dups.length})</div>
                 <button onClick={()=>setShowDuplicates(false)} style={{...S.btn("neutral"),padding:"4px 10px"}}>✕</button>
               </div>
+              {/* כפילויות ב-unitItems */}
+              {(()=>{
+                const seenSerials={};
+                const dupUnitItems=[];
+                Object.entries(db.unitItems||{}).forEach(([key,v])=>{
+                  const s=String(v.s||v.serial||"");
+                  if(!s||!isSerial(s)) return;
+                  if(!seenSerials[s]) seenSerials[s]=[];
+                  seenSerials[s].push(key);
+                });
+                Object.entries(seenSerials).forEach(([serial,keys])=>{
+                  if(keys.length>1) dupUnitItems.push({serial,keys});
+                });
+                if(dupUnitItems.length===0) return null;
+                return (
+                  <div style={{background:"var(--color-warning-subtle)",border:"1px solid var(--color-warning-fg)",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
+                    <div style={{fontWeight:700,color:"var(--color-warning-fg)",marginBottom:8}}>⚠️ כפילויות ב-unitItems ({dupUnitItems.length} צ):</div>
+                    {dupUnitItems.map(({serial,keys})=>{
+                      const firstItem=db.unitItems[keys[0]];
+                      return (
+                        <div key={serial} style={{marginBottom:8,background:"var(--color-bg-default)",borderRadius:6,padding:"8px 10px"}}>
+                          <div style={{fontWeight:700,marginBottom:4}}>{firstItem?.n||firstItem?.name||"?"} — צ <span style={{fontFamily:"monospace",color:"var(--color-accent-fg)"}}>{serial}</span> ({keys.length} כפילויות)</div>
+                          <button onClick={()=>{
+                            // השאר רק את הראשון, מחק את השאר
+                            const toDelete=keys.slice(1);
+                            const nItems={...db.unitItems};
+                            toDelete.forEach(k=>{
+                              delete nItems[k];
+                              fbDelete("db/unitItems/"+k).catch(()=>{});
+                            });
+                            const ndb={...db,unitItems:nItems};
+                            saveDB(ndb); setDb(ndb);
+                            logAction("תיקון_כפילות_unitItems","נמחקו "+toDelete.length+" כפילויות של צ "+serial,auth?.name);
+                          }} style={{...S.btn("warning"),padding:"4px 12px",fontSize:"var(--text-xs)"}}>
+                            🗑️ מחק {keys.length-1} כפילויות
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button onClick={()=>{
+                      // נקה את כולם בפעם אחת
+                      const seenS={};
+                      const nItems={...db.unitItems};
+                      Object.entries(db.unitItems||{}).forEach(([key,v])=>{
+                        const s=String(v.s||v.serial||"");
+                        if(!s||!isSerial(s)){return;}
+                        if(seenS[s]){ delete nItems[key]; fbDelete("db/unitItems/"+key).catch(()=>{}); }
+                        else seenS[s]=key;
+                      });
+                      const ndb={...db,unitItems:nItems};
+                      saveDB(ndb); setDb(ndb);
+                      logAction("תיקון_כפילויות_הכל","נוקו כל כפילויות unitItems",auth?.name);
+                      setShowDuplicates(false);
+                    }} style={{...S.btn("danger"),padding:"6px 14px",fontSize:"var(--text-sm)",marginTop:4}}>
+                      🧹 נקה את כל הכפילויות
+                    </button>
+                  </div>
+                );
+              })()}
               <div style={{overflowY:"auto",flex:1}}>
                 {dups.map(([key,arr])=>{
                   const [itemName,serial]=key.split("||");
