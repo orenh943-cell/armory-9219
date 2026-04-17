@@ -3883,12 +3883,14 @@ function AddSoldierModal({db, onSave, onClose}){
   const allSoldiers = React.useMemo(()=>[...RAW_SOLDIERS,...Object.values(db.customSoldiers||{})],[db]);
 
   function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");
-    if(k==="firstName"||k==="lastName"||k==="id"){
-      const currentForm = {firstName:"",lastName:"",id:""};
-      const q = k==="id" ? v.trim() : v.trim();
-      setSuggestions(q.length>1
-        ? allSoldiers.filter(s=>s.name.includes(q)||s.id.includes(q)).slice(0,6)
+    // הצעות רק בשדה מ"א — לא בשם, למניעת בלבול בהוספת חייל חדש
+    if(k==="id"){
+      const q = v.trim();
+      setSuggestions(q.length>2
+        ? allSoldiers.filter(s=>s.id.startsWith(q)||s.name.includes(q)).slice(0,6)
         : []);
+    } else {
+      setSuggestions([]);
     }
   }
   function pickSoldier(s){
@@ -3937,11 +3939,23 @@ function AddSoldierModal({db, onSave, onClose}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
         <div style={{position:"relative"}}>
           <label style={S.label}>שם פרטי *</label>
-          <input value={form.firstName} onChange={e=>set("firstName",e.target.value)} placeholder="שם פרטי / חיפוש..." style={{...S.input,marginBottom:0}}/>
-          {suggestions.length>0&&<div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-subtle)",
+          <input value={form.firstName} onChange={e=>set("firstName",e.target.value)} placeholder="שם פרטי" style={{...S.input,marginBottom:0}}/>
+          
+        </div>
+        <div>
+          <label style={S.label}>שם משפחה *</label>
+          <input value={form.lastName} onChange={e=>set("lastName",e.target.value)} placeholder="שם משפחה" style={{...S.input,marginBottom:0}}/>
+        </div>
+        <div>
+          <label style={S.label}>מספר אישי *</label>
+          <input value={form.id} onChange={e=>set("id",e.target.value)} 
+            onBlur={()=>setTimeout(()=>setSuggestions([]),200)}
+            placeholder="מספר אישי" style={{...S.input,marginBottom:suggestions.length>0?0:undefined}} inputMode="numeric"/>
+          {suggestions.length>0&&<div style={{background:"var(--color-bg-subtle)",
             border:"1px solid var(--color-accent-fg)",borderRadius:8,zIndex:200,maxHeight:200,overflowY:"auto",
-            boxShadow:"0 4px 16px rgba(0,0,0,.4)"}}>
-            {suggestions.map(s=><div key={s.id} onClick={()=>pickSoldier(s)}
+            boxShadow:"0 4px 16px rgba(0,0,0,.4)",marginBottom:8}}>
+            <div style={{padding:"4px 12px",fontSize:"var(--text-xs)",color:"var(--color-text-muted)",borderBottom:"1px solid var(--color-border-muted)"}}>חייל קיים — לחץ למילוי אוטומטי:</div>
+            {suggestions.map(s=><div key={s.id} onMouseDown={()=>pickSoldier(s)}
               style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--color-border-muted)",
                 display:"flex",justifyContent:"space-between",alignItems:"center"}}
               onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
@@ -3950,14 +3964,6 @@ function AddSoldierModal({db, onSave, onClose}){
               <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",fontFamily:"monospace"}}>{s.id} | {s.unit}</span>
             </div>)}
           </div>}
-        </div>
-        <div>
-          <label style={S.label}>שם משפחה *</label>
-          <input value={form.lastName} onChange={e=>set("lastName",e.target.value)} placeholder="שם משפחה" style={{...S.input,marginBottom:0}}/>
-        </div>
-        <div>
-          <label style={S.label}>מספר אישי *</label>
-          <input value={form.id} onChange={e=>set("id",e.target.value)} placeholder="מספר אישי" style={S.input} inputMode="numeric"/>
         </div>
         <div>
           <label style={S.label}>פלוגה *</label>
