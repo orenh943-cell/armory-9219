@@ -3731,7 +3731,9 @@ function AddSoldierModal({db, onSave, onClose}){
     setSuggestions([]);
   }
 
+  const [saving, setSaving] = React.useState(false);
   function save(){
+    if(saving) return; // מניעת לחיצה כפולה
     if(!form.firstName.trim()){setErr("חסר שם פרטי");return;}
     if(!form.lastName.trim()){setErr("חסר שם משפחה");return;}
     if(!form.id.trim()){setErr("חסר מספר אישי");return;}
@@ -3750,9 +3752,12 @@ function AddSoldierModal({db, onSave, onClose}){
       assignments:{...(db.assignments||{}),[form.id.trim()]:assigned},
       customSoldiers:{...(db.customSoldiers||{}),[form.id.trim()]:newSoldier},
     };
+    setSaving(true);
     saveDB(newDb);onSave(newDb);
-    logAction("הוספת_חייל", `הוסף חייל: ${form.name.trim()} (${form.id.trim()}) פלוגה ${form.unit}`, "מערכת");
-    onClose();
+    logAction("הוספת_חייל", `הוסף חייל: ${(form.firstName+" "+form.lastName).trim()} (${form.id.trim()}) פלוגה ${form.unit}`, "מערכת");
+    fbSet("db/customSoldiers/"+newSoldier.id, newSoldier).catch(()=>{});
+    fbSet("db/assignments/"+newSoldier.id, assigned).catch(()=>{});
+    setTimeout(()=>{ setSaving(false); onClose(); }, 500);
   }
 
   return (
@@ -3827,7 +3832,7 @@ function AddSoldierModal({db, onSave, onClose}){
       {err&&<p style={{color:"var(--color-danger-fg)",fontSize:"var(--text-base)",marginBottom:10}}>⚠️ {err}</p>}
 
       <div style={{display:"flex",gap:10,marginTop:12}}>
-        <button onClick={save} style={{...S.btn("green"),flex:2,padding:"11px 0",fontSize:15}}>✅ הוסף חייל</button>
+        <button onClick={save} disabled={saving} style={{...S.btn("green"),flex:2,padding:"11px 0",fontSize:15,opacity:saving?0.6:1}}>{saving?"⏳ שומר...":"✅ הוסף חייל"}</button>
         <button onClick={onClose} style={{...S.btn(),flex:1}}>ביטול</button>
       </div>
     </Modal>
