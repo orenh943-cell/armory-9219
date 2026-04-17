@@ -6361,6 +6361,22 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
+    // נקה unitItems עם t=soldier עבור ליאור עזרא (8369862) — כפילות
+    if(!window._liorFixed){
+      window._liorFixed=true;
+      fbGet("db/unitItems").then(items=>{
+        if(!items) return;
+        Object.entries(items).forEach(([key,v])=>{
+          const t=v.t||v.assignedType||"unit";
+          const si=v.si||v.assignedSoldierId||"";
+          if(t==="soldier" && si==="8369862"){
+            fbDelete("db/unitItems/"+key).catch(()=>{});
+            console.log("[fix] מחק unitItem כפול של ליאור:",key);
+          }
+        });
+      }).catch(()=>{});
+    }
+
     // תקן unitItems עם פלוגה לא תקינה (timestamp במקום פלוגה)
     const VALID_UNITS_FIX = new Set(["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי","נעורה","חטיבה 6","פנוי"]);
     fbGet("db/unitItems").then(items=>{
