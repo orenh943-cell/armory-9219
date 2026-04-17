@@ -6361,6 +6361,21 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
+    // תקן unitItems עם פלוגה לא תקינה (timestamp במקום פלוגה)
+    const VALID_UNITS_FIX = new Set(["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי","נעורה","חטיבה 6","פנוי"]);
+    fbGet("db/unitItems").then(items=>{
+      if(!items) return;
+      Object.entries(items).forEach(([key,v])=>{
+        const u = v.u||v.unit||"";
+        if(u && !VALID_UNITS_FIX.has(u)){
+          // פלוגה לא תקינה — תקן לגדודי
+          fbSet("db/unitItems/"+key+"/u", "גדודי").catch(()=>{});
+          fbSet("db/unitItems/"+key+"/unit", "גדודי").catch(()=>{});
+          console.log("[fix] תוקנה פלוגה לא תקינה:",key,"מ",u,"לגדודי");
+        }
+      });
+    }).catch(()=>{});
+
     // נקה כפילויות unitItems אוטומטית בטעינה (רק פעם אחת בסשן)
     if(!window._dedupDone){
       window._dedupDone=true;
@@ -9517,7 +9532,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       // אם יש צ סידורי — צור unitItem
       if(serialVal){
         const itemKey="ui_"+Date.now()+"_"+serialVal;
-        const newItem={n:addName.trim(), s:serialVal, u:addUnit, t:"unit",
+        const unitVal = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].includes(addUnit) ? addUnit : "גדודי";
+        const newItem={n:addName.trim(), s:serialVal, u:unitVal, t:"unit",
           makat:addMakat.trim()||getMakat(addName.trim())||null, addedAt:new Date().toLocaleDateString("he-IL")};
         nItems[itemKey]=newItem;
         newDb.unitItems=nItems;
