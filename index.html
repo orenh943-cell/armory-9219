@@ -1956,73 +1956,49 @@ function DailyModal({db,onClose,type,auth}){
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
-  // חישוב מלאי יומי
-  const loansMap = {};  // alias -> השאלות (חיילים חתומים)
-  const stockMap = {};  // alias -> מצאי (לא חתומים + בארמון)
+  // ===== חישוב מלאי יומי — הכל לפי מק"ט =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
   const armoryMaster = db.armoryMaster||{};
+  const nameToMakat = window.NAME_TO_MAKAT_DATA||{};
 
-  // בנה מפת alias→שם-ב-armoryMaster לכל פריט בדוח
-  // totalMap: alias -> מלאי קבוע
-  // חיפוש לפי מק"ט — ייחודי ולא תלוי בשם
-  // בנה: makat -> total מ-armoryMaster
+  // בנה: makat(string) -> total מ-armoryMaster (Firebase)
   const makatToTotal = {};
   Object.values(armoryMaster).forEach(entry=>{
-    if(entry.makat && entry.total!=null) makatToTotal[String(entry.makat)] = entry.total;
+    if(entry.makat!=null && entry.total!=null)
+      makatToTotal[String(entry.makat)] = entry.total;
   });
-  // בנה גם: makat -> total מ-NAME_TO_MAKAT_DATA + DAILY_ITEMS
-  const nameToMakat = window.NAME_TO_MAKAT_DATA||{};
+
+  // בנה: makat(string) -> total מ-DAILY_ITEMS (ברירת מחדל)
   const makatToDaily = {};
   DAILY_ITEMS.forEach(d=>{
-    const mk = nameToMakat[d.name] || nameToMakat[cleanItemName(d.name)];
+    const mk = nameToMakat[d.name];
     if(mk) makatToDaily[String(mk)] = d.total;
   });
 
-  const totalMap = {};
-  [...DAILY_LEFT, ...DAILY_RIGHT].forEach(item=>{
-    const alias = (item.alias||item.name||"").trim();
-    const makat = String(item.makat||"");
-    // 1. לפי מק"ט ב-armoryMaster (Firebase)
-    const masterVal = makat ? makatToTotal[makat] : undefined;
-    // 2. לפי מק"ט ב-DAILY_ITEMS
-    const dailyVal = makat ? makatToDaily[makat] : undefined;
-    // 3. fallback: שם
-    const byName = armoryMaster[alias]?.total ?? armoryMaster[cleanItemName(alias)]?.total;
-    totalMap[alias] = (masterVal!=null&&masterVal>0) ? masterVal
-                    : (byName!=null&&byName>0) ? byName
-                    : (dailyVal||0);
-  });
-
-  // חשב השאלות ומצאי מ-assignments + unitItems
+  // בנה: makat(string) -> loans (חיילים חתומים)
+  const makatToLoans = {};
+  // בנה: name -> makat מ-assignments (דרך nameToMakat)
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+    if(!signedIds.has(solId)) return; // רק חתומים = השאלות
     Object.keys(asgn||{}).forEach(rawName=>{
-      const name=cleanItemName(rawName);
-      if(signedIds.has(solId)){
-        loansMap[name]=(loansMap[name]||0)+1;
-      } else {
-        stockMap[name]=(stockMap[name]||0)+1;
+      const name = cleanItemName(rawName);
+      const mk = nameToMakat[name] || nameToMakat[rawName];
+      if(mk){
+        makatToLoans[String(mk)] = (makatToLoans[String(mk)]||0)+1;
       }
     });
-  });
-  // unitItems t=unit בלבד (בארמון, לא כפילות)
-  Object.values(db.unitItems||{}).forEach(item=>{
-    const name=cleanItemName(item.n||item.name||""); if(!name) return;
-    const t=item.t||item.assignedType||"unit";
-    if(t==="unit"){
-      stockMap[name]=(stockMap[name]||0)+1;
-    }
   });
 
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
     const makat = String(item.makat||"");
-    const cleanAlias = cleanItemName(alias);
-    // total: לפי מק"ט קודם, אחר כך alias, אחר כך cleanAlias
-    const total = (makat&&makatToTotal[makat]!=null) ? makatToTotal[makat]
-                : (makat&&makatToDaily[makat]!=null) ? makatToDaily[makat]
-                : totalMap[alias] ?? totalMap[cleanAlias] ?? 0;
-    // loans: לפי alias וגם cleanAlias
-    const loans = (loansMap[alias]||0) + (cleanAlias!==alias?(loansMap[cleanAlias]||0):0);
+    // מלאי כולל: armoryMaster > DAILY_ITEMS
+    const total = (makat && makatToTotal[makat]!=null && makatToTotal[makat]>0)
+      ? makatToTotal[makat]
+      : (makat && makatToDaily[makat]!=null ? makatToDaily[makat] : 0);
+    // השאלות: חיילים חתומים עם הפריט
+    const loans = makat ? (makatToLoans[makat]||0) : 0;
+    // מצאי = מלאי כולל - השאלות
     const stock = total - loans;
     const ok = total>0 ? (stock>=0) : null;
     return {...item, alias, total, loans, stock, ok};
