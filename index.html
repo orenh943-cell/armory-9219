@@ -7757,12 +7757,20 @@ function InventoryTab({db, setDb, soldiers, auth}){
   function deleteItem(id){
     if(!canDelete(auth)){alert("אין הרשאה למחיקה");return;}
     const item=db.unitItems[id];
-    const pin=window.prompt("הכנס קוד אישי למחיקת "+(item?.n||item?.name||"פריט")+" צ "+(item?.s||item?.serial||"—")+":");
+    const itemName = item?.n||item?.name||"פריט";
+    const pin=window.prompt("הכנס קוד אישי למחיקת "+itemName+" צ "+(item?.s||item?.serial||"—")+":");
     if(pin!==ARMORY_DASH_PIN){alert("קוד שגוי");return;}
     fbDelete("db/unitItems/"+id).catch(()=>{});
     const newItems={...db.unitItems}; delete newItems[id];
-    const ndb={...db,unitItems:newItems}; saveDB(ndb); setDb(ndb);
-    logAction("מחיקת_פריט","נמחק "+(item?.n||"?")+" צ "+(item?.s||"—"),auth?.name);
+    // הורד total ב-armoryMaster
+    const master={...(db.armoryMaster||{})};
+    if(master[itemName]){
+      const newTotal = Math.max(0,(master[itemName].total||0)-1);
+      master[itemName]={...master[itemName],total:newTotal};
+      fbSet("db/armoryMaster/"+itemName+"/total", newTotal).catch(()=>{});
+    }
+    const ndb={...db,unitItems:newItems,armoryMaster:master}; saveDB(ndb); setDb(ndb);
+    logAction("מחיקת_פריט","נמחק "+itemName+" צ "+(item?.s||"—"),auth?.name);
   }
 
   function downloadReport(){
@@ -7953,8 +7961,9 @@ function InventoryTab({db, setDb, soldiers, auth}){
                               <button onClick={e=>{e.stopPropagation();setShowAssign(showAssign===id?null:id);setShowTransfer(null);}}
                                 style={{...S.btn("blue"),padding:"2px 6px",fontSize:10}}>👤</button>
                             </>}
-                            <button onClick={e=>{e.stopPropagation();deleteItem(id);}}
-                              style={{...S.btn("red"),padding:"2px 6px",fontSize:10}}>✕</button>
+                            {canDelete(auth)&&<button onClick={e=>{e.stopPropagation();deleteItem(id);}}
+                              title="מחיקה — דשבורד ארמון בלבד"
+                              style={{...S.btn("red"),padding:"2px 6px",fontSize:10}}>✕</button>}
                           </div>}
                         </div>
                       );
@@ -9511,14 +9520,12 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
         newDb.unitItems=nItems;
         fbSet("db/unitItems/"+itemKey, newItem).catch(()=>{});
       }
-      // עדכן armoryMaster רק אם פריט חדש לגמרי (לא קיים)
+      // עדכן armoryMaster — הוסף 1 ל-total בכל הוספת פריט עם צ
       const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
       const existing2=master2[addName.trim()]||{};
       const makatVal = addMakat.trim()||existing2.makat||getMakat(addName.trim())||null;
-      // אם יש צ — לא משנים total (הוא כבר הוגדר ידנית)
-      // אם פריט חדש לגמרי (אין ב-armoryMaster) — קבע total לפי addQty
-      const isNewType = !existing2.total && !existing2.makat;
-      const newTotal = isNewType ? (parseInt(addQty)||1) : (existing2.total||0);
+      // הוסף 1 ל-total — כל הוספת פריט מעלה מלאי
+      const newTotal = (existing2.total||0) + 1;
       master2[addName.trim()]={...existing2, makat:makatVal, total:newTotal};
       newDb.armoryMaster=master2;
       saveDB(newDb); setDb(newDb);
