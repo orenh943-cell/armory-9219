@@ -9587,12 +9587,13 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
         newDb.unitItems=nItems;
         fbSet("db/unitItems/"+itemKey, newItem).catch(()=>{});
       }
-      // עדכן armoryMaster — הוסף 1 ל-total בכל הוספת פריט עם צ
+      // עדכן armoryMaster
       const master2={...(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER)};
       const existing2=master2[addName.trim()]||{};
       const makatVal = addMakat.trim()||existing2.makat||getMakat(addName.trim())||null;
-      // הוסף 1 ל-total — כל הוספת פריט מעלה מלאי
-      const newTotal = (existing2.total||0) + 1;
+      // הוסף 1 ל-total רק אם הפריט חדש לגמרי (total=0)
+      // אם total>0 — הפריט כבר קיים, הצ הוא רשומה נוספת שכבר נספרה
+      const newTotal = (existing2.total||0) > 0 ? (existing2.total||0) : 1;
       master2[addName.trim()]={...existing2, makat:makatVal, total:newTotal};
       newDb.armoryMaster=master2;
       saveDB(newDb); setDb(newDb);
