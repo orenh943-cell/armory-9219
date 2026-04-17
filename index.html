@@ -6361,20 +6361,44 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
-    // נקה unitItems עם t=soldier עבור ליאור עזרא (8369862) — כפילות
-    if(!window._liorFixed){
-      window._liorFixed=true;
+    // מחק ליאור עזרא מכל המקומות
+    if(!window._liorDeleted){
+      window._liorDeleted=true;
+      const LID="8369862";
+      // מחק מכל unitItems שקשורים אליו
       fbGet("db/unitItems").then(items=>{
         if(!items) return;
         Object.entries(items).forEach(([key,v])=>{
-          const t=v.t||v.assignedType||"unit";
           const si=v.si||v.assignedSoldierId||"";
-          if(t==="soldier" && si==="8369862"){
+          const t=v.t||v.assignedType||"unit";
+          if(si===LID || (t==="soldier" && si===LID)){
             fbDelete("db/unitItems/"+key).catch(()=>{});
-            console.log("[fix] מחק unitItem כפול של ליאור:",key);
           }
         });
       }).catch(()=>{});
+      // מחק assignments
+      fbDelete("db/assignments/"+LID).catch(()=>{});
+      // מחק signatures
+      fbDelete("db/signatures/"+LID).catch(()=>{});
+      // מחק customSoldiers
+      fbDelete("db/customSoldiers/"+LID).catch(()=>{});
+      // מחק testCerts
+      fbDelete("db/testCerts/"+LID).catch(()=>{});
+      // מחק exitForms
+      fbGet("db/exitForms").then(forms=>{
+        if(!forms) return;
+        Object.entries(forms).forEach(([key,v])=>{
+          if(v.soldierId===LID) fbDelete("db/exitForms/"+key).catch(()=>{});
+        });
+      }).catch(()=>{});
+      // מחק sigHistory
+      fbGet("db/sigHistory").then(hist=>{
+        if(!hist) return;
+        Object.entries(hist).forEach(([key,v])=>{
+          if(v.soldierId===LID) fbDelete("db/sigHistory/"+key).catch(()=>{});
+        });
+      }).catch(()=>{});
+      console.log("[cleanup] ליאור עזרא נמחק מכל המקומות");
     }
 
     // תקן unitItems עם פלוגה לא תקינה (timestamp במקום פלוגה)
