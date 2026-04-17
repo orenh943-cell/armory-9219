@@ -10639,12 +10639,14 @@ function MyStockTab({db, setDb, soldiers, auth}){
             {expandedAddItem===expandedItem&&<AddSerialInline itemName={expandedItem} db={db} setDb={setDb} onDone={()=>setExpandedAddItem(null)}/>}
 
             {/* שיוך פריט לחייל */}
-            {expandedAddItem&&expandedAddItem.startsWith("assign_")&&(()=>{
-              const parts = expandedAddItem.split("_");
-              const uid=parts[1], itemName=parts[2], unit=parts[3];
-              return <AssignUnitItemToSoldier uid={uid} itemName={itemName} unit={unit}
-                db={db} setDb={setDb} soldiers={soldiers}
-                onDone={()=>setExpandedAddItem(null)}/>;
+            {expandedAddItem&&expandedAddItem.startsWith("assign::")&&(()=>{
+              try{
+                const payload = JSON.parse(expandedAddItem.slice("assign::".length));
+                const {uid, itemName, unit} = payload;
+                return <AssignUnitItemToSoldier uid={uid} itemName={itemName} unit={unit}
+                  db={db} setDb={setDb} soldiers={soldiers}
+                  onDone={()=>setExpandedAddItem(null)}/>;
+              }catch(e){ return null; }
             })()}
 
             {/* רשימת סידוריים */}
@@ -10715,7 +10717,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         </select>
                       )}
                       {/* שיוך לחייל */}
-                      {!isSoldier&&<button onClick={()=>setExpandedAddItem("assign_"+id+"_"+expandedItem+"_"+unit)}
+                      {!isSoldier&&<button onClick={()=>setExpandedAddItem("assign::"+JSON.stringify({uid:id,itemName:expandedItem,unit}))}
                         style={{...S.btn("blue"),padding:"2px 7px",fontSize:9,minHeight:22}}>👤</button>}
                       {canDelete(auth)&&<button onClick={()=>{
                         const ndb={...db,unitItems:{...db.unitItems}};
@@ -11006,7 +11008,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                           border:"1px solid var(--color-warning-fg)"}}>
                           <span style={{flex:1,fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>🏢 מוקצה לפלוגה</span>
                           <span style={{fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{v.s||v.serial||"—"}</span>
-                          <button onClick={e=>{e.stopPropagation();setExpandedAddItem("assign_"+uid+"_"+item.name+"_"+u);}}
+                          <button onClick={e=>{e.stopPropagation();setExpandedAddItem("assign::"+JSON.stringify({uid,itemName:item.name,unit:u}));}}
                             style={{...S.btn("blue"),padding:"2px 8px",fontSize:9,minHeight:20}}>
                             שייך לחייל
                           </button>
