@@ -773,7 +773,23 @@ window.IMG_BADGE = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1
 
 const RAW_SOLDIERS = window.RAW_SOLDIERS_DATA;
 const EQ_COLS = ["קלע סער","M16","M4","מטולון M320","נגב 556","נגב 762","מאג","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש","מק פורק","מדפסים","כוונת קידמית","כוונת אחורית","כנה ספיר למאג","כנה ספיר לנגב","כנה ספיר למקכ","קנה לנגב 556","קנה לנגב 7.62","קנה למאג","אקילה X4","אקילה X6","NYX","מיקרון","שח″ע","שח″ע ממותג","שח″מ כחולה","שח''מ ירוקה","ליאור","ערמון","מכבית","טרמיס","עכבר","עדי","עמית","עמית איכון","וילון","עידו","פליר T75","רחפן איבו","אבטה","אבטה","משקפי אבטה","שלט אבטה","מטריס 30","שלט מטריס 30","אלפא","שלט אלפא","כדור ברזל- מתקן הטלה","טריגיקון","מטלון ישן","מטלון חדש","לאופולד 2","לאופולד 65","ירין הגדלה משתנה","מרק 5","מרק 6","ציין לייזר לנגב","סמן PACK","מפרומור","כוונת M5","מפרולייט","זאבון","פיגיון","סמן לייזר למפקד","נטלי","סמן לייזר ללאו","מטלון ינאי","איוטק OGL","יראור","משקפת","מצפן","משקפת 80*15","שבשבת רוח","מטל סרוג 10","מטל סרוג 20","ישלט","צגון","אורלי","כמות נשקים לחייל"];
-const DAILY_ITEMS = [{"name":"M4","total":340},{"name":"קלע סער","total":68},{"name":"M16","total":148},{"name":"HTR 338","total":3},{"name":"M-24 חדש","total":9},{"name":"נגב 762","total":7},{"name":"מטולון M320","total":34},{"name":"מאג","total":38},{"name":"נגב 556","total":24},{"name":"מק\"כ 0.5","total":9},{"name":"מקלרון","total":1},{"name":"מקלר","total":4},{"name":"כדור ברזל","total":3},{"name":"ערכת תהל","total":20},{"name":"אלפא","total":1},{"name":"מטריס 30","total":2},{"name":"אבטה","total":8},{"name":"פליר T75","total":12},{"name":"אקילה X4","total":52},{"name":"אקילה X6","total":8},{"name":"שח\"ע","total":15},{"name":"שח\"מ כחולה","total":39},{"name":"שח\"מ ירוקה","total":25},{"name":"ליאור","total":5},{"name":"ערמון","total":2},{"name":"טרמיס","total":11},{"name":"עכבר","total":15},{"name":"עדי","total":5},{"name":"עמית","total":7},{"name":"עידו","total":16},{"name":"מיקרון","total":5},{"name":"NYX","total":4},{"name":"וילון","total":19},{"name":"טריגיקון","total":36},{"name":"מפרומור","total":29},{"name":"מפרולייט","total":16},{"name":"מכבית","total":10},{"name":"משקפת","total":15}];
+const DAILY_ITEMS = [
+  {"name":"M4","total":340},{"name":"קלע סער","total":68},{"name":"M16","total":148},
+  {"name":"HTR 338","total":3},{"name":"M-24 חדש","total":9},{"name":"נגב 762","total":7},
+  {"name":"מטולון M320","total":34},{"name":"מאג","total":38},{"name":"נגב 556","total":24},
+  {"name":"מק״כ 05","total":9},{"name":"מקלרון","total":1},{"name":"מקלר","total":4},
+  {"name":"כדור ברזל- מתקן הטלה","total":3},{"name":"ערכת תהל","total":20},
+  {"name":"אלפא","total":1},{"name":"מטריס 30","total":2},{"name":"אבטה","total":8},
+  {"name":"פליר T75","total":12},{"name":"אקילה X4","total":52},{"name":"אקילה X6","total":8},
+  {"name":"שח״ע","total":15},{"name":"שח״מ כחולה","total":39},{"name":"שח'מ ירוקה","total":25},
+  {"name":"ליאור","total":5},{"name":"ערמון","total":2},{"name":"טרמיס","total":11},
+  {"name":"עכבר","total":15},{"name":"עדי","total":5},{"name":"עמית","total":7},
+  {"name":"עמית איכון","total":0},{"name":"עידו","total":16},{"name":"מיקרון","total":5},
+  {"name":"NYX","total":4},{"name":"וילון","total":19},{"name":"טריגיקון","total":36},
+  {"name":"מפרומור","total":29},{"name":"מפרולייט","total":16},{"name":"מכבית","total":10},
+  {"name":"משקפת","total":15},{"name":"ישלט","total":2},{"name":"כוונת MUNS","total":1},
+  {"name":"אורלי","total":2},{"name":"יחצ״ג מיני כוכב","total":0},{"name":"פיגיון","total":2}
+];
 
 const USERS = {
   "אורן": {role:"admin", pass:"7680832", name:"אורן חלפון", soldierId:"7680832"},
@@ -1970,47 +1986,47 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
-  // ===== חישוב מלאי יומי — בדיוק כמו ArmoryStockTab =====
+  // ===== חישוב מלאי יומי =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
   const allSolsDaily = [...Object.values(db.customSoldiers||{}),...soldiers];
   const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
 
-  // ספור כל השיוכים לפי שם פריט (כולל חתומים ולא חתומים)
-  const assignedCount = {}; // name -> count כל השיוכים
-  const loansCount = {};    // name -> count חתומים בלבד
+  // בנה makat->name מ-armoryMaster
+  const makatToName = {};
+  Object.entries(masterData2).forEach(([name,info])=>{
+    const mk = String(info.makat||getMakat(name)||"");
+    if(mk) makatToName[mk] = name;
+  });
+
+  // ספור השאלות לפי שם
+  const loansCount = {};
   allSolsDaily.forEach(s=>{
+    if(!signedIds.has(s.id)) return;
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
     Object.keys(asgn||{}).forEach(rawName=>{
       const name = cleanItemName(rawName);
-      assignedCount[name] = (assignedCount[name]||0)+1;
-      if(signedIds.has(s.id)) loansCount[name] = (loansCount[name]||0)+1;
+      loansCount[name] = (loansCount[name]||0)+1;
     });
-  });
-  Object.values(db.unitItems||{}).forEach(item=>{
-    const name = cleanItemName(item.n||item.name||"");
-    if(name) assignedCount[name] = (assignedCount[name]||0)+1;
-  });
-
-  // בנה makatData מ-armoryMaster — אותה לוגיקה כמו ArmoryStockTab
-  const makatData = {};
-  Object.entries(masterData2).forEach(([name, info])=>{
-    const mk = String(info.makat||getMakat(name)||"");
-    if(!mk) return;
-    const liveTotal = assignedCount[name]||0;
-    const dailyTotal = (DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
-    const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
-    const loans = loansCount[name]||0;
-    makatData[mk] = {total, loans, name};
   });
 
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
     const makat = String(item.makat||"");
-    if(!makat) return {...item, alias, total:0, loans:0, stock:0, ok:null};
-    const data = makatData[makat]||{total:0, loans:0};
-    const stock = data.total - data.loans;
-    const ok = data.total>0 ? (stock>=0) : null;
-    return {...item, alias, total:data.total, loans:data.loans, stock, ok};
+    if(!alias) return {...item, alias, total:0, loans:0, stock:0, ok:null};
+
+    // מצא שם ב-armoryMaster לפי מק"ט
+    const amName = makat ? (makatToName[makat]||alias) : alias;
+    const info = masterData2[amName]||masterData2[alias]||{};
+
+    // total: armoryMaster > DAILY_ITEMS
+    const dailyTotal = (DAILY_ITEMS||[]).find(d=>d.name===amName||d.name===alias)?.total||0;
+    const total = info.total>0 ? info.total : dailyTotal;
+
+    // השאלות: חיילים חתומים — חפש לפי שם armoryMaster וגם alias
+    const loans = (loansCount[amName]||0) + (amName!==alias?(loansCount[alias]||0):0);
+    const stock = total - loans;
+    const ok = total>0 ? (stock>=0) : null;
+    return {...item, alias, total, loans, stock, ok};
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
