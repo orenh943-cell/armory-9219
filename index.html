@@ -6183,6 +6183,25 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
+    // נקה כפילויות unitItems אוטומטית בטעינה (רק פעם אחת בסשן)
+    if(!window._dedupDone){
+      window._dedupDone=true;
+      fbGet("db/unitItems").then(items=>{
+        if(!items) return;
+        const seen={};
+        const toDelete=[];
+        Object.entries(items).forEach(([key,v])=>{
+          const s=String(v.s||v.serial||"");
+          if(!s||s==="1"||s==="undefined") return;
+          if(seen[s]){ toDelete.push(key); }
+          else seen[s]=key;
+        });
+        if(toDelete.length>0){
+          console.log("[dedup] מוחק",toDelete.length,"כפילויות unitItems");
+          toDelete.forEach(k=>fbDelete("db/unitItems/"+k).catch(()=>{}));
+        }
+      }).catch(()=>{});
+    }
     const off8 = fbOn("db/unitItems", (unitItems)=>{
       const items = unitItems||{};
       // Only auto-seed on very first load (check if seeded flag exists)
@@ -9964,9 +9983,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
       const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
       const gadudi = liveByUnit["גדודי"]||0;
       const assignedToUnits = liveTotal - gadudi;
-      // total = max of declared (armoryMaster) vs actual (assignments+unitItems)
-      const unitItemCount = Object.values(db.unitItems||{}).filter(v=>(v.n||v.name)===name).length;
-      const total = Math.max(info.total||0, liveTotal, unitItemCount);
+      // total = armoryMaster הוא המקור הסמכותי. אם אין — fallback ל-DAILY_ITEMS
+      const dailyTotal = (window.DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
+      const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
       const toUnits = Object.values(db.unitItems||{}).filter(v=>{
         const n=v.n||v.name||""; const u=v.u||v.unit||""; const t=v.t||v.assignedType||"unit";
         return n===name && t==="unit" && u!=="גדודי";
