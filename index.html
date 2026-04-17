@@ -10408,7 +10408,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         </div>
         <div style={{display:"flex",gap:8}}>
 
-          {canDelete(auth)&&<button onClick={resetAllArmory} style={{...S.btn("red"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🗑️ אפס מלאי</button>}
+
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
           <button onClick={exportCSV} style={{...S.btn("success"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📥 Excel</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
@@ -10536,15 +10536,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                 </div>
               )}
 
-              {canDelete(auth)&&(
-                <div style={{display:"flex",gap:8,marginTop:4}} onClick={e=>e.stopPropagation()}>
-                  <div onClick={()=>{setEditItem(editItem===item.name?null:item.name);setEditName(item.name);setEditQty("");setAddItemName(item.name);setAddSerial("");setRemoveSearch("");}}
-                  style={{marginTop:4,fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>✏️ ערוך כמות</div>
-                  <div onClick={()=>deleteItem(item.name)}
-                    style={{fontSize:9,color:"var(--color-warning-fg)",cursor:"pointer"}}>🔄 אפס כמות</div>
 
-                </div>
-              )}
             </div>
           );
         })}
