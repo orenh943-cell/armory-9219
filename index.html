@@ -7961,9 +7961,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
                               <button onClick={e=>{e.stopPropagation();setShowAssign(showAssign===id?null:id);setShowTransfer(null);}}
                                 style={{...S.btn("blue"),padding:"2px 6px",fontSize:10}}>👤</button>
                             </>}
-                            {canDelete(auth)&&<button onClick={e=>{e.stopPropagation();deleteItem(id);}}
-                              title="מחיקה — דשבורד ארמון בלבד"
-                              style={{...S.btn("red"),padding:"2px 6px",fontSize:10}}>✕</button>}
+
                           </div>}
                         </div>
                       );
@@ -8581,8 +8579,7 @@ function CabinetsTab({db, setDb, auth}){
                     <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>({total} פריטים)</span>
                     {editMode&&<button onClick={()=>{setEditingCabName({unit:selectedUnit,idx:cabIdx});setCabNameVal(cabName);}}
                       style={{...S.btn("gray"),padding:"2px 7px",fontSize:10}}>✎</button>}
-                    {editMode&&canDelete(auth)&&<button onClick={()=>removeCabinet(selectedUnit,cabIdx)}
-                      style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>🗑</button>}
+
                   </div>
                 )}
                 <button onClick={()=>printCabinet(cabName)}
@@ -8647,7 +8644,7 @@ function CabinetsTab({db, setDb, auth}){
                                     {editMode&&(
                                       <div style={{display:"flex",gap:4}}>
                                         <button onClick={()=>setEditingItem({cabName,idx})} style={{...S.btn("blue"),padding:"2px 7px",fontSize:10}}>✎</button>
-                                        <button onClick={()=>removeItem(cabName,idx)} style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>✕</button>
+
                                       </div>
                                     )}
                                   </>
