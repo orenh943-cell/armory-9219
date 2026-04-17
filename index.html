@@ -1724,31 +1724,45 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       newTestCerts[auth.soldierId] = {img:uploadedCert, date:new Date().toISOString(), signedAt};
       fbSet("db/testCerts/"+auth.soldierId, newTestCerts[auth.soldierId]).catch(()=>{});
     }
-    // מצא מנפק — לפי linkIssuer (מי ששלח את הקישור)
-    const issuerUsername = auth?.linkIssuer || (() => {
-      try{ return sessionStorage.getItem("link_issuer")||""; }catch(e){ return ""; }
-    })();
+    // מצא מנפק
     const allUsersMap = {...(db.dynamicUsers||{}), ...USERS};
     const ADMIN_USERNAMES = ["אורן","מתן","יעקב"];
-    const issuerIsAdmin = ADMIN_USERNAMES.includes(issuerUsername);
 
-    // קבע שם מנפק
+    // 1. אם המשתמש המחובר הוא אחד מהמנפקים — הוא המנפק
+    // 2. אחרת — לפי linkIssuer (מי ששלח את הקישור)
+    const currentUser = auth?.username||"";
+    const linkIssuer = auth?.linkIssuer || (() => {
+      try{ return sessionStorage.getItem("link_issuer")||""; }catch(e){ return ""; }
+    })();
+
+    const effectiveIssuer = ADMIN_USERNAMES.includes(currentUser) ? currentUser
+                          : ADMIN_USERNAMES.includes(linkIssuer) ? linkIssuer
+                          : linkIssuer || currentUser;
+
     let issuerDisplay = "אחראי ארמון";
     let issuerSigUsername = null;
 
-    if(issuerIsAdmin){
-      const u = allUsersMap[issuerUsername];
-      issuerDisplay = u?.name || issuerUsername;
-      issuerSigUsername = issuerUsername;
-    } else {
-      const armoryEntry = Object.entries(allUsersMap).find(([uname, u]) => {
-        const perms = db.userPerms?.[uname]||{};
-        return (u.roleTitle==="אחראי ארמון") || (perms._roleTitle==="אחראי ארמון");
-      });
-      if(armoryEntry){
-        const [uname, u] = armoryEntry;
-        issuerDisplay = u.name || uname;
-        issuerSigUsername = uname;
+    if(ADMIN_USERNAMES.includes(effectiveIssuer)){
+      const u = allUsersMap[effectiveIssuer];
+      issuerDisplay = u?.name || effectiveIssuer;
+      issuerSigUsername = effectiveIssuer;
+    } else if(effectiveIssuer){
+      // משתמש דינמי עם הרשאה — חפש מנפק ראשי
+      const u = allUsersMap[effectiveIssuer];
+      if(u){
+        issuerDisplay = u.name || effectiveIssuer;
+        issuerSigUsername = effectiveIssuer;
+      } else {
+        // fallback — חפש אחראי ארמון
+        const armoryEntry = Object.entries(allUsersMap).find(([uname, u2]) => {
+          const perms = db.userPerms?.[uname]||{};
+          return (u2.roleTitle==="אחראי ארמון") || (perms._roleTitle==="אחראי ארמון");
+        });
+        if(armoryEntry){
+          const [uname, u2] = armoryEntry;
+          issuerDisplay = u2.name || uname;
+          issuerSigUsername = uname;
+        }
       }
     }
 
