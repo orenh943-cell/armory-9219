@@ -1977,12 +1977,14 @@ function DailyModal({db,onClose,type,auth}){
 
   // בנה: makat(string) -> loans (חיילים חתומים)
   const makatToLoans = {};
-  // בנה: name -> makat מ-assignments (דרך nameToMakat)
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
     if(!signedIds.has(solId)) return; // רק חתומים = השאלות
     Object.keys(asgn||{}).forEach(rawName=>{
       const name = cleanItemName(rawName);
-      const mk = nameToMakat[name] || nameToMakat[rawName];
+      // נסה מק"ט לפי שם נקי ולפי שם מקורי
+      const mk = nameToMakat[name] || nameToMakat[rawName] || 
+                 nameToMakat[name.replace(/[″′"']/g,'"')] ||
+                 nameToMakat[name.replace(/[″′"']/g,"'")];
       if(mk){
         makatToLoans[String(mk)] = (makatToLoans[String(mk)]||0)+1;
       }
@@ -1992,11 +1994,11 @@ function DailyModal({db,onClose,type,auth}){
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
     const makat = String(item.makat||"");
-    // מלאי כולל: armoryMaster > DAILY_ITEMS
-    const total = (makat && makatToTotal[makat]!=null && makatToTotal[makat]>0)
-      ? makatToTotal[makat]
-      : (makat && makatToDaily[makat]!=null ? makatToDaily[makat] : 0);
-    // השאלות: חיילים חתומים עם הפריט
+    // מלאי כולל: DAILY_ITEMS (ברירת מחדל) — armoryMaster Firebase עוקף אם קיים ו>0
+    const dailyTotal = makat ? (makatToDaily[makat]||0) : 0;
+    const masterTotal = makat ? (makatToTotal[makat]||0) : 0;
+    const total = masterTotal>0 ? masterTotal : dailyTotal;
+    // השאלות: חיילים חתומים עם הפריט (לפי מק"ט)
     const loans = makat ? (makatToLoans[makat]||0) : 0;
     // מצאי = מלאי כולל - השאלות
     const stock = total - loans;
