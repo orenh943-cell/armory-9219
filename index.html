@@ -9331,7 +9331,11 @@ function AddSerialInline({itemName, db, setDb, onDone}){
 function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDone}){
   const [search, setSearch] = React.useState("");
   const [soldierId, setSoldierId] = React.useState("");
-  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const allSols = React.useMemo(()=>{
+    const combined=[...Object.values(db.customSoldiers||{}),...soldiers];
+    const seen=new Set();
+    return combined.filter(s=>{ if(seen.has(s.id)) return false; seen.add(s.id); return true; });
+  },[db,soldiers]);
   const VALID_UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
   const effectiveUnit = VALID_UNITS.includes(unit) ? unit : null;
   const matched = React.useMemo(()=>{
