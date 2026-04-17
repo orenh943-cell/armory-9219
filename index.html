@@ -10268,7 +10268,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
   const [serialSearch, setSerialSearch] = React.useState(""); // חיפוש סידורי בפאנל
   const [serialUnitFilter, setSerialUnitFilter] = React.useState("הכל"); // סינון פלוגה בסידוריים
 
-  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const allSols = React.useMemo(()=>{
+    const seen=new Set();
+    return [...Object.values(db.customSoldiers||{}),...soldiers].filter(s=>{
+      if(seen.has(s.id)) return false; seen.add(s.id); return true;
+    });
+  },[db,soldiers]);
   const units = ["הכל","א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
 
   // Merge ARMORY_MASTER with live assignments
