@@ -3906,8 +3906,12 @@ function AddSoldierModal({db, onSave, onClose}){
     if(!form.phone.trim()){setErr("חסר טלפון");return;}
     if(!form.unit.trim()){setErr("חסרה פלוגה");return;}
     if(!form.squad.trim()||form.squad==="__custom__"){setErr("חסרה מחלקה");return;}
-    if(RAW_SOLDIERS.find(s=>s.id===form.id.trim())||db.assignments[form.id.trim()]!==undefined){
-      // check if already added via db
+    const existingCustom = db.customSoldiers?.[form.id.trim()];
+    const existingRaw = RAW_SOLDIERS.find(s=>s.id===form.id.trim());
+    const existingAssign = db.assignments?.[form.id.trim()]!==undefined;
+    if(existingCustom||existingRaw||existingAssign){
+      setErr("מספר אישי "+form.id.trim()+" כבר קיים במערכת!");
+      return;
     }
     const assigned={};
     items.filter(i=>i.name).forEach(i=>{assigned[i.name]=i.serial||1;});
