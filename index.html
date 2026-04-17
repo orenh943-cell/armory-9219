@@ -9467,7 +9467,11 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
   // All serials from ALL_SERIALS + assignments + armoryMaster
   const allSerialRows = React.useMemo(()=>{
     const rows = [];
-    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers];
+    // dedup by id — customSoldiers גובר על RAW_SOLDIERS
+    const seenIds = new Set();
+    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers].filter(s=>{
+      if(seenIds.has(s.id)) return false; seenIds.add(s.id); return true;
+    });
     // From assignments
     allSols.forEach(s=>{
       const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
