@@ -10283,11 +10283,13 @@ function MyStockTab({db, setDb, soldiers, auth}){
         assigned[clean][s.unit] = (assigned[clean][s.unit]||0)+1;
       });
     });
-    // Also count unitItems (items assigned to units without specific soldier)
+    // ספור unitItems עם t=unit בלבד (לא t=soldier — אלה כבר נספרו ב-assignments)
     Object.values(db.unitItems||{}).forEach(item=>{
       const name = cleanItemName(item.n||item.name||"");
       const unit = item.u||item.unit||"";
+      const t = item.t||item.assignedType||"unit";
       if(!name||!unit) return;
+      if(t==="soldier") return; // כבר נספר ב-assignments
       if(!assigned[name]) assigned[name]={};
       assigned[name][unit] = (assigned[name][unit]||0)+1;
     });
