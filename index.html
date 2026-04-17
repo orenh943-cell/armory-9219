@@ -1956,54 +1956,47 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [soferID, setSoferID] = useState("");
   const [soferRank, setSoferRank] = useState("");
 
-  // ===== חישוב מלאי יומי — לפי liveData (אותה לוגיקה כמו מלאי ארמון) =====
+  // ===== חישוב מלאי יומי — בדיוק כמו ArmoryStockTab =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
-  const armoryMaster = db.armoryMaster||{};
-  const masterData = Object.keys(armoryMaster).length>0 ? armoryMaster : {};
   const allSolsDaily = [...Object.values(db.customSoldiers||{}),...soldiers];
+  const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
 
-  // בנה assigned: name -> count מוחזרים (חתומים) ו-loans (חתומים)
-  const dailyAssigned = {}; // name -> total count (כל השיוכים)
-  const dailyLoans = {};    // name -> count חתומים בלבד
+  // ספור כל השיוכים לפי שם פריט (כולל חתומים ולא חתומים)
+  const assignedCount = {}; // name -> count כל השיוכים
+  const loansCount = {};    // name -> count חתומים בלבד
   allSolsDaily.forEach(s=>{
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
     Object.keys(asgn||{}).forEach(rawName=>{
       const name = cleanItemName(rawName);
-      dailyAssigned[name] = (dailyAssigned[name]||0)+1;
-      if(signedIds.has(s.id)){
-        dailyLoans[name] = (dailyLoans[name]||0)+1;
-      }
+      assignedCount[name] = (assignedCount[name]||0)+1;
+      if(signedIds.has(s.id)) loansCount[name] = (loansCount[name]||0)+1;
     });
   });
+  Object.values(db.unitItems||{}).forEach(item=>{
+    const name = cleanItemName(item.n||item.name||"");
+    if(name) assignedCount[name] = (assignedCount[name]||0)+1;
+  });
 
-  // בנה: name -> total מ-DAILY_ITEMS
-  const nameToDefaultTotal = {};
-  DAILY_ITEMS.forEach(d=>{ nameToDefaultTotal[d.name]=d.total; });
-  // בנה גם: makat -> total מ-DAILY_ITEMS (fallback לפי מק"ט)
-  const makatToDefaultTotal = {};
-  const nameToMakat2 = window.NAME_TO_MAKAT_DATA||{};
-  DAILY_ITEMS.forEach(d=>{
-    const mk = nameToMakat2[d.name];
-    if(mk) makatToDefaultTotal[String(mk)] = d.total;
+  // בנה makatData מ-armoryMaster — אותה לוגיקה כמו ArmoryStockTab
+  const makatData = {};
+  Object.entries(masterData2).forEach(([name, info])=>{
+    const mk = String(info.makat||getMakat(name)||"");
+    if(!mk) return;
+    const liveTotal = assignedCount[name]||0;
+    const dailyTotal = (DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
+    const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
+    const loans = loansCount[name]||0;
+    makatData[mk] = {total, loans, name};
   });
 
   function calcItem(item){
     const alias = (item.alias||item.name||"").trim();
-    if(!alias) return {...item, alias, total:0, loans:0, stock:0, ok:null};
     const makat = String(item.makat||"");
-    // total: armoryMaster[alias] > DAILY_ITEMS[alias] > DAILY_ITEMS[makat]
-    const info = masterData[alias]||{};
-    const masterTotal = info.total||0;
-    const dailyByName = nameToDefaultTotal[alias]||0;
-    const dailyByMakat = makat ? (makatToDefaultTotal[makat]||0) : 0;
-    const dailyTotal = dailyByName>0 ? dailyByName : dailyByMakat;
-    const total = masterTotal>0 ? masterTotal : dailyTotal;
-    // השאלות = חיילים חתומים
-    const loans = dailyLoans[alias]||0;
-    // מצאי = מלאי כולל - השאלות
-    const stock = total - loans;
-    const ok = total>0 ? (stock>=0) : null;
-    return {...item, alias, total, loans, stock, ok};
+    if(!makat) return {...item, alias, total:0, loans:0, stock:0, ok:null};
+    const data = makatData[makat]||{total:0, loans:0};
+    const stock = data.total - data.loans;
+    const ok = data.total>0 ? (stock>=0) : null;
+    return {...item, alias, total:data.total, loans:data.loans, stock, ok};
   }
   const leftCalc = DAILY_LEFT.map(calcItem);
   const rightCalc = DAILY_RIGHT.map(calcItem);
