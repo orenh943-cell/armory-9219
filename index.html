@@ -9985,8 +9985,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 <div key={item.name} onClick={()=>{if(isSelected){setSelectedItem(null);}else{setSelectedItem(item.name);setEditName(item.name);setEditMakat(String(item.makat||""));setEditQty(String(item.total||""));}}}
                   style={{background:isSelected?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:10,
                     padding:"12px 14px",cursor:"pointer",
-                    borderLeft:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
-                    borderRight:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                    borderLeft:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                    borderRight:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                     borderBottom:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                     borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                     transition:"all 150ms",boxShadow:isSelected?"0 0 0 2px var(--color-accent-fg)40":"none"}}>
@@ -10642,8 +10642,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <div key={item.name} onClick={()=>setExpandedItem(isExp?null:item.name)}
               style={{background:isExp?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:9,
                 padding:"10px 12px",cursor:"pointer",
-                borderLeft:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
-                      borderRight:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                borderLeft:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                      borderRight:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                       borderBottom:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                 borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                 transition:"all var(--transition)"}}>
