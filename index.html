@@ -776,19 +776,19 @@ const RAW_SOLDIERS = window.RAW_SOLDIERS_DATA;
 // getSoldiers: returns Firebase soldiers if available, else falls back to RAW_SOLDIERS + customSoldiers
 // This is the transition bridge — once migration is complete, only db.soldiers will be used
 function getSoldiers(db){
+  const deleted = db.deletedSoldiers||{};
   if(db.soldiers && Object.keys(db.soldiers).length > 0){
-    // Firebase has soldiers — merge with customSoldiers + RAW_SOLDIERS as safety net
     const merged = {...db.soldiers};
-    // Add customSoldiers (manual additions)
     Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{ merged[id]=s; });
-    // Add any RAW_SOLDIERS not in Firebase yet (safety net)
     RAW_SOLDIERS.forEach(s=>{ if(!merged[s.id]) merged[s.id]=s; });
+    // סנן חיילים מחוקים
+    Object.keys(deleted).forEach(id=>{ delete merged[id]; });
     return Object.values(merged);
   }
-  // Fallback: RAW_SOLDIERS + customSoldiers (pre-migration)
   const seen = new Set();
   return [...Object.values(db.customSoldiers||{}), ...RAW_SOLDIERS].filter(s=>{
-    if(seen.has(s.id)) return false; seen.add(s.id); return true;
+    if(seen.has(s.id)||deleted[s.id]) return false;
+    seen.add(s.id); return true;
   });
 }
 // getSerials: returns Firebase serials if available, else falls back to ALL_SERIALS
@@ -2959,6 +2959,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
   }
 
   function deleteSoldier(){
+    // בדוק אם יש שיוך פריטים
+    const hasAssigned = db.assignments?.[soldier.id] && Object.keys(db.assignments[soldier.id]).length > 0;
+    if(hasAssigned){
+      alert("לא ניתן למחוק חייל שיש לו אמצעים משויכים.\nיש לבטל את כל השיוכים תחילה.");
+      return;
+    }
     if(!window.confirm("למחוק את "+soldier.name+"? פעולה זו תסיר את החייל מהמערכת.")) return;
     const ndb = {...db};
     // הסר מ-soldiers (Firebase primary)
@@ -2972,12 +2978,18 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     // הסר שיוך, חתימה
     if(ndb.assignments){const a={...ndb.assignments};delete a[soldier.id];ndb.assignments=a;}
     if(ndb.signatures){const s={...ndb.signatures};delete s[soldier.id];ndb.signatures=s;}
-    saveDB(ndb); onSave(ndb);
+    // הוסף ל-deletedSoldiers מיד ב-state
+    const ndb2 = {
+      ...ndb,
+      deletedSoldiers:{...(ndb.deletedSoldiers||{}), [soldier.id]:true}
+    };
+    saveDB(ndb2); onSave(ndb2);
     // מחק מ-Firebase
     fbDelete("db/soldiers/"+soldier.id).catch(()=>{});
     fbDelete("db/customSoldiers/"+soldier.id).catch(()=>{});
     fbDelete("db/assignments/"+soldier.id).catch(()=>{});
     fbDelete("db/signatures/"+soldier.id).catch(()=>{});
+    fbSet("db/deletedSoldiers/"+soldier.id, {name:soldier.name, deletedAt:new Date().toISOString(), deletedBy:auth?.name||"מערכת"}).catch(()=>{});
     logAction("מחיקת_חייל", `נמחק חייל: ${soldier.name} (${soldier.id})`, auth?.name||"מערכת");
     onClose();
   }
@@ -6451,6 +6463,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         const arr = Array.isArray(serials) ? serials : Object.values(serials);
         setDb(prev=>({...prev, serials: arr}));
       }
+    });
+    // db/deletedSoldiers listener
+    fbOn("db/deletedSoldiers", (deleted)=>{
+      if(deleted) setDb(prev=>({...prev, deletedSoldiers: deleted}));
+    });
+    // db/deletedSoldiers listener
+    fbOn("db/deletedSoldiers", (deleted)=>{
+      if(deleted) setDb(prev=>({...prev, deletedSoldiers: deleted}));
     });
     // db/soldiers listener — replaces RAW_SOLDIERS + customSoldiers
     fbOn("db/soldiers", (soldiers)=>{
