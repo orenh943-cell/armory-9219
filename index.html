@@ -15063,21 +15063,24 @@ function App(){
     if(testCertId) try{sessionStorage.setItem("link_testcert", testCertId);}catch(e){}
     if(bulkSignId) try{sessionStorage.setItem("link_bulksign", bulkSignId);}catch(e){}
     if(exitId) try{sessionStorage.setItem("link_exit", exitId);}catch(e){}
-    // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
+    // helper: מחפש חייל — RAW_SOLDIERS קודם (בטוח בזמן init), אחר כך localStorage
     function findSoldier(id){
-      const raw=getSoldiers(db).find(x=>x.id===id);
+      // RAW_SOLDIERS זמין תמיד, גם לפני Firebase
+      const raw = RAW_SOLDIERS.find(x=>x.id===id);
       if(raw) return raw;
       try{
         const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");
+        const fromSoldiers = local.soldiers?.[id];
+        if(fromSoldiers) return fromSoldiers;
         const custom=Object.values(local.customSoldiers||{});
         return custom.find(x=>x.id===id)||null;
       }catch(e){return null;}
     }
     if(testCertId){
       function findSoldier2(id){
-        const raw=getSoldiers(db).find(x=>x.id===id);
+        const raw=RAW_SOLDIERS.find(x=>x.id===id);
         if(raw) return raw;
-        try{const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return Object.values(local.customSoldiers||{}).find(x=>x.id===id)||null;}catch(e){return null;}
+        try{const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return local.soldiers?.[id]||Object.values(local.customSoldiers||{}).find(x=>x.id===id)||null;}catch(e){return null;}
       }
       const ts=findSoldier2(testCertId);
       return{role:"testcert",name:ts?.name||"חייל",soldierId:testCertId,autoTestCert:true};
