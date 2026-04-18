@@ -2914,6 +2914,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
   function deleteSoldier(){
     if(!window.confirm("למחוק את "+soldier.name+"? פעולה זו תסיר את החייל מהמערכת.")) return;
     const ndb = {...db};
+    // הסר מ-soldiers (Firebase primary)
+    if(ndb.soldiers?.[soldier.id]){
+      const s2={...ndb.soldiers}; delete s2[soldier.id]; ndb.soldiers=s2;
+    }
     // הסר מ-customSoldiers אם קיים
     if(ndb.customSoldiers?.[soldier.id]){
       const cs = {...ndb.customSoldiers}; delete cs[soldier.id]; ndb.customSoldiers = cs;
@@ -2922,6 +2926,11 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
     if(ndb.assignments){const a={...ndb.assignments};delete a[soldier.id];ndb.assignments=a;}
     if(ndb.signatures){const s={...ndb.signatures};delete s[soldier.id];ndb.signatures=s;}
     saveDB(ndb); onSave(ndb);
+    // מחק מ-Firebase
+    fbDelete("db/soldiers/"+soldier.id).catch(()=>{});
+    fbDelete("db/customSoldiers/"+soldier.id).catch(()=>{});
+    fbDelete("db/assignments/"+soldier.id).catch(()=>{});
+    fbDelete("db/signatures/"+soldier.id).catch(()=>{});
     logAction("מחיקת_חייל", `נמחק חייל: ${soldier.name} (${soldier.id})`, auth?.name||"מערכת");
     onClose();
   }
