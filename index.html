@@ -10250,6 +10250,20 @@ function MyStockTab({db, setDb, soldiers, auth}){
         assigned[clean][s.unit] = (assigned[clean][s.unit]||0)+1;
       });
     });
+    // גם assignments שלא מופיעים ב-allSols (חיילים ב-customSoldiers שלא נטענו)
+    Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+      const inSols = allSols.find(s=>s.id===solId);
+      if(!inSols){
+        // חייל שב-assignments אבל לא ב-allSols - חפש ב-customSoldiers
+        const cs = db.customSoldiers?.[solId];
+        const unit = cs?.unit||"א";
+        Object.keys(asgn||{}).forEach(name=>{
+          const clean=cleanItemName(name);
+          if(!assigned[clean]) assigned[clean]={};
+          assigned[clean][unit] = (assigned[clean][unit]||0)+1;
+        });
+      }
+    });
     // ספור unitItems עם t=unit בלבד (לא t=soldier — אלה כבר נספרו ב-assignments)
     Object.values(db.unitItems||{}).forEach(item=>{
       const name = cleanItemName(item.n||item.name||"");
