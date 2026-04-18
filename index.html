@@ -2114,6 +2114,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [note, setNote] = useState("");
   const [extraItems, setExtraItems] = useState([]); // פריטים נוספים שנוסיפו ידנית
   const [showAddItem, setShowAddItem] = useState(false);
+  const [hiddenMsds, setHiddenMsds] = useState(new Set()); // מסדים מוסתרים
   const [addItemSearch, setAddItemSearch] = useState("");
   // בעל תפקיד סופר
   const [soferName, setSoferName] = useState("");
@@ -2134,12 +2135,21 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   });
 
   // ספור השאלות לפי שם (חיילים חתומים בלבד) — עם נרמול גרשיים
-  const allLoans = {}; // name -> count
+  const allLoans = {}; // name -> count of items (including duplicates per soldier)
   allSolsDaily.forEach(s=>{
     if(!signedIds.has(s.id)) return;
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
     Object.keys(asgn||{}).forEach(raw=>{
-      const n = cleanItemName(raw); // כולל נרמול גרשיים
+      const n = cleanItemName(raw);
+      allLoans[n] = (allLoans[n]||0)+1;
+    });
+  });
+  // גם assignments של חיילים חתומים שלא ב-allSolsDaily
+  Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+    if(!signedIds.has(solId)) return;
+    if(allSolsDaily.find(s=>s.id===solId)) return; // כבר נספר
+    Object.keys(asgn||{}).forEach(raw=>{
+      const n = cleanItemName(raw);
       allLoans[n] = (allLoans[n]||0)+1;
     });
   });
@@ -2166,8 +2176,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const ok = total>0 ? (stock>=0) : null;
     return {...item, alias, total, loans, stock, ok};
   }
-  const leftCalc = DAILY_LEFT.map(calcItem);
-  const rightCalc = DAILY_RIGHT.map(calcItem);
+  const leftCalc = DAILY_LEFT.filter(i=>!hiddenMsds.has(i.msd)).map(calcItem);
+  const rightCalc = DAILY_RIGHT.filter(i=>!hiddenMsds.has(i.msd)).map(calcItem);
   const extraCalc = extraItems.map(calcItem);
   const allCalc = [...leftCalc,...rightCalc,...extraCalc];
 
@@ -2314,6 +2324,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
           ➕ הוסף פריט לדוח
         </button>
         {extraItems.length>0&&<span style={{marginRight:8,fontSize:"var(--text-xs)",color:"var(--color-accent-fg)",fontWeight:700}}>({extraItems.length} פריטים נוספים)</span>}
+        {hiddenMsds.size>0&&<button onClick={()=>setHiddenMsds(new Set())}
+          style={{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)",marginRight:4}}>
+          🔄 שחזר {hiddenMsds.size} פריטים מוסתרים</button>}
       </div>
       {showAddItem&&(()=>{
         const allNames = Object.keys(window.NAME_TO_MAKAT_DATA||{});
@@ -2386,7 +2399,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                   {L?(<>
                     <td style={{...TD(),background:bg,textAlign:"center"}}>{L.msd}</td>
                     <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{L.makat||""}</td>
-                    <td style={{...TD(),background:bg}}>{L.fullname||L.alias}</td>
+                    <td style={{...TD(),background:bg}}>
+                      <span style={{display:"flex",alignItems:"center",gap:4}}>
+                        {L.fullname||L.alias}
+                        <button onClick={e=>{e.stopPropagation();setHiddenMsds(p=>new Set([...p,L.msd]))}}
+                          style={{background:"none",border:"none",color:"var(--color-text-muted)",cursor:"pointer",fontSize:9,padding:0,lineHeight:1,opacity:0.6}}
+                          title="הסר מהדוח">✕</button>
+                      </span>
+                    </td>
                     <td style={{...TDC(),background:bg}}>{L.total||""}</td>
                     <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{L.loans||0}</td>
                     <td style={{...TDC(L.ok),background:bg,color:L.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{L.total!=null?L.stock:""}</td>
@@ -2411,7 +2431,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                 <tr key={"extra_"+i} style={{borderTop:i===0?"2px solid var(--color-accent-fg)":undefined}}>
                   <td style={{...TD(),background:bg,textAlign:"center"}}>{item.msd}</td>
                   <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{item.makat||""}</td>
-                  <td style={{...TD(),background:bg,color:"var(--color-accent-fg)",fontWeight:700}}>{item.fullname||item.alias} ⭐</td>
+                  <td style={{...TD(),background:bg,color:"var(--color-accent-fg)",fontWeight:700}}>
+                    <span style={{display:"flex",alignItems:"center",gap:4}}>
+                      {item.fullname||item.alias} ⭐
+                      <button onClick={e=>{e.stopPropagation();setExtraItems(p=>p.filter((_,j)=>j!==i))}}
+                        style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}
+                        title="הסר פריט">✕</button>
+                    </span>
+                  </td>
                   <td style={{...TDC(),background:bg}}>{item.total||""}</td>
                   <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{item.loans||0}</td>
                   <td style={{...TDC(item.ok),background:bg,color:item.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{item.total!=null?item.stock:""}</td>
