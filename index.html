@@ -6559,6 +6559,60 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       }
     }).catch(()=>{});
 
+    // ONE-TIME: תקן חיילים חסרים ב-db/soldiers
+    // כל חייל שיש לו נתונים ב-Firebase אבל לא ב-db/soldiers — הוסף אותו
+    fbGet("db/soldiersMigratedV1").then(migrated=>{
+      if(!migrated) return; // המיגרציה עוד לא רצה, לא רלוונטי עדיין
+      fbGet("db/soldiers").then(dbSoldiers=>{
+        const soldierIds = new Set(Object.keys(dbSoldiers||{}));
+        const toAdd = {};
+        
+        // בדוק כל מקור של soldierIds
+        const checkSources = (data) => {
+          Object.keys(data||{}).forEach(id=>{
+            if(!soldierIds.has(id) && id.length >= 6 && id.length <= 8 && /^\d+$/.test(id)){
+              // חפש ב-RAW_SOLDIERS
+              const raw = RAW_SOLDIERS.find(s=>s.id===id);
+              if(raw && !toAdd[id]){
+                toAdd[id] = {id:raw.id, name:raw.name, unit:raw.unit||"", squad:raw.squad||"", phone:raw.phone||""};
+              }
+            }
+          });
+        };
+        
+        // בדוק מכל המקורות
+        Promise.all([
+          fbGet("db/assignments"),
+          fbGet("db/testCerts"),
+          fbGet("db/sigHistory"),
+          fbGet("db/exitForms"),
+          fbGet("db/signatures"),
+        ]).then(([assignments, testCerts, sigHistory, exitForms, signatures])=>{
+          checkSources(assignments);
+          checkSources(testCerts);
+          checkSources(sigHistory);
+          checkSources(signatures);
+          // exitForms has soldierId inside each form
+          Object.values(exitForms||{}).forEach(f=>{
+            const id = f.soldierId;
+            if(id && !soldierIds.has(id) && !toAdd[id]){
+              const raw = RAW_SOLDIERS.find(s=>s.id===id);
+              if(raw) toAdd[id] = {id:raw.id, name:raw.name, unit:raw.unit||"", squad:raw.squad||"", phone:raw.phone||""};
+            }
+          });
+          
+          if(Object.keys(toAdd).length > 0){
+            console.log("[fix] מוסיף חיילים חסרים ל-db/soldiers:", Object.keys(toAdd).length, Object.values(toAdd).map(s=>s.name));
+            Object.entries(toAdd).forEach(([id,s])=>{
+              fbSet("db/soldiers/"+id, s).catch(()=>{});
+            });
+          } else {
+            console.log("[fix] כל החיילים קיימים ב-db/soldiers ✅");
+          }
+        }).catch(e=>console.error("[fix] error:", e));
+      }).catch(()=>{});
+    }).catch(()=>{});
+
     // ONE-TIME: migrate RAW_SOLDIERS to db/soldiers if not done yet
     fbGet("db/soldiersMigratedV1").then(done=>{
       if(!done){
