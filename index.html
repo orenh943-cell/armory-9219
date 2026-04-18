@@ -1266,7 +1266,7 @@ function groupAssigned(assigned,db){
     .map(g=>[g.name,g]);
 }
 // כל האמצעים שיש להם מספרים סידוריים במערכת
-const SERIAL_ITEMS = new Set(getSerials(db).map(s=>s.name.trim()));
+const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim())); // static fallback for module-level
 // מלאי ראשוני — פריטים פנויים (לא משויכים לחיילים)
 const IMPORTED_UNIT_ITEMS = window.IMPORTED_UNIT_ITEMS_DATA;
 function phoneToWA(p){if(!p)return null;const d=String(p).replace(/\D/g,"");return d.startsWith("0")?"972"+d.slice(1):d;}
@@ -10992,8 +10992,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         // Remove from ALL_SERIALS too
                         const removedSerial = item.s||item.serial;
                         if(removedSerial){
-                          fbDelete("db/serials/s_"+String(removedSerial)).catch(()=>{}); // remove from serials
+                          fbDelete("db/serials/s_"+String(removedSerial)).catch(()=>{});
+                        }
+                        const ndb={...db, armoryMaster:master2, unitItems:newUI};
                         saveDB(ndb); setDb(ndb);
+                        fbSet("db/armoryMaster/"+editItem, master2[editItem]).catch(()=>{});
+                        fbDelete("db/unitItems/"+id).catch(()=>{});
                       }} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:28}}>הסר</button>
                     </div>
                   ))}
