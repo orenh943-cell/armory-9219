@@ -10474,7 +10474,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
       return { name, makat, total, byUnit:info.byUnit||{}, liveByUnit,
                liveTotal, toSoldiers:soldierCount, toUnits, gadudi, unassigned };
-    }).filter(item=>item.total>0||item.liveTotal>0).filter(item=>{
+    }).filter(item=>item.liveTotal>0).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
       if(showFreeOnly && item.unassigned===0) return false;
       if(filterName.trim() && !item.name.includes(filterName.trim())) return false;
