@@ -2903,10 +2903,16 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
 
   function saveEdit(){
     if(!editName.trim()){alert("שם לא יכול להיות ריק");return;}
-    const isCustom = !!db.customSoldiers?.[soldier.id];
     const updated = {...soldier, name:editName.trim(), phone:editPhone.trim(), unit:editUnit.trim(), squad:editSquad.trim()};
-    const ndb = {...db, customSoldiers:{...(db.customSoldiers||{}), [soldier.id]:updated}};
+    const ndb = {
+      ...db,
+      soldiers:{...(db.soldiers||{}), [soldier.id]:updated},
+      customSoldiers:{...(db.customSoldiers||{}), [soldier.id]:updated}
+    };
     saveDB(ndb); onSave(ndb);
+    // כתוב ל-Firebase
+    fbSet("db/soldiers/"+soldier.id, updated).catch(()=>{});
+    fbSet("db/customSoldiers/"+soldier.id, updated).catch(()=>{});
     setEditMode(false);
     logAction("עריכת_חייל", `עודכן פרופיל ${editName}`, auth?.name||"מערכת");
   }
