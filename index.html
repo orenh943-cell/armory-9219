@@ -2678,7 +2678,7 @@ function SignatureDocument({soldier, db, onClose}){
   );
 }
 
-function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,soldiers=[]}){
+function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTestAndExitWA,auth,soldiers=[]}){
   const [editingLocation,setEditingLocation]=useState(false);
   const [editingSerial,setEditingSerial]=useState(null);
   const [newSerialVal,setNewSerialVal]=useState("");
@@ -3027,6 +3027,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 {weps.length>0&&!sig&&<button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
                 {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
                 {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowPartialSign(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
+                {soldier.phone&&<button onClick={()=>onSendTestAndExitWA(soldier)}
+                    style={{...S.btn("teal"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📲 בוחן + יציאה</button>}
                 {soldierNeedsTest(soldier,db)&&(()=>{
                   const ts=getTestStatus(db,soldier.id);
                   const ph=soldier.phone;
@@ -6849,6 +6851,28 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
   }
 
+  function sendTestAndExitWA(soldier){
+    const phone=phoneToWA(soldier.phone);
+    if(!phone){alert("אין מספר טלפון לחייל זה");return;}
+    const link="https://orenh943-cell.github.io/armory-9219";
+    const testLink=link+"?testcert="+soldier.id;
+    const exitLink=link+"?exitform="+soldier.id;
+    const msg=`שלום ${soldier.name} 👋
+
+יש לבצע את שני השלבים הבאים:
+
+1️⃣ *בוחן נשק*
+היכנס לקישור, העלה צילום מסך של תעודת הבוחן התקפה שלך:
+${testLink}
+
+2️⃣ *אישור יציאה הביתה*
+היכנס לקישור, מלא את השאלון וחתום:
+${exitLink}
+
+⚠️ יש להשלים את שני השלבים לפני היציאה.`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
+  }
+
   function sendExitFormWA(soldier){
     const phone=phoneToWA(soldier.phone);
     if(!phone){alert("אין מספר טלפון לחייל זה");return;}
@@ -7335,7 +7359,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       </main>
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
-      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} auth={auth} soldiers={soldiers}/>}
+      {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} onSendTestAndExitWA={sendTestAndExitWA} auth={auth} soldiers={soldiers}/>}
       {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
