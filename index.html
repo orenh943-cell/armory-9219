@@ -10399,20 +10399,64 @@ function MyStockTab({db, setDb, soldiers, auth}){
     return Array.from(allItemNames).map(name=>{
       const info = masterData2[name]||{};
       const makat = info.makat || getMakat(name) || null;
-      const liveByUnit = assigned[name]||{};
-      const liveTotal = Object.values(liveByUnit).reduce((s,v)=>s+v,0);
-      const gadudi = liveByUnit["גדודי"]||0;
-      const assignedToUnits = liveTotal - gadudi;
-      // total = armoryMaster הוא המקור הסמכותי. אם אין — fallback ל-DAILY_ITEMS
+
+      // ספור חיילים (מ-assignments)
+      let soldierCount = 0;
+      const soldiersByUnit = {}; // unit -> count of soldiers
+      allSols.forEach(s=>{
+        const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+        const has = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
+        if(has){
+          soldierCount++;
+          soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+1;
+        }
+      });
+      // גם assignments של חיילים שלא ב-allSols
+      Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+        if(allSols.find(s=>s.id===solId)) return; // כבר נספר
+        const has = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
+        if(has){
+          soldierCount++;
+          const unit = db.customSoldiers?.[solId]?.unit||db.soldiers?.[solId]?.unit||"א";
+          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+1;
+        }
+      });
+
+      // ספור לפלוגה (unitItems עם t=unit, לא גדודי)
+      const unitItemsForName = Object.values(db.unitItems||{}).filter(v=>{
+        const n=cleanItemName(v.n||v.name||"");
+        const t=v.t||v.assignedType||"unit";
+        const u=v.u||v.unit||"";
+        return n===name && t==="unit" && u!=="גדודי";
+      });
+      const toUnits = unitItemsForName.length;
+
+      // ספור ארמון גדודי (unitItems עם unit=גדודי)
+      const gadudi = Object.values(db.unitItems||{}).filter(v=>{
+        const n=cleanItemName(v.n||v.name||"");
+        const t=v.t||v.assignedType||"unit";
+        const u=v.u||v.unit||"";
+        return n===name && t==="unit" && u==="גדודי";
+      }).length;
+
+      const liveTotal = soldierCount + toUnits + gadudi;
+
+      // total = armoryMaster הוא המקור הסמכותי
       const dailyTotal = (window.DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
       const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
-      const toUnits = Object.values(db.unitItems||{}).filter(v=>{
-        const n=v.n||v.name||""; const u=v.u||v.unit||""; const t=v.t||v.assignedType||"unit";
-        return n===name && t==="unit" && u!=="גדודי";
-      }).length;
-      const toSoldiers = Math.max(0, assignedToUnits - toUnits);
-      const unassigned = gadudi + Math.max(0, total - liveTotal);
-      return { name, makat, total, byUnit:info.byUnit||{}, liveByUnit, liveTotal, assignedToUnits, gadudi, toSoldiers, toUnits, unassigned };
+
+      // פנוי = total - כל מה שמשוייך
+      const unassigned = Math.max(0, total - liveTotal);
+
+      // liveByUnit לתצוגה — כולל חיילים + unitItems לפי פלוגה
+      const liveByUnit = {...soldiersByUnit};
+      unitItemsForName.forEach(v=>{
+        const u=v.u||v.unit||"";
+        if(u && u!=="גדודי") liveByUnit[u] = (liveByUnit[u]||0)+1;
+      });
+
+      return { name, makat, total, byUnit:info.byUnit||{}, liveByUnit,
+               liveTotal, toSoldiers:soldierCount, toUnits, gadudi, unassigned };
     }).filter(item=>item.total>0||item.liveTotal>0).filter(item=>{
       if(showWeaponsOnly && !WEAPON_KEYS.includes(item.name)) return false;
       if(showFreeOnly && item.unassigned===0) return false;
