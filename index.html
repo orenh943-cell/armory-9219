@@ -777,9 +777,12 @@ const RAW_SOLDIERS = window.RAW_SOLDIERS_DATA;
 // This is the transition bridge — once migration is complete, only db.soldiers will be used
 function getSoldiers(db){
   if(db.soldiers && Object.keys(db.soldiers).length > 0){
-    // Firebase has soldiers — merge with customSoldiers for any additions not yet migrated
+    // Firebase has soldiers — merge with customSoldiers + RAW_SOLDIERS as safety net
     const merged = {...db.soldiers};
+    // Add customSoldiers (manual additions)
     Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{ merged[id]=s; });
+    // Add any RAW_SOLDIERS not in Firebase yet (safety net)
+    RAW_SOLDIERS.forEach(s=>{ if(!merged[s.id]) merged[s.id]=s; });
     return Object.values(merged);
   }
   // Fallback: RAW_SOLDIERS + customSoldiers (pre-migration)
