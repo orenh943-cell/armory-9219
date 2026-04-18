@@ -9169,7 +9169,7 @@ function VisutTab({db, setDb, soldiers, auth}){
             <select value={newUser} onChange={e=>setNewUser(e.target.value)}
               style={{...S.input,marginBottom:0,flex:1}}>
               <option value="">— בחר משתמש —</option>
-              {[...USERS,...Object.values(db.dynamicUsers||{})].filter(u=>{
+              {[...Object.values(USERS||{}),...Object.values(db.dynamicUsers||{})].filter(u=>{
                 const uname = typeof u==="string" ? u : u.username;
                 return uname && !db.visutUsers?.[uname] && uname!=="oren";
               }).map(u=>{
