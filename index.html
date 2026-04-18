@@ -10445,8 +10445,10 @@ function MyStockTab({db, setDb, soldiers, auth}){
       const dailyTotal = (window.DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
       const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
 
-      // פנוי = total - כל מה שמשוייך
-      const unassigned = Math.max(0, total - liveTotal);
+      // פנוי = גדודי (בארמון) + כל מה שמעל ה-total
+      // gadudi = פריטים שיושבים בארמון גדודי (זמינים להוצאה)
+      const extraFree = Math.max(0, total - liveTotal);
+      const unassigned = gadudi + extraFree;
 
       // liveByUnit לתצוגה — כולל חיילים + unitItems לפי פלוגה
       const liveByUnit = {...soldiersByUnit};
@@ -10694,8 +10696,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
         {liveData.map(item=>{
           const isExp = expandedItem===item.name;
           const displayCount = filterUnit==="הכל" ? item.total : (item.liveByUnit[filterUnit]||0);
-          // פנוי = בגדודי + לא נכנס בכלל ל-unitItems
+          // פנוי = גדודי + מעל total
           const freeCount = filterUnit==="הכל" ? item.unassigned : Math.max(0,(item.liveByUnit["גדודי"]||0));
+          const gadudiCount = item.gadudi||0;
           const isWeapon = WEAPON_KEYS.includes(item.name);
           return (
             <div key={item.name} onClick={()=>setExpandedItem(isExp?null:item.name)}
@@ -10720,8 +10723,12 @@ function MyStockTab({db, setDb, soldiers, auth}){
                     <span style={{background:"var(--color-warning-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{item.toUnits}</span>
                     <span style={{color:"var(--color-warning-fg)",fontSize:9}}>🏢 לפלוגה</span>
                   </div>}
-                  {freeCount>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
-                    <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{freeCount}</span>
+                  {gadudiCount>0&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                    <span style={{background:"#ff9500",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{gadudiCount}</span>
+                    <span style={{color:"#ff9500",fontSize:9}}>🏛️ ארמון</span>
+                  </div>}
+                  {freeCount>gadudiCount&&<div style={{fontSize:9,display:"flex",gap:3,alignItems:"center"}}>
+                    <span style={{background:"var(--color-success-fg)",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:700,fontSize:9}}>{freeCount-gadudiCount}</span>
                     <span style={{color:"var(--color-success-fg)",fontSize:9}}>🟢 פנוי</span>
                   </div>}
                 </div>
