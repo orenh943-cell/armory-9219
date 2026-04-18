@@ -1181,11 +1181,11 @@ function archiveAndClearSig(db, soldierId){
 function nameWithMakat(name){const m=getMakat(name);return m?`${name} (${m})`:name;}
 
 // רכיב להצגת מספרים סידוריים של אמצעי בלחיצה
-function SerialsList({itemName, assignedSerial}){
+function SerialsList({itemName, assignedSerial, db}){
   const [open, setOpen] = React.useState(false);
   const serials = React.useMemo(()=>
-    getSerials(db).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial)
-  ,[itemName]);
+    getSerials(db||{}).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial)
+  ,[itemName, db]);
   if(!serials.length && !assignedSerial) return null;
   return <span style={{display:"inline-block",marginRight:4}}>
     <button onClick={e=>{e.stopPropagation();setOpen(p=>!p)}}
@@ -1496,15 +1496,15 @@ function Modal({title,onClose,children,wide=false}){
 }
 
 // ===== AllSerialPicker — כל הסידוריים כולל מה שמשויך לחיילים =====
-function AllSerialPicker({itemName, value, onChange}){
+function AllSerialPicker({itemName, value, onChange, db}){
   const [query, setQuery] = React.useState(value||"");
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
 
   const allForItem = React.useMemo(()=>{
     if(!itemName) return [];
-    return getSerials(db).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial);
-  },[itemName]);
+    return getSerials(db||{}).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial);
+  },[itemName, db]);
 
   const filtered = React.useMemo(()=>{
     const q = query.trim();
@@ -3267,7 +3267,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 {item.inCabinet&&(
                   <select value={item.cabName||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],cabName:e.target.value};setNewItems(n);}} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:120}}>
                     <option value="">— בחר מיקום —</option>
-                    {getAllCabinets(db,"הכל").map(({n,divider})=>divider?<option key={n} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
+                    {getAllCabinets(db,"הכל").map(({n,divider},_ci)=>divider?<option key={n+"_"+_ci} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
                   </select>
                 )}
               </div>
@@ -3349,7 +3349,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                         onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};rowKeys.forEach(k=>{u[k]=cab;});u[rowKey]=cab;return u;});}}
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:160,maxHeight:"none"}}>
                         <option value="">— בחר מיקום —</option>
-                        {getAllCabinets(db,"הכל").map(({n,divider})=>divider?<option key={n} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
+                        {getAllCabinets(db,"הכל").map(({n,divider},_ci)=>divider?<option key={n+"_"+_ci} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
                   )}
@@ -4929,7 +4929,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
             </div>
             <div>
               <label style={S.label}>מספר סידורי</label>
-              <AllSerialPicker itemName={form.itemName} value={form.serial} onChange={v=>setF("serial",v)}/>
+              <AllSerialPicker itemName={form.itemName} value={form.serial} onChange={v=>setF("serial",v)} db={db}/>
             </div>
           </div>
           <label style={S.label}>חומרה</label>
@@ -6923,7 +6923,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
                           <td style={S.td}><Badge color="purple" small>{s.unit}</Badge></td>
                           <td style={{...S.td,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",position:"relative"}}>
                             {weps.length>0?weps.map(([k,v])=><span key={k} style={{display:"inline-flex",alignItems:"center",marginLeft:4}}>
-                              {k}<SerialsList itemName={k} assignedSerial={v}/>
+                              {k}<SerialsList itemName={k} assignedSerial={v} db={db}/>
                             </span>):"—"}
                           </td>
                           <td style={{...S.td,minWidth:120}}>
@@ -7997,7 +7997,9 @@ function InventoryTab({db, setDb, soldiers, auth}){
                 return (
                   <div key={name} onClick={()=>setExpandedItem2(isExp?null:unit+"_"+name)}
                     style={{background:isExp?"var(--color-bg-default)":"var(--color-bg-subtle)",borderRadius:9,padding:"10px 12px",cursor:"pointer",
-                      border:`1px solid ${isExp?color:"var(--color-border-muted)"}`,
+                      borderLeft:`1px solid ${isExp?color:"var(--color-border-muted)"}`,
+                      borderRight:`1px solid ${isExp?color:"var(--color-border-muted)"}`,
+                      borderBottom:`1px solid ${isExp?color:"var(--color-border-muted)"}`,
                       borderTop:`3px solid ${borderColor}`,transition:"border .15s"}}>
                     <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color,lineHeight:1}}>{info.total}</div>
                     <div style={{fontWeight:600,fontSize:"var(--text-sm)",color:WEAPON_KEYS.includes(name)?"#e6edf3":"#58a6ff",
@@ -9214,7 +9216,9 @@ function VisutTab({db, setDb, soldiers, auth}){
                 <div key={item.name} onClick={()=>setExpandedItem(isSelected?null:item.name)}
                   style={{background:isSelected?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:10,
                     padding:"10px 12px",cursor:"pointer",
-                    border:`1px solid ${isSelected?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
+                    borderLeft:`1px solid ${isSelected?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
+                    borderRight:`1px solid ${isSelected?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
+                    borderBottom:`1px solid ${isSelected?"var(--color-accent-fg)":"var(--color-border-muted)"}`,
                     borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)"}`,
                     boxShadow:isSelected?"0 0 0 2px var(--color-accent-fg)40":"none"}}>
                   <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{count}</div>
@@ -9981,7 +9985,9 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 <div key={item.name} onClick={()=>{if(isSelected){setSelectedItem(null);}else{setSelectedItem(item.name);setEditName(item.name);setEditMakat(String(item.makat||""));setEditQty(String(item.total||""));}}}
                   style={{background:isSelected?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:10,
                     padding:"12px 14px",cursor:"pointer",
-                    border:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                    borderLeft:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                    borderRight:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                    borderBottom:`1px solid ${isSelected?"var(--color-accent-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                     borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":free>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                     transition:"all 150ms",boxShadow:isSelected?"0 0 0 2px var(--color-accent-fg)40":"none"}}>
                   <div style={{fontWeight:800,fontSize:"var(--text-3xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{item.total}</div>
@@ -10636,7 +10642,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
             <div key={item.name} onClick={()=>setExpandedItem(isExp?null:item.name)}
               style={{background:isExp?"var(--color-bg-subtle)":"var(--color-bg-default)",borderRadius:9,
                 padding:"10px 12px",cursor:"pointer",
-                border:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
+                borderLeft:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                      borderRight:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,,
+                      borderBottom:`1px solid ${isExp?"var(--color-accent-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                 borderTop:`3px solid ${isWeapon?"var(--color-danger-fg)":freeCount>0?"var(--color-success-fg)":"var(--color-border-muted)"}`,
                 transition:"all var(--transition)"}}>
               <div style={{fontWeight:800,fontSize:"var(--text-2xl)",color:isWeapon?"var(--color-danger-fg)":"var(--color-accent-fg)",lineHeight:1}}>{displayCount}</div>
@@ -10814,7 +10822,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         logAction("שיוך_ארון", expandedItem+(serial!=="—"?" ("+serial+")":"")+" → "+(cabName||"ללא ארון"), auth?.name);
                       }} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"2px 6px",minWidth:110,maxWidth:140}}>
                         <option value="">📦 ללא ארון</option>
-                        {getAllCabinets(db,unit).map(({n,divider})=>divider?<option key={n} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
+                        {getAllCabinets(db,unit).map(({n,divider},_ci)=>divider?<option key={n+"_"+_ci} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
                       </select>
                       {/* העברה לפלוגה */}
                       {!isSoldier&&auth.role==="admin"&&(
