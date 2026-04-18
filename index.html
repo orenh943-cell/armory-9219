@@ -9169,14 +9169,13 @@ function VisutTab({db, setDb, soldiers, auth}){
             <select value={newUser} onChange={e=>setNewUser(e.target.value)}
               style={{...S.input,marginBottom:0,flex:1}}>
               <option value="">— בחר משתמש —</option>
-              {[...Object.values(USERS||{}),...Object.values(db.dynamicUsers||{})].filter(u=>{
-                const uname = typeof u==="string" ? u : u.username;
-                return uname && !db.visutUsers?.[uname] && uname!=="oren";
-              }).map(u=>{
-                const uname = typeof u==="string" ? u : u.username;
-                const udisp = typeof u==="string" ? u : (u.name||u.username);
-                return <option key={uname} value={uname}>{udisp} ({uname})</option>;
-              })}
+              {[
+                ...Object.entries(USERS||{}).map(([k,v])=>({username:k, name:v.name||k})),
+                ...Object.entries(db.dynamicUsers||{}).map(([k,v])=>({username:k, name:(typeof v==="object"?v.name:null)||k}))
+              ].filter(u=>u.username && !db.visutUsers?.[u.username] && u.username!=="אורן")
+               .map(u=>(
+                <option key={u.username} value={u.username}>{u.name} ({u.username})</option>
+              ))}
             </select>
             <button onClick={()=>{if(!newUser.trim())return;const ndb={...db,visutUsers:{...(db.visutUsers||{}),[newUser.trim()]:true}};saveDB(ndb);setDb(ndb);fbSet("db/visutUsers/"+newUser.trim(),true).catch(()=>{});setNewUser("");}} style={{...S.btn("blue"),padding:"8px 16px"}}>הוסף</button>
           </div>
