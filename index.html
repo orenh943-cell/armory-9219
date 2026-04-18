@@ -10415,25 +10415,26 @@ function MyStockTab({db, setDb, soldiers, auth}){
       const info = masterData2[name]||{};
       const makat = info.makat || getMakat(name) || null;
 
-      // ספור חיילים (מ-assignments)
+      // ספור יחידות פריט אצל חיילים (מ-assignments) — כולל חייל עם 2+ יחידות
       let soldierCount = 0;
-      const soldiersByUnit = {}; // unit -> count of soldiers
+      const soldiersByUnit = {}; // unit -> count of items (not soldiers)
       allSols.forEach(s=>{
         const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
-        const has = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(has){
-          soldierCount++;
-          soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+1;
+        // ספור כמה יחידות של הפריט הזה יש לחייל (בד"כ 1, לפעמים 2+)
+        const itemCount = Object.keys(asgn||{}).filter(k=>cleanItemName(k)===name).length;
+        if(itemCount>0){
+          soldierCount += itemCount;
+          soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+itemCount;
         }
       });
       // גם assignments של חיילים שלא ב-allSols
       Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
         if(allSols.find(s=>s.id===solId)) return; // כבר נספר
-        const has = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(has){
-          soldierCount++;
+        const itemCount = Object.keys(asgn||{}).filter(k=>cleanItemName(k)===name).length;
+        if(itemCount>0){
+          soldierCount += itemCount;
           const unit = db.customSoldiers?.[solId]?.unit||db.soldiers?.[solId]?.unit||"א";
-          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+1;
+          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+itemCount;
         }
       });
 
