@@ -772,6 +772,28 @@ window.IMG_BADGE = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1
 // v20260405_052024
 
 const RAW_SOLDIERS = window.RAW_SOLDIERS_DATA;
+
+// getSoldiers: returns Firebase soldiers if available, else falls back to RAW_SOLDIERS + customSoldiers
+// This is the transition bridge — once migration is complete, only db.soldiers will be used
+function getSoldiers(db){
+  if(db.soldiers && Object.keys(db.soldiers).length > 0){
+    // Firebase has soldiers — merge with customSoldiers for any additions not yet migrated
+    const merged = {...db.soldiers};
+    Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{ merged[id]=s; });
+    return Object.values(merged);
+  }
+  // Fallback: RAW_SOLDIERS + customSoldiers (pre-migration)
+  const seen = new Set();
+  return [...Object.values(db.customSoldiers||{}), ...RAW_SOLDIERS].filter(s=>{
+    if(seen.has(s.id)) return false; seen.add(s.id); return true;
+  });
+}
+// getSerials: returns Firebase serials if available, else falls back to ALL_SERIALS
+function getSerials(db){
+  if(db.serials && db.serials.length > 0) return db.serials;
+  return ALL_SERIALS;
+}
+
 const EQ_COLS = ["קלע סער","M16","M4","מטולון M320","נגב 556","נגב 762","מאג","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש","מק פורק","מדפסים","כוונת קידמית","כוונת אחורית","כנה ספיר למאג","כנה ספיר לנגב","כנה ספיר למקכ","קנה לנגב 556","קנה לנגב 7.62","קנה למאג","אקילה X4","אקילה X6","NYX","מיקרון","שח″ע","שח″ע ממותג","שח″מ כחולה","שח''מ ירוקה","ליאור","ערמון","מכבית","טרמיס","עכבר","עדי","עמית","עמית איכון","וילון","עידו","פליר T75","רחפן איבו","אבטה","אבטה","משקפי אבטה","שלט אבטה","מטריס 30","שלט מטריס 30","אלפא","שלט אלפא","כדור ברזל- מתקן הטלה","טריגיקון","מטלון ישן","מטלון חדש","לאופולד 2","לאופולד 65","ירין הגדלה משתנה","מרק 5","מרק 6","ציין לייזר לנגב","סמן PACK","מפרומור","כוונת M5","מפרולייט","זאבון","פיגיון","סמן לייזר למפקד","נטלי","סמן לייזר ללאו","מטלון ינאי","איוטק OGL","יראור","משקפת","מצפן","משקפת 80*15","שבשבת רוח","מטל סרוג 10","מטל סרוג 20","ישלט","צגון","אורלי","כמות נשקים לחייל"];
 const DAILY_ITEMS = [
   {"name":"M4","total":340},
@@ -1017,7 +1039,7 @@ function getAvailableUnits(db, soldiers, itemName){
 
 function getAvailableSerials(db, soldiers, itemName, unit){
   // מחזיר צ/סידוריים זמינים (לא משוייכים לחיילים) לפי פלוגה
-  const allSols = [...soldiers,...Object.values(db.customSoldiers||{})];
+  const allSols = getSoldiers(db);
   const usedSerials = new Set();
   allSols.forEach(s=>{
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
@@ -1034,7 +1056,7 @@ function getAvailableSerials(db, soldiers, itemName, unit){
     return n===cleanItemName(itemName) && (unit==="הכל"||u===unit) && t==="unit" && s && isSerial(s);
   }).map(([k,v])=>({serial:String(v.s||v.serial), unit:v.u||v.unit, key:k}));
   // מ-ALL_SERIALS לפי פלוגה
-  const fromStatic = ALL_SERIALS.filter(s=>{
+  const fromStatic = getSerials(db).filter(s=>{
     return cleanItemName(s.name)===cleanItemName(itemName) &&
       (unit==="הכל"||s.unit===unit) &&
       !usedSerials.has(String(s.serial)) &&
@@ -1046,7 +1068,7 @@ function getAvailableSerials(db, soldiers, itemName, unit){
 // ===== הגנות שיוך =====
 function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
   const warnings = [];
-  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
+  const allSols = getSoldiers(db);
 
   // 1. האם צ זה כבר משוייך למישהו? — בדוק בכל המקורות
   if(serial && isSerial(serial)){
@@ -1067,7 +1089,7 @@ function checkAssignmentGuards(db, soldiers, itemName, serial, targetSoldier){
       }
     }
     // בדוק גם ב-ALL_SERIALS (אם צ קיים במערכת ומשוייך)
-    const staticEntry = ALL_SERIALS.find(s=>String(s.serial)===serialStr);
+    const staticEntry = getSerials(db).find(s=>String(s.serial)===serialStr);
     if(staticEntry && staticEntry.assignedToSoldier){
       const alreadyFound = warnings.some(w=>w.type==="serial_conflict");
       if(!alreadyFound){
@@ -1131,7 +1153,7 @@ function formatSigner(auth, db){
 const ALL_SERIALS = window.ALL_SERIALS_DATA;
 
 const NAME_TO_MAKAT = window.NAME_TO_MAKAT_DATA;
-function getMakat(name,db){const fromDB=db?.armoryMaster?.[name]?.makat;if(fromDB) return String(fromDB);return NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
+function getMakat(name,db){const fromDB=db?.armoryMaster?.[name]?.makat;if(fromDB) return String(fromDB);return db?.nameMakat?.[name]||NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
 
 // שמור חתימה ישנה בהיסטוריה ואפס
 function archiveAndClearSig(db, soldierId){
@@ -1162,7 +1184,7 @@ function nameWithMakat(name){const m=getMakat(name);return m?`${name} (${m})`:na
 function SerialsList({itemName, assignedSerial}){
   const [open, setOpen] = React.useState(false);
   const serials = React.useMemo(()=>
-    ALL_SERIALS.filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial)
+    getSerials(db).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial)
   ,[itemName]);
   if(!serials.length && !assignedSerial) return null;
   return <span style={{display:"inline-block",marginRight:4}}>
@@ -1244,7 +1266,7 @@ function groupAssigned(assigned,db){
     .map(g=>[g.name,g]);
 }
 // כל האמצעים שיש להם מספרים סידוריים במערכת
-const SERIAL_ITEMS = new Set(ALL_SERIALS.map(s=>s.name.trim()));
+const SERIAL_ITEMS = new Set(getSerials(db).map(s=>s.name.trim()));
 // מלאי ראשוני — פריטים פנויים (לא משויכים לחיילים)
 const IMPORTED_UNIT_ITEMS = window.IMPORTED_UNIT_ITEMS_DATA;
 function phoneToWA(p){if(!p)return null;const d=String(p).replace(/\D/g,"");return d.startsWith("0")?"972"+d.slice(1):d;}
@@ -1286,13 +1308,13 @@ function cleanSigs(sigs){
 // Collections that are safe to bulk-overwrite (won't lose data from race conditions)
 const SAFE_BULK_COLLECTIONS = ["assignments","customSoldiers","brokenItems","bulkGuarantors",
   "userPerms","userPasswords","dynamicUsers","unitItems","armoryMaster","weaponLocations",
-  "cabinets","cabinetNames","exitForms","actLog","polls","externalSigns"];
+  "cabinets","cabinetNames","exitForms","actLog","polls","externalSigns","soldiers","serials"];
 
 // Collections that must NEVER be bulk-overwritten (only written individually)
 // because a race condition could wipe data: signatures, testCerts, userSigs, sigHistory, deletedUsers
 
 function saveDB(db){
-  const safe={assignments:{},signatures:{},customSoldiers:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},assignmentMeta:{},visutRequests:{},visutUsers:{},...db};
+  const safe={assignments:{},signatures:{},customSoldiers:{},soldiers:{},serials:[],nameMakat:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},assignmentMeta:{},visutRequests:{},visutUsers:{},...db};
   try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
   // Only write bulk-safe collections
   fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
@@ -1481,7 +1503,7 @@ function AllSerialPicker({itemName, value, onChange}){
 
   const allForItem = React.useMemo(()=>{
     if(!itemName) return [];
-    return ALL_SERIALS.filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial);
+    return getSerials(db).filter(s=>s.name.trim()===itemName.trim()).map(s=>s.serial);
   },[itemName]);
 
   const filtered = React.useMemo(()=>{
@@ -1542,7 +1564,7 @@ function SerialPicker({itemName, value, onChange, db}){
   const usedSerials = useMemo(()=>{
     const used = new Set();
     // קודם כל RAW_SOLDIERS
-    RAW_SOLDIERS.forEach(s=>{
+    getSoldiers(db).forEach(s=>{
       // אם יש override ב-DB נתעלם מה-RAW
       const assigned = db.assignments[s.id] !== undefined ? db.assignments[s.id] : s.assigned;
       Object.values(assigned||{}).forEach(v=>{ if(v&&v!==1&&String(v).length>3) used.add(Number(v)); });
@@ -1564,7 +1586,7 @@ function SerialPicker({itemName, value, onChange, db}){
   const available = useMemo(()=>{
     if(!itemName) return [];
     const name = itemName.trim();
-    const fromStatic = ALL_SERIALS
+    const fromStatic = getSerials(db)
       .filter(s=>s.name.trim()===name && !usedSerials.has(s.serial))
       .map(s=>s.serial);
     // גם מ-armoryMaster serials אם קיימים
@@ -1613,7 +1635,7 @@ function SerialPicker({itemName, value, onChange, db}){
       {open&&available.length>0&&(
         <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-canvas)",border:"1px solid #388bfd",borderRadius:8,zIndex:100,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
           <div style={{padding:"6px 10px",borderBottom:"1px solid var(--color-border-muted)",fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>
-            {available.length} זמינים בנשקייה • {ALL_SERIALS.filter(s=>s.name.trim()===(itemName||"").trim()).length} סהכ
+            {available.length} זמינים בנשקייה • {getSerials(db).filter(s=>s.name.trim()===(itemName||"").trim()).length} סהכ
           </div>
           {filtered.map(serial=>(
             <div key={serial} onClick={()=>select(serial)}
@@ -1796,7 +1818,7 @@ function Login({onLogin}){
 }
 
 function SoldierSignView({auth,onLogout,db,setDb}){
-  const soldier=RAW_SOLDIERS.find(s=>s.id===auth.soldierId);
+  const soldier=getSoldiers(db).find(s=>s.id===auth.soldierId);
   const sig=db.signatures?.[auth.soldierId];
   const assigned=auth.assignedFromLink&&Object.keys(auth.assignedFromLink).length>0?auth.assignedFromLink:(db.assignments?.[auth.soldierId]||soldier?.assigned||{});
 
@@ -2100,7 +2122,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
 
   // ===== חישוב מלאי יומי — לפי מק"ט ישירות =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
-  const allSolsDaily = [...Object.values(db.customSoldiers||{}),...soldiers];
+  const allSolsDaily = getSoldiers(db);
   const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
 
   // בנה: makat(string) -> {name, total}
@@ -2659,7 +2681,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
     const valid=newItems.filter(i=>i.name);if(!valid.length)return;
     // בדוק הגנות לפני ביצוע
     if(!forceConfirmed){
-      const allSols=[...Object.values(db.customSoldiers||{}),...soldiers];
+      const allSols=getSoldiers(db);
       const allWarnings=[];
       valid.forEach(i=>{
         const serial=i.serial&&isSerial(i.serial)?i.serial:null;
@@ -3039,7 +3061,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 <div style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-purple-fg)"}}>🛡️ ערבות מרוכזת</div>
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={()=>{
-                    const allSols=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+                    const allSols=getSoldiers(db);
                     myGuarantees.forEach(g=>{
                       const remIds=Object.keys(g.remaining||{});
                       const solList=remIds.map(id=>allSols.find(x=>x.id===id)).filter(Boolean);
@@ -3060,7 +3082,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 </div>
               </div>
               {myGuarantees.map((g,gKey)=>{
-                const allSols=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+                const allSols=getSoldiers(db);
                 const remIds=Object.keys(g.remaining||{});
                 const solCount=Object.keys(g.soldiers||{}).length;
                 const gIdx=Object.keys(db.bulkGuarantors||{}).find(k=>db.bulkGuarantors[k]===g);
@@ -3182,7 +3204,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 // מהיכן — dropdown פלוגות עם מלאי זמין
                 if(!item.name) return null;
                 const available=getAvailableUnits(db,soldiers,item.name);
-                const hasSerial=isSerial(item.serial)||ALL_SERIALS.some(s=>cleanItemName(s.name)===cleanItemName(item.name));
+                const hasSerial=isSerial(item.serial)||getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name));
                 return (
                   <div style={{display:"flex",flexDirection:"column",gap:4,flex:1}}>
                     <select value={item.fromUnit||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],fromUnit:e.target.value,serial:""};setNewItems(n);}}
@@ -3201,7 +3223,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                 );
               })()}
               {item.name&&item.fromUnit&&(()=>{
-                const hasSerial=ALL_SERIALS.some(s=>cleanItemName(s.name)===cleanItemName(item.name));
+                const hasSerial=getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name));
                 if(!hasSerial) return null;
                 const avSerials=getAvailableSerials(db,soldiers,item.name,item.fromUnit);
                 return (
@@ -3216,7 +3238,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,auth,sol
                   </select>
                 );
               })()}
-              {item.name&&item.fromUnit&&!ALL_SERIALS.some(s=>cleanItemName(s.name)===cleanItemName(item.name))&&(()=>{
+              {item.name&&item.fromUnit&&!getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name))&&(()=>{
                 const avUnits=getAvailableUnits(db,soldiers,item.name);
                 const avUnit=avUnits.find(x=>x.unit===item.fromUnit);
                 const maxQty=avUnit?avUnit.free:0;
@@ -3772,7 +3794,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
   function doCheckout(forceConfirmed=false){
     const valid=items.filter(i=>i.name);if(!valid.length||!soldier)return;
     if(!forceConfirmed){
-      const allSols2=[...Object.values(db.customSoldiers||{}),...soldiers];
+      const allSols2=getSoldiers(db);
       const allW=[];
       valid.forEach(i=>{
         const serial=i.serial&&isSerial(i.serial)?i.serial:null;
@@ -3880,7 +3902,7 @@ function AddSoldierModal({db, onSave, onClose}){
   const [err, setErr] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const units = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
-  const allSoldiers = React.useMemo(()=>[...RAW_SOLDIERS,...Object.values(db.customSoldiers||{})],[db]);
+  const allSoldiers = React.useMemo(()=>getSoldiers(db),[db]);
 
   function set(k,v){setForm(p=>({...p,[k]:v}));setErr("");
     // הצעות רק בשדה מ"א — לא בשם, למניעת בלבול בהוספת חייל חדש
@@ -3909,7 +3931,7 @@ function AddSoldierModal({db, onSave, onClose}){
     if(!form.unit.trim()){setErr("חסרה פלוגה");return;}
     if(!form.squad.trim()||form.squad==="__custom__"){setErr("חסרה מחלקה");return;}
     const existingCustom = db.customSoldiers?.[form.id.trim()];
-    const existingRaw = RAW_SOLDIERS.find(s=>s.id===form.id.trim());
+    const existingRaw = getSoldiers(db).find(s=>s.id===form.id.trim());
     const existingAssign = db.assignments?.[form.id.trim()]!==undefined;
     if(existingCustom||existingRaw||existingAssign){
       setErr("מספר אישי "+form.id.trim()+" כבר קיים במערכת!");
@@ -3923,12 +3945,14 @@ function AddSoldierModal({db, onSave, onClose}){
       ...db,
       assignments:{...(db.assignments||{}),[form.id.trim()]:assigned},
       customSoldiers:{...(db.customSoldiers||{}),[form.id.trim()]:newSoldier},
+      soldiers:{...(db.soldiers||{}),[form.id.trim()]:newSoldier},
     };
     setSaving(true);
     try{
       saveDB(newDb);onSave(newDb);
       logAction("הוספת_חייל", `הוסף חייל: ${(form.firstName+" "+form.lastName).trim()} (${form.id.trim()}) פלוגה ${form.unit}`, "מערכת");
-      fbSet("db/customSoldiers/"+newSoldier.id, newSoldier).catch(()=>{});
+      fbSet("db/soldiers/"+newSoldier.id, newSoldier).catch(()=>{});
+      fbSet("db/customSoldiers/"+newSoldier.id, newSoldier).catch(()=>{}); // backward compat
       fbSet("db/assignments/"+newSoldier.id, assigned).catch(()=>{});
       setTimeout(()=>{ setSaving(false); onClose(); }, 500);
     }catch(e){ console.error("save soldier error:",e); setSaving(false); alert("שגיאה בהוספת חייל"); }
@@ -3974,7 +3998,7 @@ function AddSoldierModal({db, onSave, onClose}){
         <div>
           <label style={S.label}>מחלקה *</label>
           {(()=>{
-            const allSols = [...RAW_SOLDIERS, ...Object.values(db.customSoldiers||{})];
+            const allSols = getSoldiers(db);
             const squadsForUnit = [...new Set(allSols.filter(s=>s.unit===form.unit&&s.squad).map(s=>s.squad))].sort();
             return squadsForUnit.length>0
               ? <select value={form.squad} onChange={e=>set("squad",e.target.value)} style={S.input}>
@@ -4188,7 +4212,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
 
   // כל החיילים
   const allSoldiers = React.useMemo(()=>
-    [...soldiers,...Object.values(db.customSoldiers||{})].filter(s=>s.name)
+    getSoldiers(db).filter(s=>s.name)
   ,[soldiers,db.customSoldiers]);
 
   // כל הבחינות שנשמרו
@@ -4594,16 +4618,16 @@ ${pending.length>0?`<h2>טרם נבחנו (${pending.length})</h2>
           <label style={S.label}>מספר סידורי</label>
           <input value={newSerialVal} onChange={e=>setNewSerialVal(e.target.value)}
             placeholder="הכנס מספר סידורי..." style={S.input} inputMode="numeric" autoFocus/>
-          {newSerialVal.trim()&&ALL_SERIALS.find(s=>s.name===showAddSerial.wepName&&String(s.serial)===newSerialVal.trim())&&(
+          {newSerialVal.trim()&&getSerials(db).find(s=>s.name===showAddSerial.wepName&&String(s.serial)===newSerialVal.trim())&&(
             <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-sm)",marginBottom:8}}>⚠️ סידורי זה כבר קיים במערכת</div>
           )}
           <button onClick={()=>{
             const serial = newSerialVal.trim();
             if(!serial) return;
             // Add to ALL_SERIALS (runtime)
-            const existing = ALL_SERIALS.find(s=>s.name===showAddSerial.wepName&&String(s.serial)===serial);
+            const existing = getSerials(db).find(s=>s.name===showAddSerial.wepName&&String(s.serial)===serial);
             if(!existing){
-              ALL_SERIALS.push({name:showAddSerial.wepName, serial:parseInt(serial)||serial, unit:"פנוי", assignedToSoldier:false, broken:false});
+              fbSet("db/serials/s_"+String(parseInt(serial)||serial), {name:showAddSerial.wepName, serial:parseInt(serial)||serial, unit:"פנוי", assignedToSoldier:false, broken:false}).catch(()=>{})
             }
             // Also save to db.unitItems so it persists
             const itemKey = "manual_"+showAddSerial.wepName.replace(/\s/g,"_")+"_"+serial;
@@ -5000,7 +5024,7 @@ function buildDailyReport(soldiers, db){
   const dateStr = now.toLocaleDateString("he-IL");
   const timeStr = now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
 
-  const allSols = [...Object.values(db.customSoldiers||{}), ...soldiers];
+  const allSols = getSoldiers(db);
   const signed = allSols.filter(s=>db.signatures?.[s.id]);
   const unsigned = allSols.filter(s=>!db.signatures?.[s.id]);
   const withWeapon = allSols.filter(s=>{
@@ -5242,7 +5266,7 @@ function PollTab({db, setDb, soldiers, auth}){
   const [queueMode, setQueueMode] = React.useState(false);
 
   const units = ["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
-  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
+  const allSols = getSoldiers(db);
 
   // האזן ל-polls ב-Firebase
   React.useEffect(()=>{
@@ -5877,7 +5901,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
   const [search,setSearch]=React.useState("");
   const [expanded,setExpanded]=React.useState(null);
   const [filter,setFilter]=React.useState("הכל");
-  const allSols=React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const allSols=React.useMemo(()=>getSoldiers(db),[db,soldiers]);
 
   const repList=React.useMemo(()=>{
     return Object.entries(db.bulkGuarantors||{}).map(([key,g])=>{
@@ -5891,7 +5915,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
           let serial=null;
           if(typeof sr==="string"&&sr.trim()&&sr!=="1")serial=sr.trim();
           else if(typeof sr==="number"&&sr>1)serial=String(sr);
-          const sd=ALL_SERIALS.find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
+          const sd=getSerials(db).find(s=>s.name===wepName&&(serial?String(s.serial)===serial:true));
           return {wepName,serial:serial||(sd?.serial?String(sd.serial):null),makat:sd?.makat||null,isWep:WEAPON_KEYS.includes(wepName)};
         });
         return {id,name:sol?.name||id,unit:sol?.unit||"?",phone:sol?.phone||"",weapons};
@@ -6358,6 +6382,22 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const off7 = fbOn("db/dynamicUsers", (dynUsers)=>{
       setDb(prev=>({...prev, dynamicUsers: dynUsers||{}}));
     });
+    // db/nameMakat listener
+    fbOn("db/nameMakat", (nm)=>{
+      if(nm) setDb(prev=>({...prev, nameMakat: nm}));
+    });
+    // db/serials listener — replaces ALL_SERIALS_DATA
+    fbOn("db/serials", (serials)=>{
+      if(serials){
+        // Convert object to array
+        const arr = Array.isArray(serials) ? serials : Object.values(serials);
+        setDb(prev=>({...prev, serials: arr}));
+      }
+    });
+    // db/soldiers listener — replaces RAW_SOLDIERS + customSoldiers
+    fbOn("db/soldiers", (soldiers)=>{
+      if(soldiers) setDb(prev=>({...prev, soldiers: soldiers}));
+    });
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
     });
@@ -6415,6 +6455,54 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         setDb(prev=>({...prev, unitItems: items}));
       }
     });
+    // ONE-TIME: migrate NAME_TO_MAKAT to db/nameMakat
+    fbGet("db/nameMakatMigratedV1").then(done=>{
+      if(!done){
+        fbSet("db/nameMakat", window.NAME_TO_MAKAT_DATA||{}).then(()=>{
+          fbSet("db/nameMakatMigratedV1", true).catch(()=>{});
+          console.log("[migration] nameMakat uploaded");
+        }).catch(()=>{});
+      }
+    }).catch(()=>{});
+
+    // ONE-TIME: migrate ALL_SERIALS to db/serials
+    fbGet("db/serialsMigratedV1").then(done=>{
+      if(!done){
+        console.log("[migration] uploading serials to Firebase...");
+        const serialData = {};
+        ALL_SERIALS.forEach((s,i)=>{
+          serialData["s_"+String(s.serial)] = {name:s.name, serial:s.serial, unit:s.unit||"", broken:s.broken||false};
+        });
+        fbSet("db/serials", serialData).then(()=>{
+          fbSet("db/serialsMigratedV1", true).catch(()=>{});
+          console.log("[migration] serials uploaded:", Object.keys(serialData).length);
+        }).catch(e=>console.error("[migration] serials failed:", e));
+      }
+    }).catch(()=>{});
+
+    // ONE-TIME: migrate RAW_SOLDIERS to db/soldiers if not done yet
+    fbGet("db/soldiersMigratedV1").then(done=>{
+      if(!done){
+        console.log("[migration] uploading soldiers to Firebase...");
+        const soldierData = {};
+        getSoldiers(db).forEach(s=>{
+          soldierData[s.id] = {id:s.id, name:s.name, unit:s.unit||"", squad:s.squad||"", phone:s.phone||""};
+        });
+        // Also merge customSoldiers
+        fbGet("db/customSoldiers").then(custom=>{
+          if(custom) Object.entries(custom).forEach(([id,s])=>{ soldierData[id]={id,name:s.name,unit:s.unit||"",squad:s.squad||"",phone:s.phone||""}; });
+          fbSet("db/soldiers", soldierData).then(()=>{
+            fbSet("db/soldiersMigratedV1", true).catch(()=>{});
+            console.log("[migration] soldiers uploaded:", Object.keys(soldierData).length);
+          }).catch(e=>console.error("[migration] failed:", e));
+        }).catch(()=>{
+          fbSet("db/soldiers", soldierData).then(()=>{
+            fbSet("db/soldiersMigratedV1", true).catch(()=>{});
+          }).catch(()=>{});
+        });
+      }
+    }).catch(()=>{});
+
     // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
     fbGet("db/armoryMasterSeededV3").then(seededV3=>{
       if(!seededV3){
@@ -6571,13 +6659,13 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [showProfile,setShowProfile]=useState(false);
   const [addModal,setAddModal]=useState(false);
 
-  const units=useMemo(()=>["הכל",...[...new Set(RAW_SOLDIERS.map(s=>s.unit).filter(Boolean))].sort()],[]);
+  const units=useMemo(()=>["הכל",...[...new Set(getSoldiers(db).map(s=>s.unit).filter(Boolean))].sort()],[]);
   const soldiers=useMemo(()=>{
     const assignments = db.assignments||{};
     const signatures = db.signatures||{};
     const customSoldiers = db.customSoldiers||{};
     const custom=Object.values(customSoldiers);
-    const base=RAW_SOLDIERS.filter(s=>!customSoldiers[s.id]);
+    const base=getSoldiers(db);
     const guarantors=db.bulkGuarantors||{};
     // Normalize unit names
     function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
@@ -7154,10 +7242,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
 function ViewerApp({auth, onLogout, db}){
   const [search,setSearch]=React.useState("");
   const [filterUnit,setFilterUnit]=React.useState(auth.viewUnit&&auth.viewUnit!=="הכל"?auth.viewUnit:"הכל");
-  const units=["הכל",...[...new Set(RAW_SOLDIERS.map(s=>s.unit))].sort()];
+  const units=["הכל",...[...new Set(getSoldiers(db).map(s=>s.unit))].sort()];
   const soldiers=React.useMemo(()=>{
     const custom=Object.values(db.customSoldiers||{});
-    const all=[...custom,...RAW_SOLDIERS];
+    const all=getSoldiers(db);
     return all.map(s=>{
       const assigned=db.assignments?db.assignments[s.id]??{}:s.assigned||{};
       const sig=db.signatures?.[s.id];
@@ -7548,10 +7636,7 @@ function AddUnitItemForm({db, setDb, onDone}){
 
   const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
 
-  const allSols = React.useMemo(()=>[
-    ...Object.values(db.customSoldiers||{}),
-    ...RAW_SOLDIERS
-  ],[db]);
+  const allSols = React.useMemo(()=>getSoldiers(db),[db]);
 
   const soldierMatches = React.useMemo(()=>{
     if(!soldierSearch.trim()) return [];
@@ -7877,7 +7962,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
         const unitItems2 = groupedByUnit[unit];
         const color = UNIT_COLORS[unit]||"var(--color-accent-fg)";
         const unitLabel = unit==="גדודי"?"🎖️ גדודי":unit==="נעורה"?"📦 נעורה":unit==="פנוי"?"🟢 פנוי":unit==="חטיבה 6"?"🔺 חטיבה 6":"פלוגה "+unit;
-        const allSolsList=[...Object.values(db.customSoldiers||{}),...soldiers];
+        const allSolsList=getSoldiers(db);
 
         // Group by item name
         const byName = {};
@@ -8300,7 +8385,7 @@ function CabinetsTab({db, setDb, auth}){
       const items = [];
       // 1. unitItems t=unit — נשק בארמון (לא יצא לחייל)
       // בנה סט של כל הצ שיצאו לחיילים (assignments)
-      const allSols2=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+      const allSols2=getSoldiers(db);
       const assignedSerials=new Set();
       allSols2.forEach(sol=>{
         const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
@@ -8324,7 +8409,7 @@ function CabinetsTab({db, setDb, auth}){
         });
       });
       // 2. משוייך לחייל + לא חתום
-      const allSolsHere=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS].filter(s=>s.unit===unit);
+      const allSolsHere=getSoldiers(db).filter(s=>s.unit===unit);
       allSolsHere.forEach(sol=>{
         if(signedIds.has(sol.id)) return; // חתום — יצא מהארמון
         const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
@@ -8349,7 +8434,7 @@ function CabinetsTab({db, setDb, auth}){
     const signedIds2 = new Set(Object.keys(db.signatures||{}));
     Object.entries(db.assignmentMeta||{}).forEach(([solId, meta])=>{
       if(signedIds2.has(solId)) return; // חתום — יצא
-      const sol = [...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS].find(s=>s.id===solId);
+      const sol = getSoldiers(db).find(s=>s.id===solId);
       if(!sol) return;
       Object.entries(meta||{}).forEach(([itemKey, metaVal])=>{
         if((metaVal.cabName||"")!==cabName) return;
@@ -8374,7 +8459,7 @@ function CabinetsTab({db, setDb, auth}){
         const serial=v.s||v.serial||null;
         const t=v.t||v.assignedType||"unit";
         // בנה סט של צ שכבר יצאו לחיילים
-        const allSols=[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS];
+        const allSols=getSoldiers(db);
         const assignedSerials=new Set();
         allSols.forEach(sol=>{
           const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
@@ -8411,7 +8496,7 @@ function CabinetsTab({db, setDb, auth}){
       if(!seen.has(key)){ seen.add(key); list.push({alias:name, makat:String(v.makat||""), fullname:name}); }
     });
     // From static ARMORY_MASTER fallback
-    Object.entries(ARMORY_MASTER||{}).forEach(([name,v])=>{
+    Object.entries(db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:ARMORY_MASTER).forEach(([name,v])=>{
       const key = name+"|"+(v.makat||"");
       if(!seen.has(key)){ seen.add(key); list.push({alias:name, makat:String(v.makat||""), fullname:name}); }
     });
@@ -8801,7 +8886,7 @@ function VisutTab({db, setDb, soldiers, auth}){
       const total = info.total||0;
       const makat = info.makat||getMakat(name,db)||"";
       const liveByUnit = {};
-      const allSols = [...soldiers,...Object.values(db.customSoldiers||{})];
+      const allSols = getSoldiers(db);
       UNITS.forEach(u=>{ liveByUnit[u]=0; });
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
@@ -8896,7 +8981,7 @@ function VisutTab({db, setDb, soldiers, auth}){
 
   function exportExcel(type){
     const BOM="\uFEFF";
-    const allSols=[...soldiers,...Object.values(db.customSoldiers||{})];
+    const allSols=getSoldiers(db);
     let rows=[];
     if(type==="all"){
       // כל המלאי — משוייכים + מוקצים ביחד
@@ -9245,7 +9330,7 @@ function AddSerialInline({itemName, db, setDb, onDone}){
   const [soldierId, setSoldierId] = React.useState("");
   const [err, setErr] = React.useState("");
   const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...RAW_SOLDIERS],[db]);
+  const allSols = React.useMemo(()=>getSoldiers(db),[db]);
   const matches = React.useMemo(()=>{
     if(!soldierSearch.trim()) return [];
     const q=soldierSearch.toLowerCase();
@@ -9334,7 +9419,7 @@ function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDo
   const [search, setSearch] = React.useState("");
   const [soldierId, setSoldierId] = React.useState("");
   const allSols = React.useMemo(()=>{
-    const combined=[...Object.values(db.customSoldiers||{}),...soldiers];
+    const combined=getSoldiers(db);
     const seen=new Set();
     return combined.filter(s=>{ if(seen.has(s.id)) return false; seen.add(s.id); return true; });
   },[db,soldiers]);
@@ -9447,7 +9532,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
 
   const liveAssigned = React.useMemo(()=>{
     const counts = {};
-    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers];
+    const allSols = getSoldiers(db);
     allSols.forEach(s=>{
       const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
       Object.keys(asgn||{}).forEach(k=>{
@@ -9471,7 +9556,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     const rows = [];
     // dedup by id — customSoldiers גובר על RAW_SOLDIERS
     const seenIds = new Set();
-    const allSols = [...Object.values(db.customSoldiers||{}),...soldiers].filter(s=>{
+    const allSols = getSoldiers(db).filter(s=>{
       if(seenIds.has(s.id)) return false; seenIds.add(s.id); return true;
     });
     // From assignments
@@ -9493,8 +9578,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
         rows.push({name:cleanItemName(v.n||v.name||""), serial:String(s), soldierName:"—", soldierId:null, unit:v.u||v.unit||"גדודי", source:"free", key});
       }
     });
-    // From ALL_SERIALS not yet in rows
-    ALL_SERIALS.forEach(s=>{
+    // From serials not yet in rows
+    getSerials(db).forEach(s=>{
       if(!usedSerials.has(String(s.serial))){
         rows.push({name:s.name, serial:String(s.serial), soldierName:"—", soldierId:null, unit:s.unit, source:"free", key:null});
       }
@@ -9703,7 +9788,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       {(()=>{
         // כפילויות צ/סידורי
         const serialMap={};
-        const allSols2=[...Object.values(db.customSoldiers||{}),...soldiers];
+        const allSols2=getSoldiers(db);
         allSols2.forEach(s=>{
           const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
           Object.entries(asgn||{}).forEach(([k,v])=>{
@@ -10031,7 +10116,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       {showDuplicates&&(()=>{
         // בנה רשימת כפולים כאן
         const serialMap2={};
-        const allSols3=[...soldiers,...Object.values(db.customSoldiers||{})];
+        const allSols3=getSoldiers(db);
         allSols3.forEach(s=>{
           const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
           Object.entries(asgn||{}).forEach(([k,v])=>{
@@ -10078,7 +10163,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                               const t=v?.t||v?.assignedType||"unit";
                               const u=v?.u||v?.unit||"?";
                               const cab=v?.cabName||"—";
-                              const sol=t==="soldier"?(db.customSoldiers?.[v?.si||v?.assignedSoldierId]?.name||[...Object.values(db.customSoldiers||{}),...soldiers].find(s=>s.id===(v?.si||v?.assignedSoldierId))?.name||v?.sn||"חייל"):"—";
+                              const sol=t==="soldier"?(db.customSoldiers?.[v?.si||v?.assignedSoldierId]?.name||getSoldiers(db).find(s=>s.id===(v?.si||v?.assignedSoldierId))?.name||v?.sn||"חייל"):"—";
                               return <div key={k} style={{padding:"2px 6px",borderRadius:4,marginBottom:2,
                                 background:t==="soldier"?"var(--color-accent-subtle)":"var(--color-bg-subtle)"}}>
                                 #{i+1}: פלוגה {u} | {t==="soldier"?"👤 חייל: "+sol:"🏢 בארמון"} | ארון: {cab}
@@ -10232,7 +10317,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
   const allSols = React.useMemo(()=>{
     const seen=new Set();
-    return [...Object.values(db.customSoldiers||{}),...soldiers].filter(s=>{
+    return getSoldiers(db).filter(s=>{
       if(seen.has(s.id)) return false; seen.add(s.id); return true;
     });
   },[db,soldiers]);
@@ -10600,7 +10685,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
         const allRelated = Object.entries(db.unitItems||{}).filter(([,v])=>(v.n||v.name||"")=== expandedItem);
         // הוסף חיילים שמשוייך להם הפריט מ-assignments (לא נשק בלבד)
         const signedIds = new Set(Object.keys(db.signatures||{}));
-        const allSolsAll=[...Object.values(db.customSoldiers||{}),...soldiers];
+        const allSolsAll=getSoldiers(db);
         const assignedRows = [];
         allSolsAll.forEach(sol=>{
           const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
@@ -10631,7 +10716,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
             (v.sn||v.assignedSoldierName||"").includes(serialSearch);
           return unitOk && searchOk;
         });
-        const allSolsList=[...Object.values(db.customSoldiers||{}),...soldiers];
+        const allSolsList=getSoldiers(db);
         return (
           <div style={{...S.card,marginBottom:16,border:"2px solid var(--color-accent-fg)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -10855,9 +10940,9 @@ function MyStockTab({db, setDb, soldiers, auth}){
                   }
                   // Add to ALL_SERIALS if serial provided and not already there
                   if(addSerial){
-                    const alreadyExists = ALL_SERIALS.some(s=>String(s.serial)===String(addSerial)&&s.name===itemName);
+                    const alreadyExists = getSerials(db).some(s=>String(s.serial)===String(addSerial)&&s.name===itemName);
                     if(!alreadyExists){
-                      ALL_SERIALS.push({name:itemName, serial:parseInt(addSerial)||addSerial, unit:"פנוי", assignedToSoldier:false});
+                      fbSet("db/serials/s_"+String(parseInt(addSerial)||addSerial), {name:itemName, serial:parseInt(addSerial)||addSerial, unit:"פנוי", assignedToSoldier:false, broken:false}).catch(()=>{})
                     }
                   }
 
@@ -10907,10 +10992,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         // Remove from ALL_SERIALS too
                         const removedSerial = item.s||item.serial;
                         if(removedSerial){
-                          const idx=ALL_SERIALS.findIndex(s=>String(s.serial)===String(removedSerial)&&s.name===(item.n||item.name));
-                          if(idx>=0) ALL_SERIALS.splice(idx,1);
-                        }
-                        const ndb={...db,armoryMaster:master2,unitItems:newUI};
+                          fbDelete("db/serials/s_"+String(removedSerial)).catch(()=>{}); // remove from serials
                         saveDB(ndb); setDb(ndb);
                       }} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)",minHeight:28}}>הסר</button>
                     </div>
@@ -10945,7 +11027,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                     const newUI={...db.unitItems};
                     Object.entries(newUI).forEach(([k,v])=>{ if(v.n===editItem) newUI[k]={...v,n:newName}; });
                     // Update ALL_SERIALS
-                    ALL_SERIALS.forEach(s=>{ if(s.name===editItem) s.name=newName; });
+                    getSerials(db).forEach(s=>{ if(s.name===editItem) s.name=newName; });
                     const ndb={...db,armoryMaster:master2,unitItems:newUI};
                     saveDB(ndb); setDb(ndb);
                     setEditItem(newName); setEditName(newName);
@@ -11451,7 +11533,7 @@ function DashDetailModal({type, soldiers, db, onClose}){
 function SearchModal({onClose, soldiers, db}){
   const [q, setQ] = React.useState("");
   const [searchItem, setSearchItem] = React.useState("");
-  const allSols = React.useMemo(()=>[...Object.values(db.customSoldiers||{}),...soldiers],[db,soldiers]);
+  const allSols = React.useMemo(()=>getSoldiers(db),[db,soldiers]);
 
   const results = React.useMemo(()=>{
     const t = q.trim();
@@ -11477,7 +11559,7 @@ function SearchModal({onClose, soldiers, db}){
         }
       });
       // חיפוש בכל ALL_SERIALS (כולל מה שלא מוקצה)
-      ALL_SERIALS.forEach(s=>{
+      getSerials(db).forEach(s=>{
         const serialStr = String(s.serial);
         if(serialStr.includes(t) && !bySerial.some(r=>String(r.serial)===serialStr)){
           bySerial.push({itemName:s.name, serial:s.serial, unit:s.unit||"?", assignedToSoldier:s.assignedToSoldier, source:"registry"});
@@ -12814,7 +12896,7 @@ function downloadAllFormsZip(db, soldiers){
   const enc = s => fflate.strToU8(s);
   const safeName = s => (s||"לא_ידוע").replace(/[\/\\:*?"<>|]/g,"_");
 
-  const allSols = [...soldiers, ...Object.values(db.customSoldiers||{})];
+  const allSols = getSoldiers(db);
   // De-duplicate by ID
   const solMap = {};
   allSols.forEach(s=>{ if(s.name && s.id) solMap[s.id]=s; });
@@ -13314,7 +13396,7 @@ function PermissionsTab({db, setDb, auth}){
   const [shareUser, setShareUser] = useState(null);
   const [sigModalUser, setSigModalUser] = useState(null); // ✍️ חתימה שמורה
   const [nameSuggestions, setNameSuggestions] = useState([]);
-  const [soldiers] = useState(()=>[...Object.values(loadDB()?.customSoldiers||{}),...RAW_SOLDIERS]);
+  const [soldiers] = useState(()=>getSoldiers(loadDB()||{}));
 
   function togglePerm(username, perm, isDynamic){
     const baseRole = isDynamic ? (db.dynamicUsers?.[username]?.role||"viewer") : (USERS[username]?.role||"viewer");
@@ -14476,7 +14558,7 @@ function BulkRepSignView({auth, db, setDb}){
 
   const soldierIds = Object.keys(g.soldiers||{});
   const soldierList = soldierIds.map(id=>{
-    const s = RAW_SOLDIERS.find(x=>x.id===id);
+    const s = getSoldiers(db).find(x=>x.id===id);
     return s ? s.name : id;
   });
 
@@ -14540,7 +14622,7 @@ function BulkRepSignView({auth, db, setDb}){
 }
 
 function ExitFormDirectView({auth, onLogout, db, setDb, onDone}){
-  const soldier = RAW_SOLDIERS.find(s=>s.id===auth.soldierId)
+  const soldier = getSoldiers(db).find(s=>s.id===auth.soldierId)
     || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
   const [answers, setAnswers] = React.useState(Array(10).fill(null));
   const [address, setAddress] = React.useState("");
@@ -14759,7 +14841,7 @@ function App(){
     if(exitId) try{sessionStorage.setItem("link_exit", exitId);}catch(e){}
     // helper: מחפש חייל ב-RAW ואז ב-customSoldiers של ה-DB המקומי
     function findSoldier(id){
-      const raw=RAW_SOLDIERS.find(x=>x.id===id);
+      const raw=getSoldiers(db).find(x=>x.id===id);
       if(raw) return raw;
       try{
         const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");
@@ -14769,7 +14851,7 @@ function App(){
     }
     if(testCertId){
       function findSoldier2(id){
-        const raw=RAW_SOLDIERS.find(x=>x.id===id);
+        const raw=getSoldiers(db).find(x=>x.id===id);
         if(raw) return raw;
         try{const local=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return Object.values(local.customSoldiers||{}).find(x=>x.id===id)||null;}catch(e){return null;}
       }
@@ -14816,18 +14898,18 @@ function App(){
       const savedBulk = sessionStorage.getItem("link_bulksign");
       const savedExit = sessionStorage.getItem("link_exit");
       if(savedSign){
-        const s2=RAW_SOLDIERS.find(x=>x.id===savedSign);
+        const s2=getSoldiers(db).find(x=>x.id===savedSign);
         if(s2) return{role:"soldier",name:s2.name,soldierId:savedSign,autoSign:true,assignedFromLink:{}};
       }
       if(savedTest){
-        const ts2=RAW_SOLDIERS.find(x=>x.id===savedTest);
+        const ts2=getSoldiers(db).find(x=>x.id===savedTest);
         return{role:"testcert",name:ts2?.name||"חייל",soldierId:savedTest,autoTestCert:true};
       }
       if(savedBulk){
         return{role:"bulkrep",name:"נציג",bulkSignKey:savedBulk,autoBulkSign:true};
       }
       if(savedExit){
-        const se=RAW_SOLDIERS.find(x=>x.id===savedExit);
+        const se=getSoldiers(db).find(x=>x.id===savedExit);
         return{role:"soldier",name:se?.name||"חייל",soldierId:savedExit,autoExitForm:true};
       }
     }catch(e){}
@@ -14926,7 +15008,7 @@ function App(){
   // testcert URL param - תמיד פתח עמוד בוחן, גם אם מחובר כמנהל
   const testCertParam = new URLSearchParams(window.location.search).get("testcert");
   if(testCertParam){
-    const ts = RAW_SOLDIERS.find(x=>x.id===testCertParam)
+    const ts = getSoldiers(db).find(x=>x.id===testCertParam)
       || Object.values(db.customSoldiers||{}).find(x=>x.id===testCertParam);
     const tcAuth = {role:"testcert",name:ts?.name||"חייל",soldierId:testCertParam,autoTestCert:true};
     return<TestCertView auth={tcAuth} db={db} setDb={setDb}/>;
@@ -14934,7 +15016,7 @@ function App(){
 
   if(!auth)return<Login onLogin={handleLogin}/>;
   if(exitFormParam){
-    const s=RAW_SOLDIERS.find(x=>x.id===exitFormParam)||Object.values(db.customSoldiers||{}).find(x=>x.id===exitFormParam);
+    const s=getSoldiers(db).find(x=>x.id===exitFormParam);
     const exitAuth={role:"soldier",name:s?.name||"חייל",soldierId:exitFormParam,autoExitForm:true,phone:s?.phone||""};
     return<ExitFormDirectView auth={exitAuth} onLogout={()=>window.location.href=window.location.pathname} db={db} setDb={setDb}/>;
   }
