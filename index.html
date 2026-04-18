@@ -2134,8 +2134,33 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     if(mk) makatToArmory[mk] = {name: cleanItemName(name), total: info.total||0};
   });
 
-  // ספור השאלות לפי שם (חיילים חתומים בלבד) — עם נרמול גרשיים
-  const allLoans = {}; // name -> count of items (including duplicates per soldier)
+  // ===== ספירת מלאי חי (כמו MyStockTab) =====
+  // liveByName[name] = כמה יחידות קיימות בפועל (חיילים + פלוגות + ארמון)
+  const liveByName = {};
+  // מ-assignments — כל החיילים
+  allSolsDaily.forEach(s=>{
+    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+    Object.keys(asgn||{}).forEach(raw=>{
+      const n = cleanItemName(raw);
+      liveByName[n] = (liveByName[n]||0)+1;
+    });
+  });
+  // orphan soldiers
+  Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
+    if(allSolsDaily.find(s=>s.id===solId)) return;
+    Object.keys(asgn||{}).forEach(raw=>{
+      const n = cleanItemName(raw);
+      liveByName[n] = (liveByName[n]||0)+1;
+    });
+  });
+  // מ-unitItems (פלוגות + ארמון)
+  Object.values(db.unitItems||{}).forEach(v=>{
+    const n = cleanItemName(v.n||v.name||"");
+    if(n) liveByName[n] = (liveByName[n]||0)+1;
+  });
+
+  // ספור השאלות לפי שם (חיילים חתומים בלבד)
+  const allLoans = {}; // name -> count
   allSolsDaily.forEach(s=>{
     if(!signedIds.has(s.id)) return;
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
@@ -2144,10 +2169,10 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       allLoans[n] = (allLoans[n]||0)+1;
     });
   });
-  // גם assignments של חיילים חתומים שלא ב-allSolsDaily
+  // orphan signed
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
     if(!signedIds.has(solId)) return;
-    if(allSolsDaily.find(s=>s.id===solId)) return; // כבר נספר
+    if(allSolsDaily.find(s=>s.id===solId)) return;
     Object.keys(asgn||{}).forEach(raw=>{
       const n = cleanItemName(raw);
       allLoans[n] = (allLoans[n]||0)+1;
@@ -2163,12 +2188,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: armoryMaster > DAILY_ITEMS fallback
+    // total: liveByName (ספירה חיה) > armoryMaster > DAILY_ITEMS
     const masterTotal = armEntry?.total||0;
+    const liveTotal = liveByName[amName]||liveByName[cleanAlias]||0;
     const dailyTotal = (DAILY_ITEMS||[]).find(d=>
       cleanItemName(d.name)===amName || cleanItemName(d.name)===cleanAlias
     )?.total||0;
-    const total = masterTotal>0 ? masterTotal : dailyTotal;
+    // השתמש בספירה החיה אם גדולה יותר, אחרת armoryMaster, אחרת DAILY_ITEMS
+    const total = liveTotal>0 ? liveTotal : (masterTotal>0 ? masterTotal : dailyTotal);
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -2177,7 +2204,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     return {...item, alias, total, loans, stock, ok};
   }
   const leftCalc = DAILY_LEFT.filter(i=>!hiddenMsds.has(i.msd)).map(calcItem);
-  const rightCalc = DAILY_RIGHT.filter(i=>!hiddenMsds.has(i.msd)).map(calcItem);
+  const rightCalc = DAILY_RIGHT.filter(i=>!hiddenMsds.has("R_"+i.msd)).map(calcItem);
   const extraCalc = extraItems.map(calcItem);
   const allCalc = [...leftCalc,...rightCalc,...extraCalc];
 
@@ -2415,7 +2442,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                   {R?(<>
                     <td style={{...TD(),background:bg,textAlign:"center"}}>{R.msd}</td>
                     <td style={{...TD(),background:bg,fontFamily:"monospace",fontSize:10}}>{R.makat||""}</td>
-                    <td style={{...TD(),background:bg}}>{R.fullname||R.alias}</td>
+                    <td style={{...TD(),background:bg}}>
+                      <span style={{display:"flex",alignItems:"center",gap:4}}>
+                        {R.fullname||R.alias}
+                        <button onClick={e=>{e.stopPropagation();setHiddenMsds(p=>new Set([...p,"R_"+R.msd]))}}
+                          style={{background:"none",border:"none",color:"var(--color-text-muted)",cursor:"pointer",fontSize:9,padding:0,lineHeight:1,opacity:0.6}}
+                          title="הסר מהדוח">✕</button>
+                      </span>
+                    </td>
                     <td style={{...TDC(),background:bg}}>{R.total||""}</td>
                     <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{R.loans||0}</td>
                     <td style={{...TDC(R.ok),background:bg,color:R.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{R.total!=null?R.stock:""}</td>
@@ -9132,7 +9166,18 @@ function VisutTab({db, setDb, soldiers, auth}){
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <input value={newUser} onChange={e=>setNewUser(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newUser.trim()){const ndb={...db,visutUsers:{...(db.visutUsers||{}),[newUser.trim()]:true}};saveDB(ndb);setDb(ndb);fbSet("db/visutUsers/"+newUser.trim(),true).catch(()=>{});setNewUser("");}}} placeholder="שם משתמש..." style={{...S.input,marginBottom:0,flex:1}}/>
+            <select value={newUser} onChange={e=>setNewUser(e.target.value)}
+              style={{...S.input,marginBottom:0,flex:1}}>
+              <option value="">— בחר משתמש —</option>
+              {[...USERS,...Object.values(db.dynamicUsers||{})].filter(u=>{
+                const uname = typeof u==="string" ? u : u.username;
+                return uname && !db.visutUsers?.[uname] && uname!=="oren";
+              }).map(u=>{
+                const uname = typeof u==="string" ? u : u.username;
+                const udisp = typeof u==="string" ? u : (u.name||u.username);
+                return <option key={uname} value={uname}>{udisp} ({uname})</option>;
+              })}
+            </select>
             <button onClick={()=>{if(!newUser.trim())return;const ndb={...db,visutUsers:{...(db.visutUsers||{}),[newUser.trim()]:true}};saveDB(ndb);setDb(ndb);fbSet("db/visutUsers/"+newUser.trim(),true).catch(()=>{});setNewUser("");}} style={{...S.btn("blue"),padding:"8px 16px"}}>הוסף</button>
           </div>
         </div>
