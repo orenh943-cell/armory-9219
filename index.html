@@ -2824,6 +2824,20 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
   }
   function doReturn(){
     if(!retSel.length)return;
+    // העתק ארון מנשק לאביזרי חבילה אם לא נבחר ארון בנפרד
+    const finalRetCabinet={...retCabinet};
+    retSel.forEach(name=>{
+      const clean=cleanItemName(name);
+      const bundle=WEAPON_BUNDLES[clean];
+      if(bundle){
+        // העתק ארון לאביזרים
+        bundle.forEach(acc=>{
+          if(!finalRetCabinet[acc] && (finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean])){
+            finalRetCabinet[acc] = finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean];
+          }
+        });
+      }
+    });
     let ndb;
     let na={...assigned};
     if(signoffMode){
@@ -3388,8 +3402,42 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                   const nameColor=isSelected?"#111":g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)";
                   return (
                 <div key={rowKey} style={{padding:"8px 12px",background:isSelected?"#dbeafe":someSelected?"#1a3a5c":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
+                  {/* סמן אם זה אביזר חבילה */}
+                  {(()=>{const isBundle=Object.values(WEAPON_BUNDLES).some(b=>b.includes(clean));
+                  const bundleParent=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                  return isBundle&&bundleParent&&Object.keys(assigned).some(k=>cleanItemName(k)===bundleParent)?
+                    <div style={{fontSize:9,color:"var(--color-text-muted)",marginBottom:2,paddingRight:4}}>
+                      📎 אביזר של {bundleParent}
+                      {allSelected&&<button onClick={e=>{e.stopPropagation();setRetSel(p=>p.filter(x=>!rowKeys.includes(x)));}}
+                        style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:9,marginRight:6}}>
+                        ✕ לא הוחזר</button>}
+                    </div>:null;})()}
                   <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-                    <input type="checkbox" checked={allSelected} onChange={e=>{const sel=e.target.checked;setRetSel(p=>sel?[...new Set([...p,...rowKeys])]:p.filter(x=>!rowKeys.includes(x)));}}/>
+                    <input type="checkbox" checked={allSelected} onChange={e=>{
+                      const sel=e.target.checked;
+                      // בדוק אם לפריט הזה יש אביזרי חבילה
+                      const bundle=WEAPON_BUNDLES[clean]||[];
+                      const bundleKeys=bundle.flatMap(acc=>
+                        Object.keys(assigned).filter(k=>cleanItemName(k)===acc)
+                      );
+                      // בחר/בטל גם את האביזרים
+                      if(sel){
+                        setRetSel(p=>[...new Set([...p,...rowKeys,...bundleKeys])]);
+                        // העבר גם ארון לאביזרים מאותו ארון כמו הנשק
+                        if(bundleKeys.length>0){
+                          setRetCabinet(prev=>{
+                            const next={...prev};
+                            bundleKeys.forEach(bk=>{
+                              const accClean=cleanItemName(bk);
+                              if(!next[accClean]) next[accClean]=next[clean+(g.serial||"")]||next[clean]||{};
+                            });
+                            return next;
+                          });
+                        }
+                      } else {
+                        setRetSel(p=>p.filter(x=>!rowKeys.includes(x)&&!bundleKeys.includes(x)));
+                      }
+                    }}/>
                     <span style={{flex:1,fontSize:"var(--text-base)",fontWeight:600,color:nameColor}}>{clean}</span>
                     {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:12,padding:"1px 8px",fontSize:"var(--text-xs)",fontWeight:700}}>×{g.qty}</span>}
                     {g.serial&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial}</span>}
