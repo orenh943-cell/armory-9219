@@ -5730,10 +5730,10 @@ function GreenEyesTab({db, setDb, soldiers, auth}) {
   const todayHe = new Date().toLocaleDateString("he-IL");
 
   const buildWALink = (unit) => {
-    const link = baseUrl+"?greeneyes=1&unit="+encodeURIComponent(unit);
-    const msg = `*ירוק בעיניים — פלוגה ${unit} — ${todayHe}*
+    const link = baseUrl+"?greeneyes=1";
+    const msg = `*ירוק בעיניים 9219 — ${todayHe}*
 
-כל חייל פלוגה ${unit} מתבקש לדווח על מצב הציוד שלו:
+כל מפקד מתבקש לדווח על מצב הציוד בפלוגה שלו:
 ${link}`;
     return "https://wa.me/?text="+encodeURIComponent(msg);
   };
@@ -5846,15 +5846,29 @@ ${link}`;
                       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
                         {GREEN_EYES_UNITS.map(unit=>{
                           const s=summary[unit];
+                          // שלוף רשומות מהיום
+                          const dateEntries = Object.values(history[date]?.[unit]||{});
                           return (
                             <div key={unit} style={{background:"var(--color-bg-subtle)",borderRadius:8,padding:"8px 10px",
-                              border:`1px solid ${s.red>0?"var(--color-danger-fg)":"var(--color-border-muted)"}`}}>
+                              border:`1px solid ${s.red>0?"var(--color-danger-fg)":s.green>0?"#2ea043":"var(--color-border-muted)"}`}}>
                               <div style={{fontWeight:700,marginBottom:4,fontSize:13}}>פלוגה {unit}</div>
-                              <div style={{display:"flex",gap:8,fontSize:13}}>
+                              <div style={{display:"flex",gap:8,fontSize:13,marginBottom:4}}>
                                 <span style={{color:"#2ea043"}}>🟢 {s.green}</span>
                                 {s.red>0&&<span style={{color:"#cf222e"}}>🔴 {s.red}</span>}
                                 {s.total===0&&<span style={{color:"var(--color-text-muted)",fontSize:11}}>אין דיווח</span>}
                               </div>
+                              {dateEntries.length>0&&(
+                                <div style={{marginTop:4,borderTop:"1px solid var(--color-border-muted)",paddingTop:4}}>
+                                  {dateEntries.map((e,i)=>(
+                                    <div key={i} style={{fontSize:11,display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+                                      <span>{e.status==="green"?"🟢":"🔴"}</span>
+                                      <span style={{fontWeight:600}}>{e.name}</span>
+                                      <span style={{color:"var(--color-text-muted)"}}>מ.א {e.maId}</span>
+                                      {e.note&&<span style={{color:"#cf222e",fontSize:10}}>— {e.note}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
