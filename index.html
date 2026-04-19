@@ -3608,13 +3608,37 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>בחר את הפריטים עליהם תרצה להחתים:</div>
         <div style={{marginBottom:12}}>
           {groupAssigned(assigned,db).map(([name,g])=>(
-            <label key={name+(g.serial||"")} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:partialSel.includes(name+(g.serial||""))?"var(--color-accent-bg)":"var(--color-bg-canvas)",borderRadius:7,marginBottom:4,cursor:"pointer",border:"1px solid var(--color-border-muted)"}}>
-              <input type="checkbox" checked={partialSel.includes(name+(g.serial||""))} onChange={e=>{const k=name+(g.serial||"");setPartialSel(p=>e.target.checked?[...p,k]:p.filter(x=>x!==k));}}/>
+            {(()=>{
+              const isBundle=Object.values(WEAPON_BUNDLES).some(b=>b.includes(name));
+              const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(name))?.[0];
+              const isSelected=partialSel.includes(name+(g.serial||""));
+              return (
+            <div key={name+(g.serial||"")} style={{marginBottom:4}}>
+              {isBundle&&parentWeapon&&<div style={{fontSize:9,color:"var(--color-text-muted)",paddingRight:4,marginBottom:1}}>
+                📎 אביזר של {parentWeapon}
+                {isSelected&&<button onClick={e=>{e.preventDefault();const k=name+(g.serial||"");setPartialSel(p=>p.filter(x=>x!==k));}}
+                  style={{background:"none",border:"none",color:"var(--color-danger-fg)",cursor:"pointer",fontSize:9,marginRight:6}}>
+                  ✕ הורד פריט</button>}
+              </div>}
+            <label style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:isSelected?"var(--color-accent-bg)":"var(--color-bg-canvas)",borderRadius:7,cursor:"pointer",border:"1px solid var(--color-border-muted)"}}>
+              <input type="checkbox" checked={partialSel.includes(name+(g.serial||""))} onChange={e=>{
+                const k=name+(g.serial||"");
+                const bundle=WEAPON_BUNDLES[name]||[];
+                // מצא מפתחות של אביזרי החבילה
+                const bundleKeys=bundle.flatMap(acc=>
+                  groupAssigned(assigned,db).filter(([n])=>n===acc).map(([n,bg])=>n+(bg.serial||""))
+                );
+                if(e.target.checked){
+                  setPartialSel(p=>[...new Set([...p,k,...bundleKeys])]);
+                } else {
+                  setPartialSel(p=>p.filter(x=>x!==k&&!bundleKeys.includes(x)));
+                }
+              }}/>
               <span style={{flex:1,fontWeight:600,color:g.isWeapon?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{name}</span>
               {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:10,padding:"0 7px",fontSize:10,fontWeight:700}}>×{g.qty}</span>}
               {g.serial&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial}</span>}
               <span style={{fontSize:10,color:"var(--color-text-muted)"}}>{g.makat||""}</span>
-            </label>
+            </label></div>);})()}
           ))}
         </div>
         <button onClick={()=>setPartialSel(groupAssigned(assigned,db).map(([n,g])=>n+(g.serial||"")))} style={{...S.btn(),fontSize:"var(--text-xs)",marginBottom:10}}>בחר הכל</button>
