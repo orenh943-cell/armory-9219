@@ -1833,13 +1833,27 @@ function Login({onLogin}){
 function SoldierSignView({auth,onLogout,db,setDb}){
   const soldier=getSoldiers(db).find(s=>s.id===auth.soldierId);
   const sig=db.signatures?.[auth.soldierId];
-  // השתמש ב-db.assignments אם יש (יש שם צ סידוריים), אחרת assignedFromLink
+  // אם הגיע קישור חלקי (assignedFromLink) — השתמש בו תמיד (מכיל רק הפריטים שנבחרו)
+  // אחרת — השתמש ב-db.assignments (יש שם צ סידוריים)
   const dbAssigned = db.assignments?.[auth.soldierId];
-  const assigned = (dbAssigned && Object.keys(dbAssigned).length>0)
-    ? dbAssigned
-    : (auth.assignedFromLink&&Object.keys(auth.assignedFromLink).length>0
-      ? auth.assignedFromLink
-      : (soldier?.assigned||{}));
+  const hasLinkItems = auth.assignedFromLink && Object.keys(auth.assignedFromLink).length>0;
+  const assigned = hasLinkItems
+    ? (() => {
+        // מיזוג: קח צ סידוריים מ-db.assignments לפריטים שב-assignedFromLink
+        const merged = {...auth.assignedFromLink};
+        if(dbAssigned){
+          Object.keys(merged).forEach(k=>{
+            const cleanK = cleanItemName(k);
+            // חפש את הצ הסידורי ב-db.assignments
+            const dbKey = Object.keys(dbAssigned).find(dk=>cleanItemName(dk)===cleanK);
+            if(dbKey && isSerial(dbAssigned[dbKey])) merged[k] = dbAssigned[dbKey];
+          });
+        }
+        return merged;
+      })()
+    : (dbAssigned && Object.keys(dbAssigned).length>0
+        ? dbAssigned
+        : (soldier?.assigned||{}));
 
   // האזנה ל-Firebase גם בצד החייל
   useEffect(()=>{
