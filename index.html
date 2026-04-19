@@ -3607,8 +3607,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
       <Modal title={"📝 חתימה חלקית — "+soldier.name} onClose={()=>{setShowPartialSign(false);setPartialSel([]);}} wide>
         <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>בחר את הפריטים עליהם תרצה להחתים:</div>
         <div style={{marginBottom:12}}>
-          {groupAssigned(assigned,db).map(([name,g])=>(
-            {(()=>{
+          {groupAssigned(assigned,db).map(([name,g])=>{
               const isBundle=Object.values(WEAPON_BUNDLES).some(b=>b.includes(name));
               const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(name))?.[0];
               const isSelected=partialSel.includes(name+(g.serial||""));
@@ -3638,8 +3637,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               {g.qty>1&&<span style={{background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",borderRadius:10,padding:"0 7px",fontSize:10,fontWeight:700}}>×{g.qty}</span>}
               {g.serial&&<span style={{fontFamily:"monospace",fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>{g.serial}</span>}
               <span style={{fontSize:10,color:"var(--color-text-muted)"}}>{g.makat||""}</span>
-            </label></div>);})()}
-          ))}
+            </label></div>);
+          })}
         </div>
         <button onClick={()=>setPartialSel(groupAssigned(assigned,db).map(([n,g])=>n+(g.serial||"")))} style={{...S.btn(),fontSize:"var(--text-xs)",marginBottom:10}}>בחר הכל</button>
         {partialSel.length>0&&(
