@@ -2583,7 +2583,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
 
 function SignatureDocument({soldier, db, onClose}){
   const sig = db.signatures?.[soldier.id];
-  const assigned = db.assignments[soldier.id] ?? soldier.assigned ?? {};
+  const _allAssigned = db.assignments[soldier.id] ?? soldier.assigned ?? {};
+  // חתימה חלקית: הצג רק פריטים שנחתמו (sig.items)
+  const assigned = (sig?.items && sig.items.length>0)
+    ? Object.fromEntries(sig.items.map(k=>[k, _allAssigned[k]||1]))
+    : _allAssigned;
   const items = groupAssigned(assigned,db);
   const today = new Date().toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"});
 
@@ -2617,6 +2621,8 @@ function SignatureDocument({soldier, db, onClose}){
           <div style={{textAlign:"left"}}>
             <div style={{fontSize:9,color:"var(--color-text-secondary)"}}>פלוגה</div>
             <div style={{fontWeight:"bold"}}>{soldier.unit}</div>
+            <div style={{fontSize:9,color:"var(--color-text-secondary)",marginTop:4}}>מחלקה</div>
+            <div style={{fontWeight:"bold"}}>{soldier.squad||"—"}</div>
           </div>
         </div>
 
@@ -2670,6 +2676,7 @@ function SignatureDocument({soldier, db, onClose}){
                   <tr><td style={{color:"var(--color-text-secondary)"}}>שם מלא</td><td style={{fontWeight:"bold"}}>{soldier.name}</td></tr>
                   <tr><td style={{color:"var(--color-text-secondary)"}}>טלפון</td><td>{soldier.phone||"—"}</td></tr>
                   <tr><td style={{color:"var(--color-text-secondary)"}}>פלוגה</td><td>{soldier.unit}</td></tr>
+                  <tr><td style={{color:"var(--color-text-secondary)"}}>מחלקה</td><td>{soldier.squad||"—"}</td></tr>
                   <tr><td style={{color:"var(--color-text-secondary)"}}>תאריך</td><td>{sig?.signedAt||today}</td></tr>
                 </tbody>
               </table>
