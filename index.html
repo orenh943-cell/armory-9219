@@ -3477,7 +3477,22 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                       <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",whiteSpace:"nowrap"}}>🗄️ ארון:</span>
                       <select value={retCabinet[rowKey]?.cabName||retCabinet[clean]?.cabName||""}
                         onClick={e=>e.stopPropagation()}
-                        onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{const u={...p};rowKeys.forEach(k=>{u[k]=cab;});u[rowKey]=cab;return u;});}}
+                        onChange={e=>{e.stopPropagation();const cab={inCabinet:!!e.target.value,cabName:e.target.value};setRetCabinet(p=>{
+                          const u={...p};
+                          rowKeys.forEach(k=>{u[k]=cab;});
+                          u[rowKey]=cab;
+                          // אם זה נשק עם חבילה — העתק ארון לכל האביזרים
+                          const bundle=WEAPON_BUNDLES[clean];
+                          if(bundle && e.target.value){
+                            bundle.forEach(acc=>{
+                              // מצא את כל מפתחות ה-assignments של האביזר
+                              Object.keys(assigned).filter(k=>cleanItemName(k)===acc).forEach(k=>{
+                                u[k]=cab; u[acc]=cab;
+                              });
+                            });
+                          }
+                          return u;
+                        });}}
                         size={1} style={{...S.input,marginBottom:0,fontSize:"var(--text-xs)",padding:"3px 8px",flex:1,minWidth:160,maxHeight:"none"}}>
                         <option value="">— בחר מיקום —</option>
                         {getAllCabinets(db,"הכל").map(({n,divider},_ci)=>divider?<option key={n+"_"+_ci} disabled style={{color:"var(--color-text-muted)",fontWeight:700,background:"var(--color-bg-subtle)"}}>{n}</option>:<option key={n} value={n}>{n}</option>)}
@@ -3487,13 +3502,27 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 </div>
               );
               })}
-              {retSel.some(name=>{const clean=cleanItemName(name);return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;})&&retSel.length>0&&(
+              {retSel.some(name=>{
+                const clean=cleanItemName(name);
+                const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                if(parentWeapon) return false; // אביזרי חבילה — לא מבקשים ארון נפרד
+                return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;
+              })&&retSel.length>0&&(
                 <div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-xs)",textAlign:"center",marginBottom:6}}>
                   ⚠️ בחר ארון לכל הפריטים המסומנים
                 </div>
               )}
               <button onClick={doReturn}
-                disabled={!retSel.length||retSel.some(name=>{const clean=cleanItemName(name);return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;})}
+                disabled={!retSel.length||retSel.some(name=>{
+                  const clean=cleanItemName(name);
+                  // אם זה אביזר חבילה — בדוק שלנשק שלו יש ארון
+                  const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                  if(parentWeapon){
+                    const parentCab=retCabinet[parentWeapon]?.cabName||Object.values(retCabinet).find(v=>v?.cabName)?.cabName;
+                    return !parentCab&&!retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;
+                  }
+                  return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;
+                })}
                 style={{...S.btn(signoffMode?"green":"orange"),width:"100%",padding:"11px 0",marginTop:8,opacity:retSel.length?1:0.5}}>{signoffMode?"✅ זכה "+retSel.length+" פריטים":"🔄 בטל שיוך ("+retSel.length+")"}</button>
             </>
           }
