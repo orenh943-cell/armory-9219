@@ -5522,10 +5522,56 @@ function PollResponseView({pollId, soldierId, db, setDb}){
 // ==================== ירוק בעיניים ====================
 const GREEN_EYES_UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
 
+function GreenEyesGlobalAlert({tab, setTab}) {
+  const [show, setShow] = React.useState(false);
+  const alertTime = localStorage.getItem("greenEyesAlertTime")||"14:00";
+
+  React.useEffect(()=>{
+    const check = setInterval(()=>{
+      const now = new Date();
+      const hhmm = now.getHours().toString().padStart(2,"0")+":"+now.getMinutes().toString().padStart(2,"0");
+      if(hhmm===alertTime){
+        const lastAlert = localStorage.getItem("greenEyesLastAlert");
+        const todayStr = now.toISOString().slice(0,10);
+        if(lastAlert!==todayStr){
+          localStorage.setItem("greenEyesLastAlert", todayStr);
+          setShow(true);
+        }
+      }
+    },60000);
+    return ()=>clearInterval(check);
+  },[alertTime]);
+
+  if(!show) return null;
+
+  return (
+    <div style={{position:"fixed",bottom:16,right:16,left:16,zIndex:9999,
+      background:"#2ea043",color:"#fff",borderRadius:12,padding:"14px 16px",
+      boxShadow:"0 4px 20px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",
+      justifyContent:"space-between",gap:10,maxWidth:480,margin:"0 auto"}}>
+      <div>
+        <div style={{fontWeight:800,fontSize:15}}>🟢 זמן לשלוח ירוק בעיניים!</div>
+        <div style={{fontSize:12,opacity:0.9,marginTop:2}}>לחץ לשליחת הסקר היומי לכל הפלוגות</div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>{setShow(false);setTab("greeneyes");}}
+          style={{background:"#fff",color:"#2ea043",border:"none",borderRadius:8,
+            padding:"8px 14px",fontWeight:700,cursor:"pointer",fontSize:13}}>
+          📲 שלח
+        </button>
+        <button onClick={()=>setShow(false)}
+          style={{background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",
+            borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:16}}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 function GreenEyesView({db, setDb}) {
-  // מגיע מ-URL params: ?greeneyes=1&unit=א
+  // מגיע מ-URL params: ?greeneyes=1&unit=א (או sessionStorage אחרי ניקוי URL)
   const params = new URLSearchParams(window.location.search);
-  const unit = params.get("unit")||"";
+  const unit = params.get("unit") ||
+    (() => { try{ return sessionStorage.getItem("link_greeneyes_unit")||""; }catch(e){ return ""; } })();
   const date = new Date().toLocaleDateString("he-IL");
   
   const [name, setName] = React.useState("");
@@ -5653,15 +5699,16 @@ function GreenEyesTab({db, setDb, soldiers, auth}) {
   );
   const [showSendModal, setShowSendModal] = React.useState(false);
 
-  // טעינת היסטוריה
+  // טעינת היסטוריה — realtime
   React.useEffect(()=>{
-    fbGet("db/greenEyes").then(data=>{
+    const unsub = fbListen("db/greenEyes", data=>{
       setHistory(data||{});
       setLoading(false);
-    }).catch(()=>setLoading(false));
+    });
+    return ()=>{ if(typeof unsub==="function") unsub(); };
   },[]);
 
-  // בדיקת שעת התראה
+  // בדיקת שעת התראה — בודק כל דקה
   React.useEffect(()=>{
     const check = setInterval(()=>{
       const now = new Date();
@@ -5674,7 +5721,7 @@ function GreenEyesTab({db, setDb, soldiers, auth}) {
           setShowSendModal(true);
         }
       }
-    },30000);
+    },60000);
     return ()=>clearInterval(check);
   },[alertTime]);
 
@@ -7933,6 +7980,8 @@ ${exitLink}
       </main>
 
       {addModal&&<AddSoldierModal db={db} onSave={setDb} onClose={()=>setAddModal(false)}/>}
+      {/* התראת ירוק בעיניים גלובלית */}
+      {auth?.role==="admin"&&<GreenEyesGlobalAlert tab={tab} setTab={setTab}/>}
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} onSendTestAndExitWA={sendTestAndExitWA} auth={auth} soldiers={soldiers}/>}
       {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
@@ -15661,6 +15710,7 @@ function App(){
     }
     // שמור context של לינק ייעודי לsession - כדי שרענון לא יאבד את הדף
     if(signId) try{sessionStorage.setItem("link_sign", signId);}catch(e){}
+    if(greenEyesParam) try{sessionStorage.setItem("link_greeneyes","1"); sessionStorage.setItem("link_greeneyes_unit",greenEyesUnit||"");}catch(e){}
     const issuerParam=params.get("issuer");
     if(issuerParam) try{sessionStorage.setItem("link_issuer", issuerParam);}catch(e){}
     if(testCertId) try{sessionStorage.setItem("link_testcert", testCertId);}catch(e){}
@@ -15799,7 +15849,7 @@ function App(){
       }
     }catch(e){}
     try{sessionStorage.removeItem("armory_session");}catch(e){}
-    try{["link_sign","link_testcert","link_bulksign","link_exit"].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
+    try{["link_sign","link_testcert","link_bulksign","link_exit","link_greeneyes","link_greeneyes_unit"].forEach(k=>sessionStorage.removeItem(k));}catch(e){}
     setAuth(null);
   }
 
@@ -15828,8 +15878,9 @@ function App(){
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
   const exitFormParam = new URLSearchParams(window.location.search).get("exitform");
 
-  // ירוק בעיניים URL param
-  const greenEyesParamApp = new URLSearchParams(window.location.search).get("greeneyes");
+  // ירוק בעיניים URL param — קרא מ-sessionStorage (URL כבר נמחק)
+  const greenEyesParamApp = new URLSearchParams(window.location.search).get("greeneyes") ||
+    (() => { try{ return sessionStorage.getItem("link_greeneyes"); }catch(e){ return null; } })();
   if(greenEyesParamApp){
     return <GreenEyesView db={db} setDb={setDb}/>;
   }
