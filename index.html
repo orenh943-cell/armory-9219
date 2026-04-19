@@ -5518,6 +5518,325 @@ function PollResponseView({pollId, soldierId, db, setDb}){
 }
 
 // =================== POLL TAB (סקר נוכחות) ===================
+
+// ==================== ירוק בעיניים ====================
+const GREEN_EYES_UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
+
+function GreenEyesView({db, setDb}) {
+  // מגיע מ-URL params: ?greeneyes=1&unit=א
+  const params = new URLSearchParams(window.location.search);
+  const unit = params.get("unit")||"";
+  const date = new Date().toLocaleDateString("he-IL");
+  
+  const [name, setName] = React.useState("");
+  const [maId, setMaId] = React.useState("");
+  const [status, setStatus] = React.useState(""); // "green"|"red"
+  const [note, setNote] = React.useState("");
+  const [submitted, setSubmitted] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  if(!unit||!GREEN_EYES_UNITS.includes(unit)){
+    return (
+      <div style={{textAlign:"center",padding:40}}>
+        <div style={{fontSize:48,marginBottom:12}}>🟢</div>
+        <div style={{fontSize:18,fontWeight:700,marginBottom:8}}>ירוק בעיניים — גדוד 9219</div>
+        <div style={{color:"#888"}}>קישור לא תקין. פנה לאחראי ארמון.</div>
+      </div>
+    );
+  }
+
+  if(submitted){
+    return (
+      <div style={{textAlign:"center",padding:40,maxWidth:400,margin:"0 auto"}}>
+        <div style={{fontSize:64,marginBottom:12}}>{status==="green"?"🟢":"🔴"}</div>
+        <div style={{fontSize:20,fontWeight:800,marginBottom:8,color:status==="green"?"#2ea043":"#cf222e"}}>
+          {status==="green"?"הכל תקין! תודה":"הדיווח התקבל"}
+        </div>
+        <div style={{fontSize:14,color:"#888"}}>הדיווח שלך נשמר ✓</div>
+      </div>
+    );
+  }
+
+  const handleSubmit = async () => {
+    if(!name.trim()||!maId.trim()||!status){
+      alert("יש למלא שם, מ.א וסטטוס");
+      return;
+    }
+    setLoading(true);
+    const today = new Date().toISOString().slice(0,10);
+    const entry = {
+      name: name.trim(),
+      maId: maId.trim(),
+      unit,
+      status,
+      note: note.trim(),
+      submittedAt: new Date().toLocaleString("he-IL"),
+      ts: Date.now(),
+    };
+    const key = maId.trim()+"_"+Date.now();
+    try {
+      await fbSet("db/greenEyes/"+today+"/"+unit+"/"+key, entry);
+    } catch(e) { console.warn(e); }
+    setLoading(false);
+    setSubmitted(true);
+  };
+
+  return (
+    <div style={{maxWidth:480,margin:"0 auto",padding:"24px 16px",fontFamily:"Arial,sans-serif",direction:"rtl"}}>
+      <div style={{textAlign:"center",marginBottom:24}}>
+        <div style={{fontSize:48,marginBottom:6}}>🟢</div>
+        <div style={{fontSize:20,fontWeight:800}}>ירוק בעיניים — פלוגה {unit}</div>
+        <div style={{fontSize:13,color:"#888",marginTop:4}}>גדוד 9219 • {date}</div>
+      </div>
+
+      <div style={{background:"#f6f8fa",borderRadius:10,padding:"16px",marginBottom:16,border:"1px solid #d0d7de"}}>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:13,fontWeight:700,display:"block",marginBottom:4}}>שם מלא</label>
+          <input value={name} onChange={e=>setName(e.target.value)}
+            placeholder="שם פרטי + משפחה"
+            style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid #d0d7de",fontSize:14,boxSizing:"border-box"}}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:13,fontWeight:700,display:"block",marginBottom:4}}>מספר אישי</label>
+          <input value={maId} onChange={e=>setMaId(e.target.value)}
+            placeholder="מ.א שלך"
+            style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid #d0d7de",fontSize:14,boxSizing:"border-box"}}/>
+        </div>
+      </div>
+
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:10,textAlign:"center"}}>כל הציוד שלי תקין ובשליטה?</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <button onClick={()=>setStatus("green")}
+            style={{padding:"18px 10px",borderRadius:10,border:`3px solid ${status==="green"?"#2ea043":"#d0d7de"}`,
+              background:status==="green"?"#d1f7c4":"#fff",cursor:"pointer",fontSize:16,fontWeight:700,
+              color:status==="green"?"#2ea043":"#444",transition:"all 0.15s"}}>
+            🟢<br/>כן, הכל תקין
+          </button>
+          <button onClick={()=>setStatus("red")}
+            style={{padding:"18px 10px",borderRadius:10,border:`3px solid ${status==="red"?"#cf222e":"#d0d7de"}`,
+              background:status==="red"?"#ffd0d0":"#fff",cursor:"pointer",fontSize:16,fontWeight:700,
+              color:status==="red"?"#cf222e":"#444",transition:"all 0.15s"}}>
+            🔴<br/>יש בעיה
+          </button>
+        </div>
+      </div>
+
+      {status==="red"&&(
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:700,display:"block",marginBottom:4}}>תאר את הבעיה</label>
+          <textarea value={note} onChange={e=>setNote(e.target.value)}
+            placeholder="איזה פריט? מה הבעיה?"
+            rows={3}
+            style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid #d0d7de",fontSize:14,
+              boxSizing:"border-box",resize:"vertical"}}/>
+        </div>
+      )}
+
+      <button onClick={handleSubmit} disabled={loading||!status||!name.trim()||!maId.trim()}
+        style={{width:"100%",padding:"13px",borderRadius:8,border:"none",
+          background:!status||!name.trim()||!maId.trim()?"#ccc":"#1a3a6b",
+          color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer"}}>
+        {loading?"שולח...":"✅ שלח דיווח"}
+      </button>
+      <div style={{textAlign:"center",fontSize:11,color:"#888",marginTop:8}}>גדוד 9219 • ארמון</div>
+    </div>
+  );
+}
+
+function GreenEyesTab({db, setDb, soldiers, auth}) {
+  const [history, setHistory] = React.useState({});
+  const [loading, setLoading] = React.useState(true);
+  const [selectedDate, setSelectedDate] = React.useState(null);
+  const [alertTime, setAlertTime] = React.useState(
+    localStorage.getItem("greenEyesAlertTime")||"14:00"
+  );
+  const [showSendModal, setShowSendModal] = React.useState(false);
+
+  // טעינת היסטוריה
+  React.useEffect(()=>{
+    fbGet("db/greenEyes").then(data=>{
+      setHistory(data||{});
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[]);
+
+  // בדיקת שעת התראה
+  React.useEffect(()=>{
+    const check = setInterval(()=>{
+      const now = new Date();
+      const hhmm = now.getHours().toString().padStart(2,"0")+":"+now.getMinutes().toString().padStart(2,"0");
+      if(hhmm===alertTime){
+        const lastAlert = localStorage.getItem("greenEyesLastAlert");
+        const todayStr = now.toISOString().slice(0,10);
+        if(lastAlert!==todayStr){
+          localStorage.setItem("greenEyesLastAlert", todayStr);
+          setShowSendModal(true);
+        }
+      }
+    },30000);
+    return ()=>clearInterval(check);
+  },[alertTime]);
+
+  const baseUrl = "https://orenh943-cell.github.io/armory-9219";
+  const today = new Date().toISOString().slice(0,10);
+  const todayHe = new Date().toLocaleDateString("he-IL");
+
+  const buildWALink = (unit) => {
+    const link = baseUrl+"?greeneyes=1&unit="+encodeURIComponent(unit);
+    const msg = `*ירוק בעיניים — פלוגה ${unit} — ${todayHe}*
+
+כל חייל פלוגה ${unit} מתבקש לדווח על מצב הציוד שלו:
+${link}`;
+    return "https://wa.me/?text="+encodeURIComponent(msg);
+  };
+
+  const sendToAll = () => {
+    GREEN_EYES_UNITS.forEach((unit,i)=>{
+      setTimeout(()=>window.open(buildWALink(unit),"_blank"), i*500);
+    });
+  };
+
+  // סיכום לפי תאריך
+  const dates = Object.keys(history).sort().reverse();
+
+  const getSummary = (dateData) => {
+    const summary = {};
+    GREEN_EYES_UNITS.forEach(u=>{ summary[u]={green:0,red:0,total:0,issues:[]}; });
+    Object.entries(dateData||{}).forEach(([unit,entries])=>{
+      if(!summary[unit]) return;
+      Object.values(entries||{}).forEach(e=>{
+        summary[unit].total++;
+        if(e.status==="green") summary[unit].green++;
+        else { summary[unit].red++; if(e.note) summary[unit].issues.push({name:e.name,note:e.note}); }
+      });
+    });
+    return summary;
+  };
+
+  return (
+    <div style={{padding:16,maxWidth:900,margin:"0 auto"}}>
+      {/* כותרת + הגדרות */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div>
+          <div style={{fontSize:20,fontWeight:800}}>🟢 ירוק בעיניים</div>
+          <div style={{fontSize:12,color:"var(--color-text-muted)"}}>סקר יומי — מצב ציוד כלל הגדוד</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>
+            <span>🔔 שעת תזכורת:</span>
+            <input type="time" value={alertTime}
+              onChange={e=>{setAlertTime(e.target.value);localStorage.setItem("greenEyesAlertTime",e.target.value);}}
+              style={{padding:"4px 8px",borderRadius:6,border:"1px solid var(--color-border-default)",fontSize:13}}/>
+          </div>
+          <button onClick={()=>setShowSendModal(true)}
+            style={{...S.btn("green"),padding:"8px 14px",fontWeight:700}}>
+            📲 שלח סקר היום
+          </button>
+        </div>
+      </div>
+
+      {/* modal שליחה */}
+      {showSendModal&&(
+        <div style={{position:"fixed",inset:0,background:"var(--color-bg-overlay)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={e=>e.target===e.currentTarget&&setShowSendModal(false)}>
+          <div style={{background:"var(--color-bg-default)",borderRadius:12,padding:20,width:"100%",maxWidth:420,border:"1px solid var(--color-border-default)"}}>
+            <div style={{fontSize:18,fontWeight:800,marginBottom:4,textAlign:"center"}}>🟢 שלח סקר ירוק בעיניים</div>
+            <div style={{fontSize:12,color:"var(--color-text-muted)",textAlign:"center",marginBottom:16}}>{todayHe}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+              {GREEN_EYES_UNITS.map(unit=>(
+                <a key={unit} href={buildWALink(unit)} target="_blank" rel="noreferrer"
+                  style={{display:"block",padding:"10px",background:"#25D366",color:"#fff",
+                    borderRadius:8,textAlign:"center",textDecoration:"none",fontWeight:700,fontSize:14}}>
+                  💬 פלוגה {unit}
+                </a>
+              ))}
+            </div>
+            <button onClick={()=>{sendToAll();setShowSendModal(false);}}
+              style={{...S.btn("green"),width:"100%",padding:"10px",fontWeight:700,marginBottom:8}}>
+              📲 שלח לכולן בבת אחת
+            </button>
+            <button onClick={()=>setShowSendModal(false)}
+              style={{...S.btn(),width:"100%",padding:"8px"}}>סגור</button>
+          </div>
+        </div>
+      )}
+
+      {/* היסטוריה */}
+      {loading?<div style={{textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>טוען...</div>:(
+        dates.length===0?(
+          <div style={{textAlign:"center",padding:40,color:"var(--color-text-muted)"}}>
+            <div style={{fontSize:40,marginBottom:8}}>🟢</div>
+            <div>אין דיווחים עדיין. שלח את הסקר הראשון!</div>
+          </div>
+        ):(
+          <div>
+            {dates.map(date=>{
+              const summary = getSummary(history[date]);
+              const dateHe = new Date(date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"});
+              const totalRed = GREEN_EYES_UNITS.reduce((s,u)=>s+(summary[u]?.red||0),0);
+              const totalGreen = GREEN_EYES_UNITS.reduce((s,u)=>s+(summary[u]?.green||0),0);
+              const isOpen = selectedDate===date;
+              return (
+                <div key={date} style={{marginBottom:10,border:`1px solid ${totalRed>0?"var(--color-danger-fg)":"var(--color-border-muted)"}`,
+                  borderRadius:10,overflow:"hidden"}}>
+                  {/* כותרת תאריך */}
+                  <div onClick={()=>setSelectedDate(isOpen?null:date)}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"10px 14px",cursor:"pointer",
+                      background:totalRed>0?"rgba(255,0,0,0.04)":"var(--color-bg-subtle)"}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{dateHe}{date===today&&<span style={{marginRight:6,fontSize:11,background:"#1a3a6b",color:"#fff",borderRadius:4,padding:"1px 5px"}}>היום</span>}</div>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                      <span style={{color:"#2ea043",fontWeight:700}}>🟢 {totalGreen}</span>
+                      {totalRed>0&&<span style={{color:"#cf222e",fontWeight:700}}>🔴 {totalRed}</span>}
+                      <span style={{fontSize:11,color:"var(--color-text-muted)"}}>{isOpen?"▲":"▼"}</span>
+                    </div>
+                  </div>
+                  {/* פירוט */}
+                  {isOpen&&(
+                    <div style={{padding:"12px 14px"}}>
+                      {/* סיכום פלוגות */}
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
+                        {GREEN_EYES_UNITS.map(unit=>{
+                          const s=summary[unit];
+                          return (
+                            <div key={unit} style={{background:"var(--color-bg-subtle)",borderRadius:8,padding:"8px 10px",
+                              border:`1px solid ${s.red>0?"var(--color-danger-fg)":"var(--color-border-muted)"}`}}>
+                              <div style={{fontWeight:700,marginBottom:4,fontSize:13}}>פלוגה {unit}</div>
+                              <div style={{display:"flex",gap:8,fontSize:13}}>
+                                <span style={{color:"#2ea043"}}>🟢 {s.green}</span>
+                                {s.red>0&&<span style={{color:"#cf222e"}}>🔴 {s.red}</span>}
+                                {s.total===0&&<span style={{color:"var(--color-text-muted)",fontSize:11}}>אין דיווח</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* בעיות */}
+                      {GREEN_EYES_UNITS.some(u=>summary[u].issues.length>0)&&(
+                        <div style={{background:"rgba(255,0,0,0.04)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--color-danger-fg)"}}>
+                          <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:"var(--color-danger-fg)"}}>⚠️ בעיות שדווחו</div>
+                          {GREEN_EYES_UNITS.map(unit=>
+                            summary[unit].issues.map((iss,i)=>(
+                              <div key={unit+i} style={{fontSize:13,marginBottom:4,paddingRight:8,borderRight:"3px solid var(--color-danger-fg)"}}>
+                                <strong>פלוגה {unit} — {iss.name}:</strong> {iss.note}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 function PollTab({db, setDb, soldiers, auth}){
   const [polls, setPolls] = React.useState([]);
   const [showCreate, setShowCreate] = React.useState(false);
@@ -7152,6 +7471,7 @@ ${exitLink}
     ...(auth.role==="admin"?[{id:"loginlog",label:"כניסות",icon:"📊"},{id:"perms",label:"הרשאות",icon:"🔑"}]:[]),
     ...(perms.canViewActLog||auth.role==="admin"?[{id:"actlog",label:"לוג תנועות",icon:"📋"}]:[]),
     ...(perms.canViewSignatures!==false?[{id:"guarantors",label:"ערבויות",icon:"🛡️"}]:[]),
+    ...(auth.role==="admin"?[{id:"greeneyes",label:"ירוק בעיניים",icon:"🟢"}]:[]),
     ...(auth.role==="admin"?[{id:"reset",label:"איפוס",icon:"⚠️"}]:[]),
     ...(auth.role==="admin"?[{id:"external",label:"החתמה חיצונית",icon:"🏢"}]:[]),
     ...(auth.role==="admin"?[{id:"poll",label:"סקר נוכחות",icon:"📊"}]:[]),
@@ -7603,6 +7923,9 @@ ${exitLink}
         )}
         {tab==="poll"&&auth.role==="admin"&&(
           <PollTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+        )}
+        {tab==="greeneyes"&&auth.role==="admin"&&(
+          <GreenEyesTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="exitform"&&(
           <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
@@ -15326,8 +15649,10 @@ function App(){
     const testCertId=params.get("testcert");
     const pollId=params.get("poll");
     const pollSid=params.get("sid");
+    const greenEyesParam=params.get("greeneyes");
+    const greenEyesUnit=params.get("unit");
     // נקה את ה-URL מיד - כך הדפדפן לא ישמור את הפרמטר בהיסטוריה
-    if(signId||exitId||bulkSignId||testCertId||pollId){
+    if(signId||exitId||bulkSignId||testCertId||pollId||greenEyesParam){
       try{
         window.history.replaceState({}, document.title, window.location.pathname);
       }catch(e){}
@@ -15502,6 +15827,12 @@ function App(){
 
   // אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
   const exitFormParam = new URLSearchParams(window.location.search).get("exitform");
+
+  // ירוק בעיניים URL param
+  const greenEyesParamApp = new URLSearchParams(window.location.search).get("greeneyes");
+  if(greenEyesParamApp){
+    return <GreenEyesView db={db} setDb={setDb}/>;
+  }
 
   // poll response URL param
   const pollParam = new URLSearchParams(window.location.search).get("poll");
