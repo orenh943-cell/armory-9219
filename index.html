@@ -3544,6 +3544,28 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         {partialSel.length>0&&(
           <div style={{borderTop:"1px solid var(--color-border-muted)",paddingTop:12,marginTop:4}}>
             <div style={{fontWeight:700,marginBottom:8,fontSize:"var(--text-sm)"}}>✍️ חתימה על {partialSel.length} פריטים:</div>
+            {/* כפתור שליחה בוואטסאפ */}
+            {soldier.phone&&<button onClick={()=>{
+              const phone=phoneToWA(soldier.phone);
+              const link="https://orenh943-cell.github.io/armory-9219";
+              // בנה assigned עם הפריטים שנבחרו בלבד
+              const partialAssigned={};
+              groupAssigned(assigned,db).forEach(([name,g])=>{
+                const k=name+(g.serial||"");
+                if(partialSel.includes(k)){
+                  Object.keys(assigned).filter(ak=>cleanItemName(ak)===name&&(g.serial?String(assigned[ak])===g.serial:!isSerial(assigned[ak]))).forEach(ak=>{partialAssigned[ak]=assigned[ak];});
+                }
+              });
+              const compactData={};
+              Object.entries(partialAssigned).forEach(([name,val])=>{const idx=EQ_COLS.indexOf(cleanItemName(name));if(idx>=0)compactData[idx]=val;else compactData[name]=val;});
+              const encoded=btoa(JSON.stringify(compactData));
+              const issuerParam=auth?.username?("&issuer="+encodeURIComponent(auth.username)):"";
+              const signLink=link+"?sign="+soldier.id+"&b="+encoded+issuerParam;
+              const msg="שלום "+soldier.name+",
+נא לחתום על טופס ההחתמה האישי:
+"+signLink;
+              window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
+            }} style={{...S.btn("wa"),width:"100%",marginBottom:10,padding:"10px 0",fontWeight:700}}>💬 שלח לחתימה ב-WhatsApp</button>}
             <SignaturePad onSave={sigData=>{
               const signedAt=new Date().toLocaleDateString("he-IL")+" "+new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
               const partialItems={};
