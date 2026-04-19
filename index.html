@@ -3609,9 +3609,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               const encoded=btoa(JSON.stringify(compactData));
               const issuerParam=auth?.username?("&issuer="+encodeURIComponent(auth.username)):"";
               const signLink=link+"?sign="+soldier.id+"&b="+encoded+issuerParam;
-              const msg="שלום "+soldier.name+",
-נא לחתום על טופס ההחתמה האישי:
-"+signLink;
+              const msg=`שלום ${soldier.name},\nנא לחתום על טופס ההחתמה האישי:\n${signLink}`;
               window.open("https://wa.me/"+phone+"?text="+encodeURIComponent(msg),"_blank");
             }} style={{...S.btn("wa"),width:"100%",marginBottom:10,padding:"10px 0",fontWeight:700}}>💬 שלח לחתימה ב-WhatsApp</button>}
             <SignaturePad onSave={sigData=>{
