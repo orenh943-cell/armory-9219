@@ -1862,7 +1862,8 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     });
     return ()=>{ off1(); };
   },[]);
-  const [step,setStep]=useState(sig?"done":"review");
+  // אם קישור חלקי — תמיד התחל ב-review (גם אם יש חתימה קיימת)
+  const [step,setStep]=useState(hasLinkItems?"review":(sig?"done":"review"));
   const [sigImg,setSigImg]=useState(sig?.sigData||null);
   const [testImg,setTestImg]=useState(sig?.testImg||null);
   const [showTestUpload,setShowTestUpload]=useState(false);
