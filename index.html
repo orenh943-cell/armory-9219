@@ -2168,14 +2168,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: liveByName (ספירה חיה) > armoryMaster > DAILY_ITEMS
+    // total: armoryMaster (Firebase) הוא המקור הסמכותי > DAILY_ITEMS fallback
     const masterTotal = armEntry?.total||0;
-    const liveTotal = liveByName[amName]||liveByName[cleanAlias]||0;
     const dailyTotal = (DAILY_ITEMS||[]).find(d=>
       cleanItemName(d.name)===amName || cleanItemName(d.name)===cleanAlias
     )?.total||0;
-    // השתמש בספירה החיה אם גדולה יותר, אחרת armoryMaster, אחרת DAILY_ITEMS
-    const total = liveTotal>0 ? liveTotal : (masterTotal>0 ? masterTotal : dailyTotal);
+    const total = masterTotal>0 ? masterTotal : dailyTotal;
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -10949,7 +10947,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
             }]);
           });
         });
-        const allRelatedWithSoldiers = [...allRelated, ...assignedRows.filter(([,v])=>!v.signed)];
+        const allRelatedWithSoldiers = [...allRelated, ...assignedRows]; // הצג גם חתומים
         // כשבוחרים פלוגה — מסנן אוטומטית לפלוגה הנבחרת
         const activeUnitFilter = filterUnit!=="הכל" ? filterUnit : serialUnitFilter;
         const relatedItems = allRelatedWithSoldiers.filter(([,v])=>{
