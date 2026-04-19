@@ -2165,11 +2165,17 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   });
 
   // ספור השאלות לפי שם (חיילים חתומים בלבד)
+  // חתימה חלקית: ספור רק פריטים שב-sig.items
   const allLoans = {}; // name -> count
   allSolsDaily.forEach(s=>{
     if(!signedIds.has(s.id)) return;
+    const sig2 = db.signatures?.[s.id];
     const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
-    Object.keys(asgn||{}).forEach(raw=>{
+    // חתימה חלקית — ספור רק sig.items
+    const itemsToCount = (sig2?.partial && sig2?.items)
+      ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
+      : asgn;
+    Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
       allLoans[n] = (allLoans[n]||0)+1;
     });
@@ -2178,7 +2184,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
     if(!signedIds.has(solId)) return;
     if(allSolsDaily.find(s=>s.id===solId)) return;
-    Object.keys(asgn||{}).forEach(raw=>{
+    const sig2 = db.signatures?.[solId];
+    const itemsToCount = (sig2?.partial && sig2?.items)
+      ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
+      : asgn;
+    Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
       allLoans[n] = (allLoans[n]||0)+1;
     });
@@ -2729,7 +2739,17 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
   const [retSel,setRetSel]=useState([]);
   const [retCabinet,setRetCabinet]=useState({}); // name -> {inCabinet:bool, cabName:str}
   const [signoffMode,setSignoffMode]=useState(false); // true = זיכוי (keep assignments, just clear sig)
-  const assigned=db.assignments[soldier.id]??soldier.assigned??{};
+  const _allAssigned=db.assignments[soldier.id]??soldier.assigned??{};
+  const _sig=db.signatures?.[soldier.id];
+  // בזיכוי: אם חתימה חלקית — הצג רק פריטים שנחתמו (sig.items)
+  const assigned=(()=>{
+    if(_sig?.partial && _sig?.items && _sig.items.length>0){
+      const partial={};
+      _sig.items.forEach(k=>{ if(_allAssigned[k]!==undefined) partial[k]=_allAssigned[k]; });
+      return Object.keys(partial).length>0 ? partial : _allAssigned;
+    }
+    return _allAssigned;
+  })();
   const sig=db.signatures?.[soldier.id];
   const weps=Object.entries(assigned).filter(([k])=>WEAPON_KEYS.includes(k));
   // ערבות מרוכזת — האם חייל זה ערב על אחרים?
@@ -2775,11 +2795,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         nextIdx++;
       }
     });
-    // הוסף אביזרים אוטומטיים לפי WEAPON_BUNDLES
-    valid.forEach(i=>{
-      const bundle = WEAPON_BUNDLES[i.name];
-      if(bundle){ bundle.forEach(acc=>{ if(!na[acc]) na[acc]=1; }); }
-    });
+
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     // Add cabinet items for those marked as inCabinet
     const newUnitItems={...(ndb.unitItems||{})};
@@ -4025,11 +4041,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
     const na={...assigned};
     valid.forEach(i=>{
       na[i.name]=i.serial||1;
-      // הוסף אביזרים אוטומטיים לפי WEAPON_BUNDLES
-      const bundle = WEAPON_BUNDLES[i.name];
-      if(bundle){
-        bundle.forEach(acc=>{ if(!na[acc]) na[acc]=1; });
-      }
+      // לא מוסיפים אביזרים ל-assignments — הם משויכים בנפרד
     });
     const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
     delete ndb.signatures[soldier.id];fbDelete("db/signatures/"+soldier.id).catch(()=>{});
