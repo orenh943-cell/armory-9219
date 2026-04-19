@@ -2850,7 +2850,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     }
     // Handle items going to cabinet
     retSel.forEach(name=>{
-      const serial=assigned[name]; const sStr=isSerial(serial)?String(serial):null; const rowKey=cleanItemName(name)+(sStr||""); const rc=retCabinet[rowKey]||retCabinet[name]||retCabinet[cleanItemName(name)];
+      const serial=assigned[name]; const sStr=isSerial(serial)?String(serial):null; const rowKey=cleanItemName(name)+(sStr||""); const rc=finalRetCabinet[rowKey]||finalRetCabinet[name]||finalRetCabinet[cleanItemName(name)];
       if(rc?.inCabinet && rc.cabName){
         if(signoffMode){
           // זיכוי: הציוד בארון אבל עדיין שייך לחייל — סמן soldierId
@@ -2897,7 +2897,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     // פריטים ללא ארון — רק בביטול שיוך (לא בזיכוי)
     if(!signoffMode){
       retSel.forEach(name=>{
-        const rc=retCabinet[name];
+        const rc=finalRetCabinet[name]||finalRetCabinet[cleanItemName(name)];
         if(!rc?.inCabinet){
           const serial=assigned[name];
           // מצא fromUnit מה-meta — אם אין, השתמש בפלוגת החייל
@@ -3081,9 +3081,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 })()}
                 <button onClick={()=>setShowDoc(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📄 טופס</button>
                 {sig&&canDelete(auth)&&<button onClick={()=>{
-                  // Pre-select all assigned items for return
                   setRetSel(Object.keys(assigned));
                   setRetCabinet({});
+                  setSignoffMode(true);
                   setView("return");
                 }} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>❌ זיכוי</button>}
               </div>
