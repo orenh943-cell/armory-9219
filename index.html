@@ -3789,7 +3789,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
             <div style={{fontWeight:700,color:"var(--color-success-fg)"}}>✍️ חתימה פעילה</div>
             <button onClick={()=>{
               const sig=db.signatures[soldier.id];
-              const html=buildSignatureFormHtml({...soldier},{...sig,sigData:sig.sigData},soldier.assigned||{});
+              const _formAssigned1=(sig.partial&&sig.items)?Object.fromEntries(sig.items.map(k=>[k,(db.assignments?.[soldier.id]||soldier.assigned||{})[k]||1])):(db.assignments?.[soldier.id]||soldier.assigned||{});
+              const html=buildSignatureFormHtml({...soldier},{...sig,sigData:sig.sigData},_formAssigned1);
               const blob=new Blob([html],{type:"text/html"});
               const url=URL.createObjectURL(blob);
               const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+".html";
@@ -3815,7 +3816,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 {sig.sigData&&<img src={sig.sigData} style={{height:28,borderRadius:3,border:"1px solid var(--color-border-muted)",cursor:"pointer"}}
                   onClick={()=>window._showLightbox&&window._showLightbox(sig.sigData)}/>}
                 <button onClick={()=>{
-                  const html=buildSignatureFormHtml({...soldier,id:soldier.id,name:soldier.name},{...sig,sigData:sig.sigData}, db.assignments?.[soldier.id]||soldier.assigned||{});
+                  const _formAssigned2=(sig.partial&&sig.items)?Object.fromEntries(sig.items.map(k=>[k,(db.assignments?.[soldier.id]||soldier.assigned||{})[k]||1])):(db.assignments?.[soldier.id]||soldier.assigned||{});
+                  const html=buildSignatureFormHtml({...soldier,id:soldier.id,name:soldier.name},{...sig,sigData:sig.sigData}, _formAssigned2);
                   const blob=new Blob([html],{type:"text/html"});
                   const url=URL.createObjectURL(blob);
                   const a=document.createElement("a");a.href=url;a.download="חתימה_"+soldier.name+"_"+(sig.signedAt||key).replace(/[/:]/g,"-")+".html";
