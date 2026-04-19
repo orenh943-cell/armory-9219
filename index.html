@@ -10159,7 +10159,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8,marginBottom:16}}>
             {filtered.map(item=>{
               const assigned = liveAssigned[cleanItemName(item.name)]||0;
-              const realTotal = Math.max(item.total, assigned); // actual = max of declared vs live
+              const realTotal = item.total; // total מ-Firebase הוא המקור הסמכותי
               const free = Math.max(0,item.total-assigned);
               const isWeapon = WEAPON_KEYS.includes(item.name);
               const isSelected = selectedItem===item.name;
