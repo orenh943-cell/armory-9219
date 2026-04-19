@@ -5699,13 +5699,12 @@ function GreenEyesTab({db, setDb, soldiers, auth}) {
   );
   const [showSendModal, setShowSendModal] = React.useState(false);
 
-  // טעינת היסטוריה — realtime
+  // טעינת היסטוריה
   React.useEffect(()=>{
-    const unsub = fbListen("db/greenEyes", data=>{
+    fbGet("db/greenEyes").then(data=>{
       setHistory(data||{});
       setLoading(false);
-    });
-    return ()=>{ if(typeof unsub==="function") unsub(); };
+    }).catch(()=>setLoading(false));
   },[]);
 
   // בדיקת שעת התראה — בודק כל דקה
