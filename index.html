@@ -13845,11 +13845,8 @@ function exportSoldiersExcel(soldiers, db){
   // גליון לפי פלוגה
   let csv = "";
   // כותרת
-  csv += "גדוד 9219 — מצב שלבי חיילים
-";
-  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+"
-
-";
+  csv += "גדוד 9219 — מצב שלבי חיילים\n";
+  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+"\n\n";
 
   UNITS.forEach(unit=>{
     const unitSoldiers = soldiers.filter(s=>s.unit===unit&&s.name);
