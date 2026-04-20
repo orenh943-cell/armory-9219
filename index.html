@@ -7195,6 +7195,46 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     }).catch(()=>{});
 
     // ONE-TIME: הוסף אביזרי M4 לכל חיילים עם M4
+    // ONE-TIME: הוסף אביזרי M16 וקלע סער
+    fbGet("db/m16SaarBundleV1").then(done=>{
+      if(!done){
+        fbGet("db/assignments").then(allAssignments=>{
+          if(!allAssignments) return;
+          const updates = {};
+          Object.entries(allAssignments).forEach(([solId, asgn])=>{
+            if(!asgn) return;
+            const hasM16 = Object.keys(asgn).some(k=>cleanItemName(k)==="M16");
+            const hasSaar = Object.keys(asgn).some(k=>cleanItemName(k)==="קלע סער");
+            if(!hasM16&&!hasSaar) return;
+            const newAsgn = {...asgn};
+            let changed = false;
+            if(hasM16){
+              WEAPON_BUNDLES["M16"].forEach(acc=>{
+                if(!Object.keys(newAsgn).some(k=>cleanItemName(k)===acc)){
+                  newAsgn[acc]=1; changed=true;
+                }
+              });
+            }
+            if(hasSaar){
+              WEAPON_BUNDLES["קלע סער"].forEach(acc=>{
+                if(!Object.keys(newAsgn).some(k=>cleanItemName(k)===acc)){
+                  newAsgn[acc]=1; changed=true;
+                }
+              });
+            }
+            if(changed) updates[solId] = newAsgn;
+          });
+          if(Object.keys(updates).length>0){
+            console.log("[bundle] מוסיף אביזרי M16/קלע סער ל-"+Object.keys(updates).length+" חיילים");
+            Object.entries(updates).forEach(([solId,asgn])=>{
+              fbSet("db/assignments/"+solId, sanitizeForFirebase(asgn)).catch(()=>{});
+            });
+          }
+          fbSet("db/m16SaarBundleV1", true).catch(()=>{});
+        }).catch(()=>{});
+      }
+    }).catch(()=>{});
+
     fbGet("db/m4BundleAssignedV1").then(done=>{
       if(!done){
         fbGet("db/assignments").then(allAssignments=>{
