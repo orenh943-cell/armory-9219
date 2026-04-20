@@ -20,6 +20,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/fflate@0.8.2/umd/index.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
@@ -7691,7 +7692,7 @@ ${exitLink}
                 </button>
               </div>
               <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>exportSoldiersExcel(soldiers,db)} style={{...S.btn("gray"),fontSize:"var(--text-base)"}}>📊 ייצוא Excel</button>
+              <button onClick={()=>exportSoldiersJSON(soldiers,db)} style={{...S.btn("gray"),fontSize:"var(--text-base)"}}>📊 הורד נתוני Excel</button>
               <button onClick={()=>setAddModal(true)} style={{...S.btn("green"),fontSize:"var(--text-base)"}}>👤 הוסף חייל</button>
               {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),fontSize:"var(--text-base)"}}>➕ משיכה / החזרה</button>}
               </div>
@@ -13807,129 +13808,267 @@ function buildSignatureFormHtml(s, sig, assigned){
 </body></html>`;
 }
 
-function exportSoldiersExcel(soldiers, db){
-  const sigs = db.signatures||{};
-  const certs = db.testCerts||{};
-  const exits = db.exitForms||{};
-  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
-  const dateStr = new Date().toLocaleDateString("he-IL");
+function exportSoldiersJSON(soldiers, db){
+  // כפתור הורדה — מפעיל ישירות את ExcelJS
+  exportSoldiersExcelJS(soldiers, db);
+}
 
-  function buildRow(s, idx){
-    const sig = sigs[s.id];
-    const cert = certs[s.id];
-    const exitArr = Object.values(exits).filter(function(f){return f.soldierId===s.id;});
-    const hasExit = exitArr.some(function(f){return f.soldierSig;});
-    const approved = exitArr.some(function(f){return f.status==="אושר";});
-    const weps = Object.keys(s.assigned||{}).filter(function(k){return WEAPON_KEYS.includes(cleanItemName(k));});
-    const signedAt = sig ? sig.signedAt : "";
-    const certDate = cert&&cert.img ? new Date(cert.date).toLocaleDateString("he-IL") : "";
+async function exportSoldiersExcelJS(soldiers, db){
+  if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה, נסה שוב"); return; }
+
+  const sigs  = db.signatures||{};
+  const certs = db.testCerts||{};
+  const exits = Object.values(db.exitForms||{});
+  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
+  const TODAY = new Date().toLocaleDateString("he-IL");
+
+  // צבעים
+  const C = {
+    NAVY:     {argb:"FF1A3A6B"}, NAVY2:   {argb:"FF2A5298"},
+    WHITE:    {argb:"FFFFFFFF"}, GOLD:    {argb:"FFF4A900"},
+    GREEN_BG: {argb:"FFD6F5E3"}, GREEN_FG:{argb:"FF1A7A3C"},
+    RED_BG:   {argb:"FFFFE0E0"}, RED_FG:  {argb:"FFA01020"},
+    YEL_BG:   {argb:"FFFFF9C4"}, YEL_FG:  {argb:"FF7A6000"},
+    GRAY:     {argb:"FFE8EEF7"}, ALT:     {argb:"FFF4F7FB"},
+    PAR_BG:   {argb:"FFFFF3CD"}, PAR_FG:  {argb:"FF856404"},
+    BORDER:   {argb:"FFC5CEE0"},
+  };
+  const UNIT_COLORS = {
+    "א":"FF1F4E79","ב":"FF375623","ג":"FF6B2C2C",
+    "מסייעת":"FF4A235A","אגמ":"FF784212","פלסמ":"FF1A5276"
+  };
+
+  function thinBorder(argb){
+    const s={style:"thin",color:{argb}};
+    return {top:s,left:s,bottom:s,right:s};
+  }
+  function medBorder(argb){
+    const s={style:"medium",color:{argb}};
+    return {top:s,left:s,bottom:s,right:s};
+  }
+
+  function hdrFont(sz=11){ return {bold:true,size:sz,color:C.WHITE,name:"Arial"}; }
+  function dataFont(sz=10,bold=false,color=null){
+    return {bold,size:sz,color:color||{argb:"FF000000"},name:"Arial"};
+  }
+  function fillSolid(c){ return {type:"pattern",pattern:"solid",fgColor:c}; }
+  const AL_C = {horizontal:"center",vertical:"middle",readingOrder:2};
+  const AL_R = {horizontal:"right",  vertical:"middle",readingOrder:2};
+
+  function soldierRow(s){
+    const sid = s.id||"";
+    const sig  = sigs[sid];
+    const cert = certs[sid];
+    const exitArr = exits.filter(e=>e.soldierId===sid);
+    const hasExit = exitArr.some(e=>e.soldierSig);
+    const approved= exitArr.some(e=>e.status==="אושר");
+    const weps = Object.keys(s.assigned||{})
+      .filter(k=>["M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320"].includes(cleanItemName(k)));
+    let certDateStr = "";
+    if(cert&&cert.date){
+      try{ certDateStr=new Date(cert.date).toLocaleDateString("he-IL"); }catch(e){}
+    }
     return {
-      num: idx+1,
-      id: s.id||"",
-      name: s.name||"",
-      squad: s.squad||"",
-      phone: s.phone||"",
-      weps: weps.join(" / ")||"אין נשק",
-      sig: sig ? (sig.partial?"חלקי":"✓") : "✗",
-      sigDate: signedAt,
-      cert: cert&&cert.img?"✓":"✗",
-      certDate: certDate,
-      exit: hasExit?"✓":"✗",
-      approved: approved?"✓":"✗",
-      note: sig&&sig.partial?"חלקי":"",
+      id:sid, name:s.name||"", squad:s.squad||"", phone:s.phone||"",
+      weps:weps.join(" / ")||"אין נשק",
+      sig:!!sig, sigPartial:!!(sig&&sig.partial), sigDate:sig?sig.signedAt||"":"",
+      cert:!!(cert&&cert.img), certDate:certDateStr,
+      exit:hasExit, approved,
     };
   }
 
-  function cell(val, isCheck, alt, bold){
-    const bg = isCheck===true?"#d4f7c0":isCheck===false?"#ffd0d0":alt?"#f0f4fa":"#ffffff";
-    const fw = bold?"bold":"normal";
-    const color = isCheck===true?"#1a6b2e":isCheck===false?"#8b0000":"#000";
-    return "<td style='background:"+bg+";color:"+color+";font-weight:"+fw+";border:1px solid #ccc;padding:5px 8px;white-space:nowrap;font-size:11px;text-align:center'>"+val+"</td>";
-  }
-  function cellR(val, alt){
-    return "<td style='background:"+(alt?"#f0f4fa":"#fff")+";border:1px solid #ccc;padding:5px 8px;font-size:11px;text-align:right;direction:rtl'>"+val+"</td>";
-  }
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "ארמון 9219";
+  wb.created = new Date();
 
-  let html = "<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'>";
-  html += "<style>body{font-family:Arial,sans-serif;direction:rtl}";
-  html += "table{border-collapse:collapse;width:100%;margin-bottom:30px}";
-  html += "th{background:#1a3a6b;color:#fff;padding:7px 10px;border:1px solid #ccc;font-size:12px;text-align:center}";
-  html += "h2{color:#1a3a6b;margin-top:30px;margin-bottom:6px;font-size:15px}";
-  html += ".title{font-size:18px;font-weight:bold;color:#1a3a6b;margin-bottom:4px}";
-  html += ".subtitle{font-size:12px;color:#555;margin-bottom:20px}";
-  html += ".sum-table th{font-size:12px} .sum-table td{text-align:center}";
-  html += "@media print{h2{page-break-before:always}}";
-  html += "</style></head><body>";
-  html += "<div class='title'>גדוד 9219 — מצב שלבי חיילים</div>";
-  html += "<div class='subtitle'>הופק: "+dateStr+"</div>";
+  // ════════════════════════════════════════════════
+  // גליון סיכום
+  // ════════════════════════════════════════════════
+  const wsSum = wb.addWorksheet("סיכום",{views:[{rightToLeft:true}]});
+  wsSum.properties.tabColor = {argb:"FF1A3A6B"};
 
-  // Summary table
-  html += "<h2>סיכום כולל</h2><table class='sum-table'>";
-  html += "<tr><th>פלוגה</th><th>סהכ חיילים</th><th>חתמו</th><th>בוחן תקף</th><th>יציאה</th><th>אושר</th><th>% השלמה</th></tr>";
-  UNITS.forEach(function(unit){
-    const us = soldiers.filter(function(s){return s.unit===unit&&s.name;});
-    const total = us.length;
-    const signed = us.filter(function(s){return !!sigs[s.id];}).length;
-    const tested = us.filter(function(s){return !!(certs[s.id]&&certs[s.id].img);}).length;
-    const exited = us.filter(function(s){
-      return Object.values(exits).some(function(f){return f.soldierId===s.id&&f.soldierSig;});
-    }).length;
-    const appr = us.filter(function(s){
-      return Object.values(exits).some(function(f){return f.soldierId===s.id&&f.status==="אושר";});
-    }).length;
-    const pct = total>0 ? Math.round((signed+tested+exited+appr)/(total*4)*100)+"%" : "—";
-    const pctNum = total>0 ? (signed+tested+exited+appr)/(total*4) : 0;
-    const pctBg = pctNum>=0.8?"#d4f7c0":pctNum>=0.5?"#fff3cd":"#ffd0d0";
-    html += "<tr>";
-    html += "<td style='background:#e8eef5;font-weight:bold;border:1px solid #ccc;padding:5px 10px;text-align:center'>פלוגה "+unit+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center'>"+total+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center;background:"+(signed===total&&total>0?"#d4f7c0":"#fff")+"'>"+signed+"/"+total+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center'>"+tested+"/"+total+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center'>"+exited+"/"+total+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center'>"+appr+"/"+total+"</td>";
-    html += "<td style='border:1px solid #ccc;padding:5px 10px;text-align:center;background:"+pctBg+";font-weight:bold'>"+pct+"</td>";
-    html += "</tr>";
+  // Row 1 — כותרת ראשית
+  wsSum.mergeCells("A1:I1");
+  const t1 = wsSum.getCell("A1");
+  t1.value = "גדוד 9219  |  מצב שלבי חיילים  |  הופק: "+TODAY;
+  t1.font = {bold:true,size:18,color:C.WHITE,name:"Arial"};
+  t1.fill = fillSolid(C.NAVY);
+  t1.alignment = {...AL_C};
+  t1.border = medBorder("FF1A3A6B");
+  wsSum.getRow(1).height = 40;
+
+  // Row 2 — מקרא
+  wsSum.mergeCells("A2:I2");
+  const t2 = wsSum.getCell("A2");
+  t2.value = "✓ = בוצע    ✗ = לא בוצע    ◑ = חתימה חלקית";
+  t2.font = {size:10,color:C.NAVY,name:"Arial"};
+  t2.fill = fillSolid(C.GRAY);
+  t2.alignment = {...AL_C};
+  wsSum.getRow(2).height = 20;
+
+  wsSum.getRow(3).height = 8;
+
+  // Row 4 — כותרות עמודות
+  const SHDRS = ["פלוגה","סהכ חיילים","חתמו","% חתימה","בוחן","יציאה","אושר","% השלמה","סטטוס"];
+  const SWIDS = [16,14,12,12,12,12,12,16,16];
+  const sumHdrRow = wsSum.getRow(4);
+  sumHdrRow.height = 24;
+  SHDRS.forEach(function(h,i){
+    const cell = sumHdrRow.getCell(i+1);
+    cell.value = h; cell.font = hdrFont(11);
+    cell.fill = fillSolid(C.NAVY); cell.alignment = {...AL_C};
+    cell.border = thinBorder("FFC5CEE0");
+    wsSum.getColumn(i+1).width = SWIDS[i];
   });
-  html += "</table>";
 
-  // Per unit tables
-  UNITS.forEach(function(unit){
-    const us = soldiers.filter(function(s){return s.unit===unit&&s.name;});
-    if(!us.length) return;
-    html += "<h2>פלוגה "+unit+" ("+us.length+" חיילים)</h2><table>";
-    html += "<tr><th>#</th><th>מ.א</th><th>שם מלא</th><th>מחלקה</th><th>טלפון</th><th>נשק</th><th>חתימה</th><th>תאריך חתימה</th><th>בוחן</th><th>תאריך בוחן</th><th>יציאה</th><th>אושר</th><th>הערות</th></tr>";
-    us.forEach(function(s, i){
-      const r = buildRow(s, i);
-      const alt = i%2===1;
-      html += "<tr>";
-      html += cellR(r.num, alt);
-      html += cellR(r.id, alt);
-      html += "<td style='background:"+(alt?"#f0f4fa":"#fff")+";border:1px solid #ccc;padding:5px 8px;font-size:11px;font-weight:bold;text-align:right'>"+r.name+"</td>";
-      html += cellR(r.squad, alt);
-      html += cellR(r.phone, alt);
-      html += cellR(r.weps, alt);
-      html += cell(r.sig, r.sig==="✓", alt);
-      html += cellR(r.sigDate, alt);
-      html += cell(r.cert, r.cert==="✓", alt);
-      html += cellR(r.certDate, alt);
-      html += cell(r.exit, r.exit==="✓", alt);
-      html += cell(r.approved, r.approved==="✓", alt);
-      html += cellR(r.note, alt);
-      html += "</tr>";
+  // Data rows
+  UNITS.forEach(function(unit,ri){
+    const uSols = soldiers.filter(s=>s.unit===unit&&s.name);
+    const rows = uSols.map(soldierRow);
+    const total = rows.length;
+    const signed= rows.filter(r=>r.sig).length;
+    const tested= rows.filter(r=>r.cert).length;
+    const exited= rows.filter(r=>r.exit).length;
+    const appr  = rows.filter(r=>r.approved).length;
+    const pctSig= total?Math.round(signed/total*100):0;
+    const pctAll= total?Math.round((signed+tested+exited+appr)/(total*4)*100):0;
+    const alt = ri%2===1;
+    const base = alt?C.ALT:{argb:"FFFFFFFF"};
+    const status = pctAll===100?"✓ מוכן":pctAll>=50?"⚠ חסר":"✗ לא מוכן";
+    const sBg = pctAll===100?C.GREEN_BG:pctAll>=50?C.YEL_BG:C.RED_BG;
+    const sFg = pctAll===100?C.GREEN_FG:pctAll>=50?C.YEL_FG:C.RED_FG;
+    const sigBg = signed===total&&total>0?C.GREEN_BG:signed>0?C.YEL_BG:C.RED_BG;
+    const sigFg = signed===total&&total>0?C.GREEN_FG:signed>0?C.YEL_FG:C.RED_FG;
+    const pBg = pctAll>=80?C.GREEN_BG:pctAll>=50?C.YEL_BG:C.RED_BG;
+    const pFg = pctAll>=80?C.GREEN_FG:pctAll>=50?C.YEL_FG:C.RED_FG;
+    const row = wsSum.getRow(ri+5);
+    row.height = 22;
+    const vals = ["פלוגה "+unit, total, signed, pctSig+"%", tested, exited, appr, pctAll+"%", status];
+    const bgs  = [C.GRAY, base, sigBg, sigBg, base, base, base, pBg, sBg];
+    const fgs  = [C.NAVY, null, sigFg, sigFg, null, null, null, pFg, sFg];
+    const bolds= [true,false,false,true,false,false,false,true,true];
+    vals.forEach(function(v,i){
+      const cell = row.getCell(i+1);
+      cell.value = v;
+      cell.font = dataFont(i===7?12:11, bolds[i], fgs[i]);
+      cell.fill = fillSolid(bgs[i]);
+      cell.alignment = {...AL_C};
+      cell.border = thinBorder("FFC5CEE0");
     });
-    html += "</table>";
+  });
+  wsSum.views = [{state:"frozen",ySplit:4,rightToLeft:true}];
+
+  // ════════════════════════════════════════════════
+  // גליון לכל פלוגה
+  // ════════════════════════════════════════════════
+  const PHDR = ["#","מ.א","שם מלא","מחלקה","טלפון","נשק","חתימה","תאריך חתימה","בוחן","תאריך בוחן","יציאה","אושר","הערות"];
+  const PWID = [4,  12,   22,      14,      15,      22,    10,      16,           10,     16,           8,      8,      18];
+
+  UNITS.forEach(function(unit){
+    const uColor = UNIT_COLORS[unit]||"FF1A3A6B";
+    const uColorObj = {argb:uColor};
+    const ws2 = wb.addWorksheet("פלוגה "+unit,{views:[{rightToLeft:true}]});
+    ws2.properties.tabColor = {argb:uColor};
+
+    const uSols = soldiers.filter(s=>s.unit===unit&&s.name);
+    const rows  = uSols.map(soldierRow);
+    const total = rows.length;
+    const signed= rows.filter(r=>r.sig).length;
+    const tested= rows.filter(r=>r.cert).length;
+    const exited= rows.filter(r=>r.exit).length;
+    const appr  = rows.filter(r=>r.approved).length;
+
+    // כותרת
+    ws2.mergeCells("A1:"+get_col(PHDR.length)+"1");
+    const t = ws2.getCell("A1");
+    t.value = "פלוגה "+unit+"  |  גדוד 9219  |  "+total+" חיילים  |  "+TODAY;
+    t.font = {bold:true,size:15,color:C.WHITE,name:"Arial"};
+    t.fill = fillSolid(uColorObj);
+    t.alignment = {...AL_C};
+    t.border = medBorder(uColor);
+    ws2.getRow(1).height = 34;
+
+    // פס סטטיסטיקות
+    ws2.mergeCells("A2:"+get_col(PHDR.length)+"2");
+    const s2 = ws2.getCell("A2");
+    s2.value = "חתמו: "+signed+"/"+total+"   |   בוחן: "+tested+"/"+total+"   |   יציאה: "+exited+"/"+total+"   |   אושר: "+appr+"/"+total;
+    s2.font = {size:10,color:uColorObj,name:"Arial"};
+    s2.fill = fillSolid(C.GRAY);
+    s2.alignment = {...AL_C};
+    ws2.getRow(2).height = 20;
+    ws2.getRow(3).height = 6;
+
+    // כותרות עמודות
+    const hRow = ws2.getRow(4);
+    hRow.height = 24;
+    PHDR.forEach(function(h,i){
+      const cell = hRow.getCell(i+1);
+      cell.value = h; cell.font = hdrFont(11);
+      cell.fill = fillSolid(uColorObj); cell.alignment = {...AL_C};
+      cell.border = {top:thinBorder(uColor).top,left:thinBorder(uColor).left,
+                     right:thinBorder(uColor).right,
+                     bottom:{style:"medium",color:{argb:uColor}}};
+      ws2.getColumn(i+1).width = PWID[i];
+    });
+
+    // נתוני חיילים
+    rows.forEach(function(r,ri){
+      const row = ws2.getRow(ri+5);
+      row.height = 20;
+      const alt = ri%2===1;
+      const base = alt?C.ALT:{argb:"FFFFFFFF"};
+      const sigV = r.sigPartial?"◑":(r.sig?"✓":"✗");
+      const sigBg= r.sigPartial?C.PAR_BG:(r.sig?C.GREEN_BG:C.RED_BG);
+      const sigFg= r.sigPartial?C.PAR_FG:(r.sig?C.GREEN_FG:C.RED_FG);
+      function chk(v){ return v?{v:"✓",bg:C.GREEN_BG,fg:C.GREEN_FG}:{v:"✗",bg:C.RED_BG,fg:C.RED_FG}; }
+      const certC= chk(r.cert); const exitC=chk(r.exit); const apprC=chk(r.approved);
+      const cols = [
+        {v:ri+1,         bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:r.id,         bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:r.name,       bg:base,     fg:null,    al:AL_R, bold:true},
+        {v:r.squad,      bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:r.phone,      bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:r.weps,       bg:base,     fg:null,    al:AL_R, bold:false},
+        {v:sigV,         bg:sigBg,    fg:sigFg,   al:AL_C, bold:true},
+        {v:r.sigDate,    bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:certC.v,      bg:certC.bg, fg:certC.fg,al:AL_C, bold:true},
+        {v:r.certDate,   bg:base,     fg:null,    al:AL_C, bold:false},
+        {v:exitC.v,      bg:exitC.bg, fg:exitC.fg,al:AL_C, bold:true},
+        {v:apprC.v,      bg:apprC.bg, fg:apprC.fg,al:AL_C, bold:true},
+        {v:r.sigPartial?"חתימה חלקית":"", bg:r.sigPartial?C.PAR_BG:base,
+         fg:r.sigPartial?C.PAR_FG:null, al:AL_R, bold:false},
+      ];
+      cols.forEach(function(col,i){
+        const cell = row.getCell(i+1);
+        cell.value = col.v;
+        cell.font = dataFont(i===2?10:10, col.bold, col.fg);
+        cell.fill = fillSolid(col.bg);
+        cell.alignment = {...col.al};
+        cell.border = thinBorder("FFC5CEE0");
+      });
+    });
+    ws2.views = [{state:"frozen",ySplit:4,rightToLeft:true}];
   });
 
-  html += "</body></html>";
+  // helper
+  function get_col(n){ return String.fromCharCode(64+n); }
 
-  const blob = new Blob([html],{type:"application/vnd.ms-excel;charset=utf-8"});
+  // Move summary first
+  wb.orderSheets(function(a,b){
+    if(a.name==="סיכום") return -1;
+    if(b.name==="סיכום") return 1;
+    return 0;
+  });
+
+  // Save
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href=url;
-  a.download="מצב_חיילים_9219_"+dateStr.split("/").join("-")+".xls";
-  a.click();
-  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  a.href=url; a.download="מצב_חיילים_9219_"+TODAY.split("/").join("-")+".xlsx"; a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);},2000);
 }
+
 
 function downloadAllFormsZip(db, soldiers){
   if(typeof fflate==="undefined"){ alert("ספריית ZIP לא נטענה, נסה שוב"); return; }
