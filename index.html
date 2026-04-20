@@ -13896,7 +13896,7 @@ function exportSoldiersExcel(soldiers, db){
   UNITS.forEach(addSheet);
 
   // Summary sheet
-  const sumRows = [["פלוגה","סה"כ חיילים","חתמו","בוחן תקף","יציאה","אושר","% השלמה"]];
+  const sumRows = [["פלוגה","סהכ חיילים","חתמו","בוחן תקף","יציאה","אושר","% השלמה"]];
   UNITS.forEach(function(unit){
     const us = soldiers.filter(function(s){return s.unit===unit&&s.name;});
     const total = us.length;
