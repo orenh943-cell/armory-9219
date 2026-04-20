@@ -13807,15 +13807,14 @@ function buildSignatureFormHtml(s, sig, assigned){
 }
 
 function exportSoldiersExcel(soldiers, db){
-  const BOM = "﻿";
+  const BOM = "\uFEFF";
+  const NL = "\n";
   const sigs = db.signatures||{};
   const certs = db.testCerts||{};
   const exits = db.exitForms||{};
-
   const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
   const headers = ["מספר אישי","שם מלא","פלוגה","מחלקה","טלפון","נשק","חתימה","בוחן","יציאה","אושר","הערות"];
 
-  // בנה שורות לכל חייל
   function buildRow(s){
     const sig = sigs[s.id];
     const cert = certs[s.id];
@@ -13824,63 +13823,43 @@ function exportSoldiersExcel(soldiers, db){
     const approved = exitArr.some(f=>f.status==="אושר");
     const weps = Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(cleanItemName(k)));
     return [
-      s.id||"",
-      s.name||"",
-      s.unit||"",
-      s.squad||"",
-      s.phone||"",
+      s.id||"", s.name||"", s.unit||"", s.squad||"", s.phone||"",
       weps.join(" / ")||"אין נשק",
-      sig ? "✅ "+sig.signedAt : "❌",
-      cert?.img ? "✅ "+new Date(cert.date).toLocaleDateString("he-IL") : "❌",
-      hasExit ? "✅" : "❌",
-      approved ? "✅" : "❌",
-      sig?.partial ? "חתימה חלקית" : "",
+      sig ? "V "+sig.signedAt : "X",
+      cert&&cert.img ? "V "+new Date(cert.date).toLocaleDateString("he-IL") : "X",
+      hasExit ? "V" : "X",
+      approved ? "V" : "X",
+      sig&&sig.partial ? "חתימה חלקית" : "",
     ];
   }
 
-  // גליון כולל
-  let allRows = [headers];
-  soldiers.filter(s=>s.name).forEach(s=>allRows.push(buildRow(s)));
+  function rowToCsv(row){ return row.map(c=>'"'+String(c).replace(/"/g,"'")+'"').join(",")+NL; }
 
-  // גליון לפי פלוגה
-  let csv = "";
-  // כותרת
-  csv += "גדוד 9219 — מצב שלבי חיילים\n";
-  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+"\n\n";
+  let csv = "גדוד 9219 מצב שלבי חיילים"+NL;
+  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+NL+NL;
 
-  UNITS.forEach(unit=>{
-    const unitSoldiers = soldiers.filter(s=>s.unit===unit&&s.name);
+  UNITS.forEach(function(unit){
+    const unitSoldiers = soldiers.filter(function(s){return s.unit===unit&&s.name;});
     if(!unitSoldiers.length) return;
-    csv += "פלוגה "+unit+"
-";
-    csv += headers.map(h=>`"${h}"`).join(",")+"
-";
-    unitSoldiers.forEach(s=>{
-      csv += buildRow(s).map(c=>`"${String(c).replace(/"/g,"'")}"`).join(",")+"
-";
-    });
-    csv += "
-";
+    csv += "פלוגה "+unit+NL;
+    csv += rowToCsv(headers);
+    unitSoldiers.forEach(function(s){ csv += rowToCsv(buildRow(s)); });
+    csv += NL;
   });
 
-  // הוסף גם שורות ללא פלוגה ידועה
-  const other = soldiers.filter(s=>s.name&&!UNITS.includes(s.unit));
+  const other = soldiers.filter(function(s){return s.name&&UNITS.indexOf(s.unit)===-1;});
   if(other.length){
-    csv += "שאר
-";
-    csv += headers.map(h=>`"${h}"`).join(",")+"
-";
-    other.forEach(s=>{ csv += buildRow(s).map(c=>`"${String(c).replace(/"/g,"'")}"`).join(",")+"
-"; });
+    csv += "שאר"+NL;
+    csv += rowToCsv(headers);
+    other.forEach(function(s){ csv += rowToCsv(buildRow(s)); });
   }
 
   const blob = new Blob([BOM+csv],{type:"text/csv;charset=utf-8"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href=url;
-  a.download="מצב_חיילים_"+new Date().toLocaleDateString("he-IL").replace(/\//g,"-")+".csv";
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const dateStr = new Date().toLocaleDateString("he-IL").split("/").join("-");
+  a.href=url; a.download="מצב_חיילים_"+dateStr+".csv"; a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
 
 function downloadAllFormsZip(db, soldiers){
