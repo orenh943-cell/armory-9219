@@ -4543,7 +4543,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
         }
       });
     });
-    setResults(res.slice(0,100));
+    setResults(res);
   },[search,allSoldiers,db.assignments,filterWep,inspectedKeys]);
 
   function toggle(key){const s=new Set(selected);s.has(key)?s.delete(key):s.add(key);setSelected(s);}
@@ -7690,6 +7690,7 @@ ${exitLink}
                 </button>
               </div>
               <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>exportSoldiersExcel(soldiers,db)} style={{...S.btn("gray"),fontSize:"var(--text-base)"}}>📊 ייצוא Excel</button>
               <button onClick={()=>setAddModal(true)} style={{...S.btn("green"),fontSize:"var(--text-base)"}}>👤 הוסף חייל</button>
               {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),fontSize:"var(--text-base)"}}>➕ משיכה / החזרה</button>}
               </div>
@@ -7718,7 +7719,7 @@ ${exitLink}
                           return soldierSortDir==="desc"?solScore(b)-solScore(a):solScore(a)-solScore(b);
                         })
                       : filtered
-                    ).slice(0,100).map((s,_idx)=>{
+                    ).map((s,_idx)=>{
                       const weps=Object.entries(s.assigned||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       // סקר נוכחות — בדוק האם יש סקר פתוח שהחייל ענה עליו
                       const latestPoll = Object.values(db.polls||{}).sort((a,b)=>b.createdAt>a.createdAt?1:-1)[0];
@@ -13803,6 +13804,86 @@ function buildSignatureFormHtml(s, sig, assigned){
 </div>
 
 </body></html>`;
+}
+
+function exportSoldiersExcel(soldiers, db){
+  const BOM = "﻿";
+  const sigs = db.signatures||{};
+  const certs = db.testCerts||{};
+  const exits = db.exitForms||{};
+
+  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
+  const headers = ["מספר אישי","שם מלא","פלוגה","מחלקה","טלפון","נשק","חתימה","בוחן","יציאה","אושר","הערות"];
+
+  // בנה שורות לכל חייל
+  function buildRow(s){
+    const sig = sigs[s.id];
+    const cert = certs[s.id];
+    const exitArr = Object.values(exits).filter(f=>f.soldierId===s.id);
+    const hasExit = exitArr.some(f=>f.soldierSig);
+    const approved = exitArr.some(f=>f.status==="אושר");
+    const weps = Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(cleanItemName(k)));
+    return [
+      s.id||"",
+      s.name||"",
+      s.unit||"",
+      s.squad||"",
+      s.phone||"",
+      weps.join(" / ")||"אין נשק",
+      sig ? "✅ "+sig.signedAt : "❌",
+      cert?.img ? "✅ "+new Date(cert.date).toLocaleDateString("he-IL") : "❌",
+      hasExit ? "✅" : "❌",
+      approved ? "✅" : "❌",
+      sig?.partial ? "חתימה חלקית" : "",
+    ];
+  }
+
+  // גליון כולל
+  let allRows = [headers];
+  soldiers.filter(s=>s.name).forEach(s=>allRows.push(buildRow(s)));
+
+  // גליון לפי פלוגה
+  let csv = "";
+  // כותרת
+  csv += "גדוד 9219 — מצב שלבי חיילים
+";
+  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+"
+
+";
+
+  UNITS.forEach(unit=>{
+    const unitSoldiers = soldiers.filter(s=>s.unit===unit&&s.name);
+    if(!unitSoldiers.length) return;
+    csv += "פלוגה "+unit+"
+";
+    csv += headers.map(h=>`"${h}"`).join(",")+"
+";
+    unitSoldiers.forEach(s=>{
+      csv += buildRow(s).map(c=>`"${String(c).replace(/"/g,"'")}"`).join(",")+"
+";
+    });
+    csv += "
+";
+  });
+
+  // הוסף גם שורות ללא פלוגה ידועה
+  const other = soldiers.filter(s=>s.name&&!UNITS.includes(s.unit));
+  if(other.length){
+    csv += "שאר
+";
+    csv += headers.map(h=>`"${h}"`).join(",")+"
+";
+    other.forEach(s=>{ csv += buildRow(s).map(c=>`"${String(c).replace(/"/g,"'")}"`).join(",")+"
+"; });
+  }
+
+  const blob = new Blob([BOM+csv],{type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url;
+  a.download="מצב_חיילים_"+new Date().toLocaleDateString("he-IL").replace(/\//g,"-")+".csv";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 function downloadAllFormsZip(db, soldiers){
