@@ -19,6 +19,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
@@ -13807,59 +13808,121 @@ function buildSignatureFormHtml(s, sig, assigned){
 }
 
 function exportSoldiersExcel(soldiers, db){
-  const BOM = "\uFEFF";
-  const NL = "\n";
+  if(typeof XLSX==="undefined"){ alert("ספריית Excel לא נטענה, נסה שוב"); return; }
   const sigs = db.signatures||{};
   const certs = db.testCerts||{};
   const exits = db.exitForms||{};
   const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ"];
-  const headers = ["מספר אישי","שם מלא","פלוגה","מחלקה","טלפון","נשק","חתימה","בוחן","יציאה","אושר","הערות"];
+  const HEADERS = ["#","מ.א","שם מלא","מחלקה","טלפון","נשק","חתימה","בוחן נשק","יציאה","אושר","הערות"];
+  const COL_WIDTHS = [4,12,22,14,16,26,22,18,10,10,22];
 
-  function buildRow(s){
+  function buildRow(s, idx){
     const sig = sigs[s.id];
     const cert = certs[s.id];
-    const exitArr = Object.values(exits).filter(f=>f.soldierId===s.id);
-    const hasExit = exitArr.some(f=>f.soldierSig);
-    const approved = exitArr.some(f=>f.status==="אושר");
-    const weps = Object.keys(s.assigned||{}).filter(k=>WEAPON_KEYS.includes(cleanItemName(k)));
+    const exitArr = Object.values(exits).filter(function(f){return f.soldierId===s.id;});
+    const hasExit = exitArr.some(function(f){return f.soldierSig;});
+    const approved = exitArr.some(function(f){return f.status==="אושר";});
+    const weps = Object.keys(s.assigned||{}).filter(function(k){return WEAPON_KEYS.includes(cleanItemName(k));});
     return [
-      s.id||"", s.name||"", s.unit||"", s.squad||"", s.phone||"",
+      idx+1,
+      s.id||"",
+      s.name||"",
+      s.squad||"",
+      s.phone||"",
       weps.join(" / ")||"אין נשק",
-      sig ? "V "+sig.signedAt : "X",
-      cert&&cert.img ? "V "+new Date(cert.date).toLocaleDateString("he-IL") : "X",
-      hasExit ? "V" : "X",
-      approved ? "V" : "X",
+      sig ? (sig.partial?"חלקי "+sig.signedAt:"✓ "+sig.signedAt) : "✗",
+      cert&&cert.img ? "✓ "+new Date(cert.date).toLocaleDateString("he-IL") : "✗",
+      hasExit ? "✓" : "✗",
+      approved ? "✓" : "✗",
       sig&&sig.partial ? "חתימה חלקית" : "",
     ];
   }
 
-  function rowToCsv(row){ return row.map(c=>'"'+String(c).replace(/"/g,"'")+'"').join(",")+NL; }
+  const wb = XLSX.utils.book_new();
+  const dateStr = new Date().toLocaleDateString("he-IL");
 
-  let csv = "גדוד 9219 מצב שלבי חיילים"+NL;
-  csv += "הופק: "+new Date().toLocaleDateString("he-IL")+NL+NL;
+  // HDR style
+  const hdrStyle = {font:{bold:true,color:{rgb:"FFFFFF"},name:"Arial",sz:11},
+    fill:{fgColor:{rgb:"1A3A6B"}},alignment:{horizontal:"center",vertical:"center",readingOrder:2},
+    border:{top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}}};
+  const greenStyle = {fill:{fgColor:{rgb:"D4F7C0"}},font:{name:"Arial",sz:10},
+    alignment:{horizontal:"center",readingOrder:2}};
+  const redStyle = {fill:{fgColor:{rgb:"FFD0D0"}},font:{name:"Arial",sz:10},
+    alignment:{horizontal:"center",readingOrder:2}};
+  const dataStyle = {font:{name:"Arial",sz:10},alignment:{horizontal:"right",readingOrder:2},
+    border:{top:{style:"thin",color:{rgb:"DDDDDD"}},bottom:{style:"thin",color:{rgb:"DDDDDD"}},
+      left:{style:"thin",color:{rgb:"DDDDDD"}},right:{style:"thin",color:{rgb:"DDDDDD"}}}};
+  const altStyle = {font:{name:"Arial",sz:10},fill:{fgColor:{rgb:"F0F4FA"}},
+    alignment:{horizontal:"right",readingOrder:2},
+    border:{top:{style:"thin",color:{rgb:"DDDDDD"}},bottom:{style:"thin",color:{rgb:"DDDDDD"}},
+      left:{style:"thin",color:{rgb:"DDDDDD"}},right:{style:"thin",color:{rgb:"DDDDDD"}}}};
+  const titleStyle = {font:{bold:true,name:"Arial",sz:14,color:{rgb:"1A3A6B"}},
+    fill:{fgColor:{rgb:"E8EEF5"}},alignment:{horizontal:"center",readingOrder:2}};
 
-  UNITS.forEach(function(unit){
+  function addSheet(unit){
     const unitSoldiers = soldiers.filter(function(s){return s.unit===unit&&s.name;});
-    if(!unitSoldiers.length) return;
-    csv += "פלוגה "+unit+NL;
-    csv += rowToCsv(headers);
-    unitSoldiers.forEach(function(s){ csv += rowToCsv(buildRow(s)); });
-    csv += NL;
-  });
+    const rows = [HEADERS].concat(unitSoldiers.map(buildRow));
 
-  const other = soldiers.filter(function(s){return s.name&&UNITS.indexOf(s.unit)===-1;});
-  if(other.length){
-    csv += "שאר"+NL;
-    csv += rowToCsv(headers);
-    other.forEach(function(s){ csv += rowToCsv(buildRow(s)); });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = COL_WIDTHS.map(function(w){return {wch:w};});
+    ws["!rtl"] = true;
+
+    // Style headers
+    HEADERS.forEach(function(_,ci){
+      const addr = XLSX.utils.encode_cell({r:0,c:ci});
+      if(!ws[addr]) ws[addr]={v:HEADERS[ci],t:"s"};
+      ws[addr].s = hdrStyle;
+    });
+
+    // Style data rows
+    unitSoldiers.forEach(function(s,ri){
+      const row = rows[ri+1];
+      row.forEach(function(val,ci){
+        const addr = XLSX.utils.encode_cell({r:ri+1,c:ci});
+        if(!ws[addr]) ws[addr]={v:val,t:"s"};
+        const isCheckCol = ci>=6&&ci<=9;
+        const isCheck = String(val).startsWith("✓");
+        const isCross = String(val)==="✗";
+        if(isCheckCol&&isCheck) ws[addr].s = greenStyle;
+        else if(isCheckCol&&isCross) ws[addr].s = redStyle;
+        else ws[addr].s = ri%2===1 ? altStyle : dataStyle;
+      });
+    });
+
+    const sheetName = "פלוגה "+unit;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
-  const blob = new Blob([BOM+csv],{type:"text/csv;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const dateStr = new Date().toLocaleDateString("he-IL").split("/").join("-");
-  a.href=url; a.download="מצב_חיילים_"+dateStr+".csv"; a.click();
-  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  UNITS.forEach(addSheet);
+
+  // Summary sheet
+  const sumRows = [["פלוגה","סה"כ חיילים","חתמו","בוחן תקף","יציאה","אושר","% השלמה"]];
+  UNITS.forEach(function(unit){
+    const us = soldiers.filter(function(s){return s.unit===unit&&s.name;});
+    const total = us.length;
+    const signed = us.filter(function(s){return !!sigs[s.id];}).length;
+    const tested = us.filter(function(s){return certs[s.id]&&certs[s.id].img;}).length;
+    const exited = us.filter(function(s){
+      return Object.values(exits).some(function(f){return f.soldierId===s.id&&f.soldierSig;});
+    }).length;
+    const appr = us.filter(function(s){
+      return Object.values(exits).some(function(f){return f.soldierId===s.id&&f.status==="אושר";});
+    }).length;
+    const pct = total>0 ? Math.round((signed+tested+exited+appr)/(total*4)*100)+"%" : "—";
+    sumRows.push(["פלוגה "+unit, total, signed, tested, exited, appr, pct]);
+  });
+  const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum["!cols"] = [14,16,12,14,12,12,14].map(function(w){return {wch:w};});
+  wsSum["!rtl"] = true;
+  sumRows[0].forEach(function(_,ci){
+    const addr = XLSX.utils.encode_cell({r:0,c:ci});
+    if(wsSum[addr]) wsSum[addr].s = hdrStyle;
+  });
+  XLSX.utils.book_append_sheet(wb, wsSum, "סיכום", true);
+  // Move summary to first
+  wb.SheetNames = ["סיכום"].concat(wb.SheetNames.filter(function(n){return n!=="סיכום";}));
+
+  XLSX.writeFile(wb, "מצב_חיילים_גדוד_9219_"+dateStr.replace(/\/g,"-")+".xlsx");
 }
 
 function downloadAllFormsZip(db, soldiers){
