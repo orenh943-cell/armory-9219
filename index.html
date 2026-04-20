@@ -13922,7 +13922,7 @@ function exportSoldiersExcel(soldiers, db){
   // Move summary to first
   wb.SheetNames = ["סיכום"].concat(wb.SheetNames.filter(function(n){return n!=="סיכום";}));
 
-  XLSX.writeFile(wb, "מצב_חיילים_גדוד_9219_"+dateStr.replace(/\/g,"-")+".xlsx");
+  XLSX.writeFile(wb, "מצב_חיילים_גדוד_9219_"+dateStr.split("/").join("-")+".xlsx");
 }
 
 function downloadAllFormsZip(db, soldiers){
