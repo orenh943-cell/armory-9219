@@ -7513,11 +7513,13 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const phone=phoneToWA(soldier.phone);
     if(!phone){alert("אין מספר טלפון לחייל זה");return;}
     const link="https://orenh943-cell.github.io/armory-9219";
-    const assigned=soldier.assigned||{};
+    // השתמש ב-db.assignments (Firebase) שמכיל את האביזרים המעודכנים
+    const assigned=db.assignments?.[soldier.id]||soldier.assigned||{};
     const compactData={};
     Object.entries(assigned).forEach(([name,val])=>{
-      const idx=EQ_COLS.indexOf(name);
+      const idx=EQ_COLS.indexOf(cleanItemName(name));
       if(idx>=0) compactData[idx]=val;
+      else compactData[name]=val;
     });
     // שימוש ב-btoa לקידוד קצר וללא תווים בעייתיים
     const encoded=btoa(JSON.stringify(compactData));
