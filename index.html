@@ -14053,12 +14053,12 @@ async function exportSoldiersExcelJS(soldiers, db){
   // helper
   function get_col(n){ return String.fromCharCode(64+n); }
 
-  // Move summary first
-  wb.orderSheets(function(a,b){
-    if(a.name==="סיכום") return -1;
-    if(b.name==="סיכום") return 1;
-    return 0;
-  });
+  // Move summary first — ExcelJS uses array splice
+  const sumIdx = wb.worksheets.findIndex(function(ws){return ws.name==="סיכום";});
+  if(sumIdx>0){
+    const sumSheet = wb.worksheets.splice(sumIdx,1)[0];
+    wb.worksheets.unshift(sumSheet);
+  }
 
   // Save
   const buf = await wb.xlsx.writeBuffer();
