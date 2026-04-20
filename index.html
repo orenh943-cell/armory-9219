@@ -7414,7 +7414,10 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const guarantors=db.bulkGuarantors||{};
     // Normalize unit names
     function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
-    return [...custom,...base].map(s=>{
+    // סנן כפילויות — custom כבר כלול ב-base דרך getSoldiers
+    const seen=new Set();
+    const unique=[...custom,...base].filter(s=>{ if(seen.has(s.id)) return false; seen.add(s.id); return true; });
+    return unique.map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
       // If Firebase has loaded assignments, use them (even if empty = reset happened)
       // If Firebase hasn't loaded yet, fall back to built-in s.assigned
