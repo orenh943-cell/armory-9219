@@ -7481,27 +7481,16 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       }
     }).catch(()=>{});
 
-    // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
-    fbGet("db/armoryMasterSeededV2").then(seededV2=>{
-      if(!seededV2){
-        // First load with V2 — force zero all totals in Firebase
-        fbSet("db/armoryMaster", ARMORY_MASTER).catch(()=>{});
-        fbSet("db/armoryMasterSeededV2", true).catch(()=>{});
-        setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
+    // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
+    fbGet("db/armoryMaster").then(master=>{
+      if(master && Object.keys(master).length>0){
+        if(master) Object.entries(master).forEach(([name,v])=>{ if(v.makat) { window._makatCache=window._makatCache||{}; window._makatCache[name]=String(v.makat); } });
+        setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
       } else {
-        // Already seeded V2 — use Firebase data
-        fbGet("db/armoryMaster").then(master=>{
-          if(master && Object.keys(master).length>0){
-            // Sync makat cache for getMakat() to use
-            if(master) Object.entries(master).forEach(([name,v])=>{ if(v.makat) { window._makatCache=window._makatCache||{}; window._makatCache[name]=String(v.makat); } });
-            setDb(prev=>({...prev, armoryMaster: master, _armoryMasterLoaded: true}));
-          } else {
-            setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
-          }
-        }).catch(()=>{
-          setDb(prev=>({...prev, armoryMaster: ARMORY_MASTER, _armoryMasterLoaded: true}));
-        });
+        setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
       }
+    }).catch(()=>{
+      setDb(prev=>({...prev, armoryMaster: {}, _armoryMasterLoaded: true}));
     });
     const off9 = ()=>{}; // placeholder (no listener needed for armoryMaster)
     const off10 = fbOn("db/weaponLocations", (locs)=>{
