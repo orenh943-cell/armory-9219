@@ -7462,13 +7462,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       }
     }).catch(()=>{});
 
-    // DEBUG: ספור M4 מ-assignments
-    fbGet("db/assignments").then(allAsgn=>{
-      if(!allAsgn) return;
-      const m4ids = Object.entries(allAsgn).filter(([,a])=>
-        Object.keys(a||{}).some(k=>k==="M4"||k.startsWith("M4 "))
-      ).map(([id])=>id);
-      console.log("[DEBUG] M4 בשיוכים: "+m4ids.length+" חיילים:", m4ids.slice(0,5)+"...");
+    // DEBUG: ספור M4 מ-unitItems
+    fbGet("db/unitItems").then(unitItems=>{
+      if(!unitItems) return;
+      const m4units = Object.entries(unitItems).filter(([,v])=>
+        (v.n||v.name||"")==="M4"
+      );
+      console.log("[DEBUG] M4 ב-unitItems: "+m4units.length+" רשומות:");
+      m4units.forEach(([k,v])=>console.log("  key="+k+" serial="+v.s+" unit="+v.u));
     }).catch(()=>{});
 
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
