@@ -2136,18 +2136,21 @@ function DailyLiveStock({db, soldiers}){
   // בנה פריטים מ-DAILY_LEFT + DAILY_RIGHT (עם מק"ט ושם מלא)
   const allDailyItems = [...(window.DAILY_LEFT_DATA||[]),...(window.DAILY_RIGHT_DATA||[])];
 
-  // הוסף פריטים מ-armoryMaster שלא ב-DAILY
-  const dailyAliases = new Set(allDailyItems.map(i=>cleanItemName(i.alias||i.name||"")));
-  Object.entries(masterData).forEach(([name])=>{
-    const clean=cleanItemName(name);
-    if(!dailyAliases.has(clean) && liveCounts[clean]>0){
-      allDailyItems.push({msd:"—", makat:masterData[name]?.makat||"", fullname:name, alias:name});
-    }
-  });
+  // סנן — רק פריטים מהרשימה המאושרת (לפי מק"ט)
+  const VALID_MAKATS = new Set(["100012066","100012073","100012332","100014050","100015536",
+    "100020009","100020017","100021013","100022206","100024225","100025019","100025132",
+    "146737000","146737001","146749000","146749001","146749010",
+    "146755000","146755013","146755014","146764000","146764009",
+    "100070154","100070170","100070537","100070740","100070758",
+    "100071258","100072369","100072505","100075881","100075946",
+    "100075962","100075989","100077555","100077889","100079275",
+    "100081954","100083523","100083582","100083680","100087863",
+    "100087871","100088983","146360017","100069180","100075431",
+    "100077656","100079330","100088843"]);
 
   // סנן וחשב
   const seenAliases = new Set();
-  const rows = allDailyItems.map(item=>{
+  const rows = allDailyItems.filter(item=>item.makat && VALID_MAKATS.has(String(item.makat))).map(item=>{
     const alias = cleanItemName(item.alias||item.name||"");
     if(seenAliases.has(alias)) return null;
     seenAliases.add(alias);
