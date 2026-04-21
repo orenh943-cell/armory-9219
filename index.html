@@ -937,10 +937,10 @@ const USERS = {
 };
 // הרשאות ברירת מחדל לפי תפקיד
 const DEFAULT_PERMS = {
-  admin:   {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:true, canManagePerms:true, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:true, isMagad:true, canViewInspection:true, canViewActLog:true, canViewDaily:true, canViewCabinets:true},
-  manager: {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:false, canManagePerms:false, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:false, isMagad:false, canViewInspection:true, canViewActLog:false, canViewDaily:true, canViewCabinets:true},
-  viewer:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:false, canViewSignatures:false, canViewBroken:false, canViewInventory:false, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:false, canViewActLog:false, canViewDaily:false, canViewCabinets:false},
-  custom:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:false, canViewSignatures:false, canViewBroken:false, canViewInventory:false, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:false, canViewActLog:false, canViewDaily:false, canViewCabinets:false, canViewArmoryDash:false, canViewVisut:false},
+  admin:   {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:true, canManagePerms:true, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canEditBroken:true, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:true, isMagad:true, canViewInspection:true, canViewActLog:true, canViewDaily:true, canViewCabinets:true},
+  manager: {canCheckout:true, canReturn:true, canSign:true, canBulkSign:true, canEdit:false, canManagePerms:false, canDownload:true, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canEditBroken:false, canViewInventory:true, canSendToUnit:false, canFillExitForm:true, canApproveExitForm:true, canCommanderDecide:false, isMagad:false, canViewInspection:true, canViewActLog:false, canViewDaily:true, canViewCabinets:true},
+  viewer:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:true, canViewSignatures:true, canViewBroken:true, canEditBroken:false, canViewInventory:true, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:true, canViewActLog:false, canViewDaily:true, canViewCabinets:true},
+  custom:  {canCheckout:false, canReturn:false, canSign:false, canBulkSign:false, canEdit:false, canManagePerms:false, canDownload:false, canViewSoldiers:false, canViewSignatures:false, canViewBroken:false, canEditBroken:false, canViewInventory:false, canSendToUnit:false, canFillExitForm:false, canApproveExitForm:false, canCommanderDecide:false, isMagad:false, canViewInspection:false, canViewActLog:false, canViewDaily:false, canViewCabinets:false, canViewArmoryDash:false, canViewVisut:false},
 };
 function getPerms(auth, db){
   const base = DEFAULT_PERMS[auth.role]||DEFAULT_PERMS.viewer;
@@ -958,7 +958,8 @@ function canEditUnit(auth, db, unit){
 }
 // מחיקות — רק אורן
 function canDelete(auth){
-  return auth?.username==="אורן" || auth?.name==="אורן חלפון";
+  // רק admin עם canManagePerms — לא לפי שם
+  return auth?.role==="admin";
 }
 function canSignAdmin(auth){
   // אורן, מתן, יעקב בלבד
@@ -1343,9 +1344,8 @@ const SAFE_BULK_COLLECTIONS = ["assignments","customSoldiers","brokenItems","bul
 
 function saveDB(db){
   const safe={assignments:{},signatures:{},customSoldiers:{},soldiers:{},serials:[],nameMakat:{},brokenItems:[],bulkGuarantors:{},userPerms:{},dynamicUsers:{},unitItems:{},armoryMaster:{},weaponLocations:{},cabinets:{},cabinetNames:{},exitForms:{},actLog:{},inspections:{},inspectionFamilies:null,userPasswords:{},testCerts:{},userSigs:{},sigHistory:{},polls:{},externalSigns:{},deletedUsers:{},assignmentMeta:{},visutRequests:{},visutUsers:{},...db};
-  try{localStorage.setItem(DB_KEY,JSON.stringify(safe));}catch(e){}
-  // Only write bulk-safe collections
-  fbSet("db/assignments", sanitizeForFirebase(safe.assignments)).catch(e=>console.warn("FB err:",e));
+  // Only write bulk-safe collections to Firebase — NO localStorage
+  fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/customSoldiers", safe.customSoldiers).catch(e=>console.warn("FB err:",e));
   fbSet("db/brokenItems", safe.brokenItems).catch(e=>console.warn("FB err:",e));
   fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
@@ -1925,42 +1925,31 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     const allUsersMap = {...(db.dynamicUsers||{}), ...USERS};
     const ADMIN_USERNAMES = ["אורן","מתן","יעקב"];
 
-    // 1. אם המשתמש המחובר הוא אחד מהמנפקים — הוא המנפק
+    // מנפק = רק אורן/מתן/יעקב בלבד
+    // 1. אם המחובר הוא אחד מהשלושה — הוא המנפק
     // 2. אחרת — לפי linkIssuer (מי ששלח את הקישור)
+    // 3. אחרים לא יכולים להיות מנפק
     const currentUser = auth?.username||"";
     const linkIssuer = auth?.linkIssuer || (() => {
       try{ return sessionStorage.getItem("link_issuer")||""; }catch(e){ return ""; }
     })();
 
+    // בחר מנפק — רק מהשלושה
     const effectiveIssuer = ADMIN_USERNAMES.includes(currentUser) ? currentUser
                           : ADMIN_USERNAMES.includes(linkIssuer) ? linkIssuer
-                          : linkIssuer || currentUser;
+                          : null; // לא אחד מהשלושה — אין מנפק מוגדר
 
-    let issuerDisplay = "אחראי ארמון";
+    let issuerDisplay = "ארמון גדוד 9219";
     let issuerSigUsername = null;
 
-    if(ADMIN_USERNAMES.includes(effectiveIssuer)){
+    if(effectiveIssuer && ADMIN_USERNAMES.includes(effectiveIssuer)){
       const u = allUsersMap[effectiveIssuer];
       issuerDisplay = u?.name || effectiveIssuer;
       issuerSigUsername = effectiveIssuer;
-    } else if(effectiveIssuer){
-      // משתמש דינמי עם הרשאה — חפש מנפק ראשי
-      const u = allUsersMap[effectiveIssuer];
-      if(u){
-        issuerDisplay = u.name || effectiveIssuer;
-        issuerSigUsername = effectiveIssuer;
-      } else {
-        // fallback — חפש אחראי ארמון
-        const armoryEntry = Object.entries(allUsersMap).find(([uname, u2]) => {
-          const perms = db.userPerms?.[uname]||{};
-          return (u2.roleTitle==="אחראי ארמון") || (perms._roleTitle==="אחראי ארמון");
-        });
-        if(armoryEntry){
-          const [uname, u2] = armoryEntry;
-          issuerDisplay = u2.name || uname;
-          issuerSigUsername = uname;
-        }
-      }
+    } else {
+      // כל מורשה אחר — המנפק הוא אורן חלפון
+      issuerDisplay = "אורן חלפון";
+      issuerSigUsername = "אורן";
     }
 
     // שלוף חתימה שמורה מ-Firebase ישירות ושמור
@@ -1983,7 +1972,9 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         testCerts:newTestCerts
       };
       fbSet("db/signatures/"+auth.soldierId, sigEntry).catch(e=>console.warn("sig err:",e));
-      // נקה sessionStorage כדי שרענון לא יחזיר לדף חתימה
+      // שמור עדכון remaining ל-Firebase
+      fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(e=>console.warn("guarantors err:",e));
+      // נקה sessionStorage
       try{
         sessionStorage.removeItem("link_sign");
         sessionStorage.removeItem("link_issuer");
@@ -1991,7 +1982,6 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         sessionStorage.removeItem("link_exit");
         sessionStorage.removeItem("link_bulksign");
       }catch(e){}
-      try{localStorage.setItem(DB_KEY,JSON.stringify(newDb));}catch(e){}
       setDb(newDb);setSigImg(sigData);setStep("done");
       logAction("חתימה", soldierData.name+" חתם על נשק", soldierData.name);
     };
@@ -2142,7 +2132,13 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [note, setNote] = useState("");
   const [extraItems, setExtraItems] = useState([]); // פריטים נוספים שנוסיפו ידנית
   const [showAddItem, setShowAddItem] = useState(false);
-  const [hiddenMsds, setHiddenMsds] = useState(new Set()); // מסדים מוסתרים
+  const [hiddenMsds, setHiddenMsds] = useState(()=>{
+    // טען הסתרות שמורות
+    const saved = db.dailyHiddenMsds;
+    return saved ? new Set(saved) : new Set();
+  }); // מסדים מוסתרים
+  const [lockedTotals, setLockedTotals] = useState({}); // {msd: overrideTotal}
+  const [editingTotal, setEditingTotal] = useState(null); // msd being edited
   const [addItemSearch, setAddItemSearch] = useState("");
   // בעל תפקיד סופר
   const [soferName, setSoferName] = useState("");
@@ -2151,6 +2147,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
 
   // ===== חישוב מלאי יומי — לפי מק"ט ישירות =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
+  // הוסף חיילים עם ערבות מרוכזת ל-signedIds
+  Object.values(db.bulkGuarantors||{}).forEach(g=>{
+    Object.keys(g.remaining||{}).forEach(id=>signedIds.add(id));
+    Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
+  });
   const allSolsDaily = getSoldiers(db);
   const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
 
@@ -2231,7 +2232,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const dailyTotal = (DAILY_ITEMS||[]).find(d=>
       cleanItemName(d.name)===amName || cleanItemName(d.name)===cleanAlias
     )?.total||0;
-    const total = masterTotal>0 ? masterTotal : dailyTotal;
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
+      : masterTotal>0 ? masterTotal : dailyTotal;
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -2239,6 +2241,13 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const ok = total>0 ? (stock>=0) : null;
     return {...item, alias, total, loans, stock, ok};
   }
+  // שמור הסתרות ב-Firebase
+  React.useEffect(()=>{
+    if(hiddenMsds.size>0){
+      fbSet("db/dailyHiddenMsds", [...hiddenMsds]).catch(()=>{});
+    }
+  },[hiddenMsds]);
+
   const leftCalc = DAILY_LEFT.filter(i=>!hiddenMsds.has(i.msd)).map(calcItem);
   const rightCalc = DAILY_RIGHT.filter(i=>!hiddenMsds.has("R_"+i.msd)).map(calcItem);
   const extraCalc = extraItems.map(calcItem);
@@ -2369,13 +2378,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
               <input value={editDate} onChange={e=>setEditDate(e.target.value)}
                 style={{...S.input,marginBottom:0,width:100,fontSize:"var(--text-sm)",padding:"3px 6px"}}/>
             </div>
-            {type==="close"&&(
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>שעה:</span>
-                <input value={editTime} onChange={e=>setEditTime(e.target.value)}
-                  style={{...S.input,marginBottom:0,width:70,fontSize:"var(--text-sm)",padding:"3px 6px"}}/>
-              </div>
-            )}
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>שעה:</span>
+              <input value={editTime} onChange={e=>setEditTime(e.target.value)}
+                style={{...S.input,marginBottom:0,width:70,fontSize:"var(--text-sm)",padding:"3px 6px"}}/>
+            </div>
           </div>
         </div>
       </div>
@@ -2509,7 +2516,27 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                         title="הסר פריט">✕</button>
                     </span>
                   </td>
-                  <td style={{...TDC(),background:bg}}>{item.total||""}</td>
+                  <td style={{...TDC(),background:bg,cursor:"pointer",position:"relative"}}
+                    onClick={()=>setEditingTotal(editingTotal===item.msd?null:item.msd)}
+                    title="לחץ לעריכה/נעילה">
+                    {editingTotal===item.msd?(
+                      <input autoFocus type="number" defaultValue={lockedTotals[item.msd]??item.total??0}
+                        style={{width:50,textAlign:"center",border:"1px solid var(--color-accent-fg)",borderRadius:4,fontSize:11,padding:"1px 3px"}}
+                        onBlur={e=>{
+                          const v=parseInt(e.target.value);
+                          if(!isNaN(v)) setLockedTotals(p=>({...p,[item.msd]:v}));
+                          setEditingTotal(null);
+                        }}
+                        onKeyDown={e=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape")setEditingTotal(null);}}/>
+                    ):(
+                      <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                        {lockedTotals[item.msd]!==undefined?
+                          <span style={{color:"var(--color-accent-fg)",fontWeight:800}}>🔒{lockedTotals[item.msd]}</span>:
+                          <span style={{fontWeight:700}}>{item.total||""}</span>
+                        }
+                      </span>
+                    )}
+                  </td>
                   <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{item.loans||0}</td>
                   <td style={{...TDC(item.ok),background:bg,color:item.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{item.total!=null?item.stock:""}</td>
                   <td style={{...TD(),background:bg}}></td>
@@ -2586,7 +2613,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       </div>
 
       <div style={{display:"flex",gap:10}}>
-        <button onClick={handlePrint} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
+        <button onClick={()=>{
+          logAction(type==="open"?"פתיחת_ארמון":"סגירת_ארמון",
+            (type==="open"?"פתיחת ארמון":"סגירת ארמון")+" — "+editDate+" "+editTime,
+            auth?.name||"מנהל");
+          handlePrint();
+        }} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
         <button onClick={onClose} style={{...S.btn(),flex:1}}>סגור</button>
       </div>
 
@@ -3235,7 +3267,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                       if(gKey) delete newBG[gKey];
                     });
                     const ndb={...db,bulkGuarantors:newBG};
-                    saveDB(ndb); onSave(ndb);
+                    onSave(ndb);
+                    fbSet("db/bulkGuarantors", sanitizeForFirebase(newBG)).catch(()=>{});
+                    logAction("זיכוי_ערבות_מלא", "זיכוי שובר מלא של "+soldier.name, auth?.name);
                   }} style={{...S.btn("red"),padding:"5px 10px",fontSize:"var(--text-sm)"}}>✅ זיכוי שובר מלא</button>
                 </div>
               </div>
@@ -3258,10 +3292,15 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                         {remIds.map(id=>{
                           const s=allSols.find(x=>x.id===id);
                           const sName=s?s.name:id;
+                          // ציוד שהנציג ערב עליו לחייל זה
+                          const soldierItems = g.soldierAssigned?.[id] || db.assignments?.[id] || s?.assigned || {};
+                          const wepItems = Object.entries(soldierItems).filter(([k])=>WEAPON_KEYS.includes(cleanItemName(k)));
+                          const accItems = Object.entries(soldierItems).filter(([k])=>!WEAPON_KEYS.includes(cleanItemName(k)));
                           return (
-                            <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #1a1a2e"}}>
-                              <span style={{fontSize:"var(--text-sm)",color:"var(--color-warning-fg)"}}>⚠️ {sName}</span>
-                              <button onClick={()=>{
+                            <div key={id} style={{padding:"6px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                                <span style={{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-warning-fg)"}}>⚠️ {sName}</span>
+                                <button onClick={()=>{
                                 const gKey2=Object.keys(db.bulkGuarantors||{}).find(k=>{
                                   const gg=db.bulkGuarantors[k];
                                   return gg.repId===soldier.id && gg.remaining && gg.remaining[id];
@@ -3272,8 +3311,24 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                                 const newG={...db.bulkGuarantors[gKey2],remaining:newRem};
                                 const newBG={...db.bulkGuarantors,[gKey2]:newG};
                                 const ndb={...db,bulkGuarantors:newBG};
-                                saveDB(ndb); onSave(ndb);
+                                onSave(ndb);
+                                fbSet("db/bulkGuarantors", sanitizeForFirebase(newBG)).catch(()=>{});
+                                logAction("הסר_ערבות", "הוסר "+sName+" מערבות "+soldier.name, auth?.name);
                               }} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)"}}>הסר ערבות</button>
+                              </div>
+                              {/* רשימת ציוד */}
+                              <div style={{display:"flex",gap:4,flexWrap:"wrap",paddingRight:16,marginTop:2}}>
+                                {wepItems.map(([k,v])=>(
+                                  <span key={k} style={{background:"var(--color-danger-bg)",color:"var(--color-danger-fg)",borderRadius:6,padding:"1px 7px",fontSize:10,fontWeight:700}}>
+                                    {cleanItemName(k)}{v&&v!==1?" "+v:""}
+                                  </span>
+                                ))}
+                                {accItems.map(([k,v])=>(
+                                  <span key={k} style={{background:"var(--color-bg-subtle)",color:"var(--color-text-secondary)",borderRadius:6,padding:"1px 7px",fontSize:10}}>
+                                    {cleanItemName(k)}{v&&v!==1?" "+v:""}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           );
                         })}
@@ -3746,9 +3801,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 if(entry2){const [uname,u]=entry2;issuerSigUsername2=uname;issuerDisplay2=u.name||uname;}
               }
               const _savePartial = (issuerSig2) => {
-                const sigEntry={sigData,signedAt,partial:true,items:Object.keys(partialItems),issuerName:issuerDisplay2,...(issuerSig2?{issuerSig:issuerSig2}:{})};
+                const sigEntry={sigData,signedAt,partial:true,
+                  items:Object.keys(partialItems),
+                  assignedItems:partialItems,
+                  issuerName:issuerDisplay2,
+                  ...(issuerSig2?{issuerSig:issuerSig2}:{})};
                 const ndb={...db,signatures:{...(db.signatures||{}),[soldier.id]:sigEntry}};
-                saveDB(ndb); onSave(ndb);
+                onSave(ndb);
                 fbSet("db/signatures/"+soldier.id, sigEntry).catch(()=>{});
                 logAction("חתימה_חלקית", "חתימה חלקית של "+soldier.name+" על: "+Object.keys(partialItems).map(k=>cleanItemName(k)).join(", "), auth?.name);
                 setShowPartialSign(false); setPartialSel([]);
@@ -4196,7 +4255,7 @@ function AddSoldierModal({db, onSave, onClose}){
   }
 
   const [saving, setSaving] = React.useState(false);
-  function save(){
+  async function save(){
     if(saving) return; // מניעת לחיצה כפולה
     if(!form.firstName.trim()){setErr("חסר שם פרטי");return;}
     if(!form.lastName.trim()){setErr("חסר שם משפחה");return;}
@@ -4204,31 +4263,42 @@ function AddSoldierModal({db, onSave, onClose}){
     if(!form.phone.trim()){setErr("חסר טלפון");return;}
     if(!form.unit.trim()){setErr("חסרה פלוגה");return;}
     if(!form.squad.trim()||form.squad==="__custom__"){setErr("חסרה מחלקה");return;}
-    const existingCustom = db.customSoldiers?.[form.id.trim()];
-    const existingRaw = getSoldiers(db).find(s=>s.id===form.id.trim());
-    const existingAssign = db.assignments?.[form.id.trim()]!==undefined;
-    if(existingCustom||existingRaw||existingAssign){
-      setErr("מספר אישי "+form.id.trim()+" כבר קיים במערכת!");
+    const tid = form.id.trim();
+    const existingRaw = getSoldiers(db).find(s=>s.id===tid);
+    const existingInDb = db.soldiers?.[tid];
+    const existingCustom = db.customSoldiers?.[tid];
+    const wasDeleted = db.deletedSoldiers?.[tid];
+    if(existingRaw||existingInDb||existingCustom){
+      setErr("מספר אישי "+tid+" כבר קיים במערכת!");
       return;
+    }
+    // אם היה מחוק — הסר מרשימת המחוקים
+    if(wasDeleted){
+      const newDeleted={...db.deletedSoldiers};
+      delete newDeleted[tid];
+      fbSet("db/deletedSoldiers", newDeleted).catch(()=>{});
     }
     const assigned={};
     items.filter(i=>i.name).forEach(i=>{assigned[i.name]=i.serial||1;});
     // Save to db as a new soldier entry
-    const newSoldier={id:form.id.trim(),name:(form.firstName.trim()+" "+form.lastName.trim()).trim(),unit:form.unit,squad:form.squad.trim()==="__custom__"?"":form.squad.trim(),phone:form.phone.trim(),assigned:{}};
-    const newDb={
-      ...db,
-      assignments:{...(db.assignments||{}),[form.id.trim()]:assigned},
-      customSoldiers:{...(db.customSoldiers||{}),[form.id.trim()]:newSoldier},
-      soldiers:{...(db.soldiers||{}),[form.id.trim()]:newSoldier},
-    };
+    const newSoldier={id:tid,name:(form.firstName.trim()+" "+form.lastName.trim()).trim(),unit:form.unit,squad:form.squad.trim()==="__custom__"?"":form.squad.trim(),phone:form.phone.trim(),assigned:{}};
     setSaving(true);
     try{
-      saveDB(newDb);onSave(newDb);
-      logAction("הוספת_חייל", `הוסף חייל: ${(form.firstName+" "+form.lastName).trim()} (${form.id.trim()}) פלוגה ${form.unit}`, "מערכת");
-      fbSet("db/soldiers/"+newSoldier.id, newSoldier).catch(()=>{});
-      fbSet("db/customSoldiers/"+newSoldier.id, newSoldier).catch(()=>{}); // backward compat
-      fbSet("db/assignments/"+newSoldier.id, assigned).catch(()=>{});
-      setTimeout(()=>{ setSaving(false); onClose(); }, 500);
+      // שמירה רק ב-Firebase — מקום אחד
+      await Promise.all([
+        fbSet("db/soldiers/"+tid, newSoldier),
+        fbSet("db/assignments/"+tid, assigned),
+      ]);
+      // עדכן state מקומי
+      const newDb={
+        ...db,
+        soldiers:{...(db.soldiers||{}),[tid]:newSoldier},
+        assignments:{...(db.assignments||{}),[tid]:assigned},
+      };
+      onSave(newDb);
+      logAction("הוספת_חייל", "הוסף חייל: "+newSoldier.name+" ("+tid+") פלוגה "+form.unit, "מערכת");
+      setSaving(false);
+      onClose();
     }catch(e){ console.error("save soldier error:",e); setSaving(false); alert("שגיאה בהוספת חייל"); }
   }
 
@@ -5106,7 +5176,7 @@ function BrokenEquipmentTab({db, setDb, soldiers, auth}){
           <h2 style={{margin:0,fontSize:"var(--text-xl)",fontWeight:800}}>🔧 אמצעי תקול</h2>
           {openCount>0&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-base)",marginTop:2}}>{openCount} תקלות פתוחות</div>}
         </div>
-        {perms.canEdit&&<button onClick={()=>setShowForm(true)} style={{...S.btn("orange")}}>+ דווח תקלה</button>}
+        {(perms.canEditBroken||perms.canEdit)&&<button onClick={()=>setShowForm(true)} style={{...S.btn("orange")}}>+ דווח תקלה</button>}
       </div>
 
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
@@ -12850,7 +12920,7 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
   const [mpNote, setMpNote] = React.useState("");
   const [decision, setDecision] = React.useState(""); // מגד בלבד
   const [showPad, setShowPad] = React.useState(false);
-  const [sig, setSig] = React.useState(null);
+  const [sig, setSig] = React.useState(()=>db.userSigs?.[auth?.username]||null);
   const [done, setDone] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
@@ -12899,6 +12969,11 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
       }
       fbSet("db/exitForms/"+id, newForms[id]).catch(e=>console.warn(e));
     });
+    logAction(
+      isMagad?"אישור_מגד_מרוכז":"אישור_מפ_מרוכז",
+      formatSigner(auth,db)+" "+(isMagad?(decision==="מאשר"?"אישר":"דחה"):"אישר")+" "+selected.size+" טפסי יציאה",
+      formatSigner(auth,db)
+    );
     setDb({...db, exitForms:newForms});
     setSaving(false);
     setDone(true);
@@ -14393,7 +14468,7 @@ const PERM_LABELS = {
 };
 
 const PERM_GROUPS = [
-  {label:"👁️ צפייה כללית",    perms:["canViewSoldiers","canViewSignatures","canViewBroken","canViewInventory"]},
+  {label:"👁️ צפייה כללית",    perms:["canViewSoldiers","canViewSignatures","canViewBroken","canEditBroken","canViewInventory"]},
   {label:"✏️ עריכה ושיוך",    perms:["canEdit","canCheckout","canReturn","canDownload"]},
   {label:"✍️ חתימות נשק",     perms:["canSign","canBulkSign","canSendToUnit"]},
   {label:"🔍 בחינות ודוחות",  perms:["canViewInspection","canViewActLog","canViewDaily","canViewCabinets"]},
@@ -14586,15 +14661,47 @@ function PermissionsTab({db, setDb, auth}){
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [soldiers] = useState(()=>getSoldiers(loadDB()||{}));
 
+  // תלויות בין הרשאות
+  const PERM_DEPS = {
+    canSign:          ["canViewSoldiers"],
+    canBulkSign:      ["canViewSoldiers","canSign"],
+    canCheckout:      ["canViewSoldiers","canViewInventory"],
+    canReturn:        ["canViewSoldiers","canViewInventory"],
+    canEdit:          ["canViewSoldiers"],
+    canEditBroken:    ["canViewBroken"],
+    canApproveExitForm:["canFillExitForm"],
+    canCommanderDecide:["canFillExitForm"],
+    isMagad:          ["canCommanderDecide","canApproveExitForm","canFillExitForm"],
+    canManagePerms:   ["canViewSoldiers"],
+  };
+  // אם פותחים הרשאה — פותחים גם תלויות
+  // אם סוגרים הרשאה — סוגרים גם מה שתלוי בה
+  const PERM_REVDEPS = {}; // מה תלוי בהרשאה זו
+  Object.entries(PERM_DEPS).forEach(([p, deps])=>{
+    deps.forEach(dep=>{
+      if(!PERM_REVDEPS[dep]) PERM_REVDEPS[dep]=[];
+      PERM_REVDEPS[dep].push(p);
+    });
+  });
+
   function togglePerm(username, perm, isDynamic){
     const baseRole = isDynamic ? (db.dynamicUsers?.[username]?.role||"viewer") : (USERS[username]?.role||"viewer");
     const base = DEFAULT_PERMS[baseRole]||{};
     const current = db.userPerms?.[username] || {};
     const merged = {...base,...current};
     const newVal = !merged[perm];
-    const newPerms = {...(db.userPerms||{}), [username]: {...current, [perm]: newVal}};
+    let updated = {...current, [perm]: newVal};
+    if(newVal){
+      // פותחים — פתח גם תלויות
+      (PERM_DEPS[perm]||[]).forEach(dep=>{ updated[dep]=true; });
+    } else {
+      // סוגרים — סגור גם מה שתלוי בנו
+      (PERM_REVDEPS[perm]||[]).forEach(dep=>{ updated[dep]=false; });
+    }
+    const newPerms = {...(db.userPerms||{}), [username]: updated};
     const ndb = {...db, userPerms: newPerms};
-    saveDB(ndb); setDb(ndb);
+    setDb(ndb);
+    fbSet("db/userPerms/"+username, updated).catch(()=>{});
   }
 
   function addUser(){
@@ -14608,7 +14715,9 @@ function PermissionsTab({db, setDb, auth}){
       dynamicUsers:{...(db.dynamicUsers||{}),[newUser.username.trim()]:u},
       userPerms: rolePreset ? {...(db.userPerms||{}),[newUser.username.trim()]:rolePreset} : db.userPerms
     };
-    saveDB(ndb); setDb(ndb);
+    setDb(ndb);
+    fbSet("db/dynamicUsers/"+newUser.username.trim(), u).catch(()=>{});
+    if(rolePreset) fbSet("db/userPerms/"+newUser.username.trim(), rolePreset).catch(()=>{});
     // Show share modal after creating user
     setShareUser({username:newUser.username.trim(), name:newUser.name.trim(), pass:newUser.pass.trim(), phone:newUser.phone||""});
     setNewUser({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",editUnit:"הכל",roleTitle:"",rank:"",phone:""});
@@ -14622,7 +14731,9 @@ function PermissionsTab({db, setDb, auth}){
     // mark static users as deleted
     const deletedUsers={...(db.deletedUsers||{}), [username]:true};
     const ndb={...db,dynamicUsers:newDyn,userPerms:newPerms,deletedUsers};
-    saveDB(ndb); setDb(ndb);
+    setDb(ndb);
+    fbSet("db/dynamicUsers/"+username, null).catch(()=>{});
+    fbSet("db/userPerms/"+username, null).catch(()=>{});
     fbSet("db/deletedUsers/"+username, true).catch(()=>{});
   }
 
@@ -15307,7 +15418,7 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const [repPhone,setRepPhone]=React.useState("");
   const [selectedUnit,setSelectedUnit]=React.useState("הכל");
   const [repSuggestions,setRepSuggestions]=React.useState([]);
-  const [sigData,setSigData]=React.useState(null);
+  const [sigData,setSigData]=React.useState(()=>db.userSigs?.[auth?.username]||null);
   const [showPad,setShowPad]=React.useState(false);
   const [step,setStep]=React.useState("select"); // select, sign, done
   const [manualMode,setManualMode]=React.useState(false);
