@@ -2156,11 +2156,18 @@ function DailyLiveStock({db, soldiers}){
     });
   });
 
-  // בנה רשימת פריטים — total מ-armoryMaster (Firebase) בלבד
+  // ספור סידוריים מ-db/serials — זה המקור האמיתי לכמות
+  const serialCounts = {};
+  getSerials(db).forEach(s=>{
+    const n = cleanItemName(s.name);
+    if(n) serialCounts[n] = (serialCounts[n]||0)+1;
+  });
+
+  // בנה רשימת פריטים — total = ספירת סידוריים מ-Firebase
   const rows = Object.entries(masterData)
     .map(([name,info])=>{
       const clean = cleanItemName(name);
-      const total = info.total||0; // רק מ-armoryMaster/total ב-Firebase
+      const total = serialCounts[clean]||0; // ספירת סידוריים בפועל
       if(!total) return null;
       const loans = allLoans[clean]||0;
       const stock = total - loans;
@@ -2331,12 +2338,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: ספירה חיה (assignments+unitItems) — זה המלאי האמיתי
+    // total: ספירת סידוריים מ-db/serials — זה המקור האמיתי
     // lockedTotals עוקף אם הוגדר ידנית
-    const amName2 = cleanItemName(armEntry?.name || alias);
-    const liveT = (liveByName[amName2]||0) + (amName2!==cleanItemName(alias)?(liveByName[cleanItemName(alias)]||0):0);
+    const serialCount = getSerials(db).filter(s=>
+      cleanItemName(s.name)===amName || cleanItemName(s.name)===cleanAlias
+    ).length;
     const masterTotal = armEntry?.total||0;
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : (liveT>0?liveT:masterTotal);
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
+      : serialCount>0 ? serialCount : masterTotal;
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -2619,33 +2628,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                         title="הסר פריט">✕</button>
                     </span>
                   </td>
-                  <td style={{...TDC(),background:bg,position:"relative"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
-                      {editingTotal===item.msd?(
-                        <input autoFocus type="number" defaultValue={lockedTotals[item.msd]??item.total??0}
-                          style={{width:48,textAlign:"center",border:"2px solid var(--color-accent-fg)",borderRadius:4,fontSize:11,padding:"1px 3px"}}
-                          onBlur={e=>{
-                            const v=parseInt(e.target.value);
-                            if(!isNaN(v)) setLockedTotals(p=>({...p,[item.msd]:v}));
-                            setEditingTotal(null);
-                          }}
-                          onKeyDown={e=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape")setEditingTotal(null);}}/>
-                      ):(
-                        <span style={{fontWeight:700,color:lockedTotals[item.msd]!==undefined?"var(--color-accent-fg)":"inherit"}}>
-                          {lockedTotals[item.msd]!==undefined?lockedTotals[item.msd]:item.total||""}
-                        </span>
-                      )}
-                      <button onClick={e=>{e.stopPropagation();
-                        if(lockedTotals[item.msd]!==undefined){
-                          setLockedTotals(p=>{const n={...p};delete n[item.msd];return n;});
-                        } else {
-                          setEditingTotal(item.msd);
-                        }
-                      }} title={lockedTotals[item.msd]!==undefined?"שחרר נעילה":"נעל כמות"}
-                        style={{background:"none",border:"none",cursor:"pointer",fontSize:10,padding:"0 1px",opacity:0.6,color:lockedTotals[item.msd]!==undefined?"var(--color-accent-fg)":"var(--color-text-muted)"}}>
-                        {lockedTotals[item.msd]!==undefined?"🔒":"✏️"}
-                      </button>
-                    </div>
+                  <td style={{...TDC(),background:bg}}>
+                    <span style={{fontWeight:700}}>{item.total||""}</span>
                   </td>
                   <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{item.loans||0}</td>
                   <td style={{...TDC(item.ok),background:bg,color:item.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{item.total!=null?item.stock:""}</td>
