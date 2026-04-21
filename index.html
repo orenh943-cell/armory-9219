@@ -2155,7 +2155,8 @@ function DailyLiveStock({db, soldiers}){
     if(seenAliases.has(alias)) return null;
     seenAliases.add(alias);
     const total = liveCounts[alias]||0;
-    if(!total && !hiddenItems.has(alias)) return null;
+    // הצג גם פריטים עם total=0 — כל פריט מהרשימה צריך להופיע
+    // if(!total && !hiddenItems.has(alias)) return null;
     const loans = allLoans[alias]||0;
     const stock = total - loans;
     return {...item, alias, total, loans, stock, ok:stock>=0, hidden:hiddenItems.has(alias)};
