@@ -7482,8 +7482,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     }).catch(()=>{});
 
     // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
-      }
-    }).catch(()=>{});
     fbGet("db/armoryMasterSeededV2").then(seededV2=>{
       if(!seededV2){
         // First load with V2 — force zero all totals in Firebase
