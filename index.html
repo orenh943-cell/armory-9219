@@ -2159,7 +2159,8 @@ function DailyLiveStock({db, soldiers}){
   // חשב liveTotal בדיוק כמו מלאי ארמון (assignments + unitItems)
   const liveCounts = {};
   allSols.forEach(s=>{
-    const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+    // רק db.assignments — ללא fallback ל-s.assigned הסטטי
+    const asgn=db.assignments?.[s.id]||{};
     Object.keys(asgn||{}).forEach(k=>{
       const n=cleanItemName(k); liveCounts[n]=(liveCounts[n]||0)+1;
     });
@@ -2285,7 +2286,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const liveByName = {};
   // מ-assignments — כל החיילים
   allSolsDaily.forEach(s=>{
-    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+    // רק db.assignments — ללא fallback ל-s.assigned הסטטי
+    const asgn = db.assignments?.[s.id]||{};
     Object.keys(asgn||{}).forEach(raw=>{
       const n = cleanItemName(raw);
       liveByName[n] = (liveByName[n]||0)+1;
@@ -2311,7 +2313,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   allSolsDaily.forEach(s=>{
     if(!signedIds.has(s.id)) return;
     const sig2 = db.signatures?.[s.id];
-    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+    const asgn = db.assignments?.[s.id]||{};
     // חתימה חלקית — ספור רק sig.items
     const itemsToCount = (sig2?.partial && sig2?.items)
       ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
@@ -7536,9 +7538,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const guarantors=db.bulkGuarantors||{};
     // Normalize unit names
     function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
-    // סנן כפילויות — custom כבר כלול ב-base דרך getSoldiers
+    // רק base (getSoldiers) — ללא custom שכבר כלול בתוכו
     const seen=new Set();
-    const unique=[...custom,...base].filter(s=>{ if(seen.has(s.id)) return false; seen.add(s.id); return true; });
+    const unique=base.filter(s=>{ if(seen.has(s.id)) return false; seen.add(s.id); return true; });
     return unique.map(s=>{
       const guarantee=Object.values(guarantors).find(g=>g.remaining&&g.remaining[s.id]);
       // If Firebase has loaded assignments, use them (even if empty = reset happened)
@@ -9805,7 +9807,8 @@ function VisutTab({db, setDb, soldiers, auth}){
         liveByUnit[u]=(liveByUnit[u]||0)+1;
       });
       allSols.forEach(s=>{
-        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        // רק db.assignments — מקור יחיד, ללא fallback ל-s.assigned הסטטי
+        const asgn=db.assignments?.[s.id]||{};
         Object.keys(asgn||{}).forEach(k=>{
           if(cleanItemName(k)===name) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
         });
@@ -9815,7 +9818,7 @@ function VisutTab({db, setDb, soldiers, auth}){
       const toSoldiers={}, toUnits={};
       UNITS.forEach(u=>{ toSoldiers[u]=0; toUnits[u]=0; });
       allSols.forEach(s=>{
-        const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+        const asgn=db.assignments?.[s.id]||{};
         Object.keys(asgn||{}).forEach(k=>{ if(cleanItemName(k)===name) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1; });
       });
       Object.values(db.unitItems||{}).forEach(v=>{
