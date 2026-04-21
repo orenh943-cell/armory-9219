@@ -2082,14 +2082,14 @@ function DailyLiveStock({db, soldiers}){
   });
   const [showAddItem, setShowAddItem] = React.useState(false);
   const [addSearch, setAddSearch] = React.useState("");
-  const [notes, setNotes] = React.useState(()=>{
-    try{ return JSON.parse(localStorage.getItem("dailyNotes")||"{}"); }catch(e){return {};}
-  });
+  const [notes, setNotes] = React.useState(db.dailyNotes||{});
+  // סנכרן כשdb.dailyNotes מתעדכן
+  React.useEffect(()=>{ if(db.dailyNotes) setNotes(db.dailyNotes); },[db.dailyNotes]);
   function setNote(alias, val){
     setNotes(prev=>{
       const n={...prev};
       if(val.trim()) n[alias]=val; else delete n[alias];
-      try{localStorage.setItem("dailyNotes",JSON.stringify(n));}catch(e){}
+      fbSet("db/dailyNotes", n).catch(()=>{});
       return n;
     });
   }
@@ -2389,7 +2389,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
 
   function handlePrint(){
-    const savedNotes = (() => { try{ return JSON.parse(localStorage.getItem("dailyNotes")||"{}"); }catch(e){return {};} })();
+    const savedNotes = db.dailyNotes||{};
     const leftRows = leftCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
@@ -7471,6 +7471,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         });
       }
     }).catch(()=>{});
+
+    // טעינת הערות יומי — realtime
+    const offDailyNotes = fbOn("db/dailyNotes", notes=>{
+      setDb(prev=>({...prev, dailyNotes:notes||{}}));
+    });
 
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
     fbGet("db/armoryMaster").then(master=>{
