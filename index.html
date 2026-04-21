@@ -2171,11 +2171,14 @@ function DailyLiveStock({db, soldiers}){
   });
 
   // בנה רשימת פריטים — total = liveTotal (assignments+unitItems) כמו מלאי ארמון
+  const seenNames = new Set();
   const rows = Object.entries(masterData)
     .map(([name,info])=>{
       const clean = cleanItemName(name);
       const total = liveCounts[clean]||0;
       if(!total) return null;
+      if(seenNames.has(clean)) return null; // מנע כפילות שמות
+      seenNames.add(clean);
       const loans = allLoans[clean]||0;
       const stock = total - loans;
       return {name:clean, makat:info.makat, total, loans, stock, ok:stock>=0};
@@ -7457,6 +7460,15 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           }).catch(()=>{});
         });
       }
+    }).catch(()=>{});
+
+    // DEBUG: ספור M4 מ-assignments
+    fbGet("db/assignments").then(allAsgn=>{
+      if(!allAsgn) return;
+      const m4ids = Object.entries(allAsgn).filter(([,a])=>
+        Object.keys(a||{}).some(k=>k==="M4"||k.startsWith("M4 "))
+      ).map(([id])=>id);
+      console.log("[DEBUG] M4 בשיוכים: "+m4ids.length+" חיילים:", m4ids.slice(0,5)+"...");
     }).catch(()=>{});
 
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
