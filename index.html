@@ -2120,6 +2120,108 @@ const CABINETS_DATA = window.CABINETS_DATA_DATA;
 const DAILY_LEFT = window.DAILY_LEFT_DATA;
 const DAILY_RIGHT = window.DAILY_RIGHT_DATA;
 
+function DailyLiveStock({db, soldiers}){
+  const masterData = db.armoryMaster||{};
+
+  // חשב signedIds כולל ערבות מרוכזת
+  const signedIds = new Set(Object.keys(db.signatures||{}));
+  Object.values(db.bulkGuarantors||{}).forEach(g=>{
+    Object.keys(g.remaining||{}).forEach(id=>signedIds.add(id));
+    Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
+  });
+
+  // ספור השאלות
+  const allLoans = {};
+  const allSols = getSoldiers(db);
+  allSols.forEach(s=>{
+    if(!signedIds.has(s.id)) return;
+    const sig = db.signatures?.[s.id];
+    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
+    const itemsToCount = (sig?.partial&&sig?.items)
+      ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])) : asgn;
+    Object.keys(itemsToCount||{}).forEach(raw=>{
+      const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1;
+    });
+  });
+  // orphan
+  Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
+    if(!signedIds.has(solId)) return;
+    if(allSols.find(s=>s.id===solId)) return;
+    const sig=db.signatures?.[solId];
+    const itemsToCount=(sig?.partial&&sig?.items)
+      ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])):asgn;
+    Object.keys(itemsToCount||{}).forEach(raw=>{
+      const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1;
+    });
+  });
+
+  // בנה רשימת פריטים מ-armoryMaster
+  const rows = Object.entries(masterData)
+    .filter(([,info])=>info.total>0)
+    .map(([name,info])=>{
+      const clean = cleanItemName(name);
+      const total = info.total||0;
+      const loans = allLoans[clean]||0;
+      const stock = total - loans;
+      return {name:clean, makat:info.makat, total, loans, stock, ok:stock>=0};
+    })
+    .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+
+  if(!rows.length) return (
+    <div style={{...S.card,textAlign:"center",color:"var(--color-text-muted)",padding:20}}>
+      אין נתוני מלאי ב-Firebase — עדכן ב-armoryMaster
+    </div>
+  );
+
+  const allOk = rows.every(r=>r.ok);
+  const issues = rows.filter(r=>!r.ok);
+
+  return (
+    <div style={{...S.card,marginBottom:4}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontWeight:800,fontSize:15}}>📦 מצב מלאי עכשיו</div>
+        <div style={{fontSize:12,color:allOk?"var(--color-success-fg)":"var(--color-danger-fg)",fontWeight:700}}>
+          {allOk?"✅ הכל תקין":("⚠️ "+issues.length+" חריגות")}
+        </div>
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"var(--color-bg-subtle)"}}>
+              {["פריט","מק"ט","כולל","השאלה","בארמון"].map(h=>(
+                <th key={h} style={{padding:"5px 8px",textAlign:"center",borderBottom:"2px solid var(--color-border-default)",fontWeight:700,fontSize:11}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r,i)=>(
+              <tr key={r.name} style={{background:!r.ok?"rgba(255,0,0,0.06)":i%2?"var(--color-bg-subtle)":"transparent"}}>
+                <td style={{padding:"4px 8px",fontWeight:600,borderBottom:"1px solid var(--color-border-muted)"}}>{r.name}</td>
+                <td style={{padding:"4px 8px",textAlign:"center",fontFamily:"monospace",fontSize:10,borderBottom:"1px solid var(--color-border-muted)",color:"var(--color-text-muted)"}}>{r.makat||""}</td>
+                <td style={{padding:"4px 8px",textAlign:"center",fontWeight:700,borderBottom:"1px solid var(--color-border-muted)"}}>{r.total}</td>
+                <td style={{padding:"4px 8px",textAlign:"center",color:"var(--color-warning-fg)",borderBottom:"1px solid var(--color-border-muted)"}}>{r.loans}</td>
+                <td style={{padding:"4px 8px",textAlign:"center",fontWeight:800,
+                  color:r.ok?"var(--color-success-fg)":"var(--color-danger-fg)",
+                  borderBottom:"1px solid var(--color-border-muted)"}}>{r.stock}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {issues.length>0&&(
+        <div style={{marginTop:8,padding:"6px 10px",background:"rgba(255,0,0,0.06)",borderRadius:6,border:"1px solid var(--color-danger-fg)"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--color-danger-fg)",marginBottom:4}}>⚠️ חריגות:</div>
+          {issues.map(r=>(
+            <div key={r.name} style={{fontSize:11,color:"var(--color-danger-fg)"}}>
+              {r.name} — צפוי {r.total}, בהשאלה {r.loans}, חסר {Math.abs(r.stock)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DailyModal({db,onClose,type,auth,soldiers=[]}){
   // תאריך ושעה עם אפשרות עריכה
   const now = new Date();
@@ -7971,8 +8073,12 @@ ${exitLink}
 
         {tab==="daily"&&perms.canViewDaily!==false&&(
           <div>
-            <h2 style={{marginBottom:16,fontSize:"var(--text-xl)",fontWeight:800}}>טופס יומי</h2>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <h2 style={{marginBottom:12,fontSize:"var(--text-xl)",fontWeight:800}}>טופס יומי</h2>
+
+            {/* תצוגת מלאי חי */}
+            <DailyLiveStock db={db} soldiers={soldiers}/>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:16}}>
               {[["open","🌅","פתיחת יום","green"],["close","🌙","סגירת יום","orange"]].map(([t,e,l,c])=>(
                 <div key={t} style={{...S.card,textAlign:"center",padding:"28px 16px"}}>
                   <div style={{fontSize:"var(--text-3xl)",marginBottom:8}}>{e}</div>
