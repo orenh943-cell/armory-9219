@@ -2122,6 +2122,7 @@ const DAILY_RIGHT = window.DAILY_RIGHT_DATA;
 
 function DailyLiveStock({db, soldiers}){
   const masterData = db.armoryMaster||{};
+  const allSols = getSoldiers(db);
 
   // חשב signedIds כולל ערבות מרוכזת
   const signedIds = new Set(Object.keys(db.signatures||{}));
@@ -2130,9 +2131,21 @@ function DailyLiveStock({db, soldiers}){
     Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
   });
 
-  // ספור השאלות
+  // חשב liveTotal לכל פריט (בדיוק כמו מלאי הארמון)
+  const liveTotals = {};
+  Object.values(db.unitItems||{}).forEach(v=>{
+    const n=cleanItemName(v.n||v.name||"");
+    if(n) liveTotals[n]=(liveTotals[n]||0)+1;
+  });
+  allSols.forEach(s=>{
+    const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+    Object.keys(asgn||{}).forEach(k=>{
+      const n=cleanItemName(k); liveTotals[n]=(liveTotals[n]||0)+1;
+    });
+  });
+
+  // ספור השאלות (חתומים בלבד)
   const allLoans = {};
-  const allSols = getSoldiers(db);
   allSols.forEach(s=>{
     if(!signedIds.has(s.id)) return;
     const sig = db.signatures?.[s.id];
@@ -2143,7 +2156,6 @@ function DailyLiveStock({db, soldiers}){
       const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1;
     });
   });
-  // orphan
   Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
     if(!signedIds.has(solId)) return;
     if(allSols.find(s=>s.id===solId)) return;
@@ -2155,16 +2167,17 @@ function DailyLiveStock({db, soldiers}){
     });
   });
 
-  // בנה רשימת פריטים מ-armoryMaster
+  // בנה רשימת פריטים — liveTotal הוא המקור, armoryMaster נותן מקט בלבד
   const rows = Object.entries(masterData)
-    .filter(([,info])=>info.total>0)
     .map(([name,info])=>{
       const clean = cleanItemName(name);
-      const total = info.total||0;
+      const total = liveTotals[clean]||0; // ספירה חיה מ-assignments+unitItems
+      if(!total) return null;
       const loans = allLoans[clean]||0;
       const stock = total - loans;
       return {name:clean, makat:info.makat, total, loans, stock, ok:stock>=0};
     })
+    .filter(Boolean)
     .sort((a,b)=>a.name.localeCompare(b.name,"he"));
 
   if(!rows.length) return (
@@ -2329,9 +2342,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: רק מ-Firebase (armoryMaster) — lockedTotals עוקף אם הוגדר ידנית
+    // total: ספירה חיה (assignments+unitItems) — זה המלאי האמיתי
+    // lockedTotals עוקף אם הוגדר ידנית
+    const amName2 = cleanItemName(armEntry?.name || alias);
+    const liveT = (liveByName[amName2]||0) + (amName2!==cleanItemName(alias)?(liveByName[cleanItemName(alias)]||0):0);
     const masterTotal = armEntry?.total||0;
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : masterTotal;
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : (liveT>0?liveT:masterTotal);
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -7466,80 +7482,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     }).catch(()=>{});
 
     // armoryMaster: ONE-TIME read only (not real-time) — prevents overwriting local edits
-    fbGet("db/armoryMasterSeededV3").then(seededV3=>{
-      if(!seededV3){
-        // תיקון כמויות נכונות לפי מלאי ארמון
-        fbSet("db/armoryMaster/M4/total", 340).catch(()=>{});;
-    fbSet("db/armoryMaster/קלע סער/total", 68).catch(()=>{});;
-    fbSet("db/armoryMaster/מטולון M320/total", 34).catch(()=>{});;
-    fbSet("db/armoryMaster/נגב 556/total", 24).catch(()=>{});;
-    fbSet("db/armoryMaster/M-24 חדש/total", 9).catch(()=>{});;
-    fbSet("db/armoryMaster/M16/total", 148).catch(()=>{});;
-    fbSet("db/armoryMaster/מאג/total", 38).catch(()=>{});;
-    fbSet("db/armoryMaster/HTR 338/total", 3).catch(()=>{});;
-    fbSet("db/armoryMaster/מקלר/total", 4).catch(()=>{});;
-    fbSet("db/armoryMaster/נגב 762/total", 7).catch(()=>{});;
-    fbSet("db/armoryMaster/אקילה X4/total", 52).catch(()=>{});;
-    fbSet("db/armoryMaster/מצפן/total", 65).catch(()=>{});;
-    fbSet("db/armoryMaster/יראור/total", 103).catch(()=>{});;
-    fbSet("db/armoryMaster/מקלרון/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/מק״כ 05/total", 9).catch(()=>{});;
-    fbSet("db/armoryMaster/טריגיקון/total", 36).catch(()=>{});;
-    fbSet("db/armoryMaster/שח״מ כחולה/total", 39).catch(()=>{});;
-    fbSet("db/armoryMaster/שח״ע/total", 15).catch(()=>{});;
-    fbSet("db/armoryMaster/שח״ע ממותג/total", 14).catch(()=>{});;
-    fbSet("db/armoryMaster/שח''מ ירוקה/total", 25).catch(()=>{});;
-    fbSet("db/armoryMaster/כוונת M5/total", 26).catch(()=>{});;
-    fbSet("db/armoryMaster/מפרומור/total", 29).catch(()=>{});;
-    fbSet("db/armoryMaster/ציין לייזר לנגב/total", 31).catch(()=>{});;
-    fbSet("db/armoryMaster/זאבון/total", 34).catch(()=>{});;
-    fbSet("db/armoryMaster/עידו/total", 16).catch(()=>{});;
-    fbSet("db/armoryMaster/וילון/total", 19).catch(()=>{});;
-    fbSet("db/armoryMaster/סמן לייזר ללאו/total", 23).catch(()=>{});;
-    fbSet("db/armoryMaster/משקפי אבטה/total", 14).catch(()=>{});;
-    fbSet("db/armoryMaster/משקפת 50*10 גלורי/total", 14).catch(()=>{});;
-    fbSet("db/armoryMaster/מפרולייט/total", 16).catch(()=>{});;
-    fbSet("db/armoryMaster/שלט אבטה/total", 10).catch(()=>{});;
-    fbSet("db/armoryMaster/מכבית/total", 10).catch(()=>{});;
-    fbSet("db/armoryMaster/טרמיס/total", 11).catch(()=>{});;
-    fbSet("db/armoryMaster/פליר T75/total", 12).catch(()=>{});;
-    fbSet("db/armoryMaster/אקילה X6/total", 8).catch(()=>{});;
-    fbSet("db/armoryMaster/מטלון חדש/total", 8).catch(()=>{});;
-    fbSet("db/armoryMaster/שבשבת רוח/total", 9).catch(()=>{});;
-    fbSet("db/armoryMaster/עמית/total", 7).catch(()=>{});;
-    fbSet("db/armoryMaster/מטלון ישן/total", 7).catch(()=>{});;
-    fbSet("db/armoryMaster/אבטה/total", 8).catch(()=>{});;
-    fbSet("db/armoryMaster/ליאור/total", 5).catch(()=>{});;
-    fbSet("db/armoryMaster/נטלי/total", 5).catch(()=>{});;
-    fbSet("db/armoryMaster/מיקרון/total", 5).catch(()=>{});;
-    fbSet("db/armoryMaster/עדי/total", 5).catch(()=>{});;
-    fbSet("db/armoryMaster/ירין הגדלה משתנה/total", 4).catch(()=>{});;
-    fbSet("db/armoryMaster/מרק 5/total", 4).catch(()=>{});;
-    fbSet("db/armoryMaster/צגון/total", 4).catch(()=>{});;
-    fbSet("db/armoryMaster/NYX/total", 4).catch(()=>{});;
-    fbSet("db/armoryMaster/מרק 6/total", 5).catch(()=>{});;
-    fbSet("db/armoryMaster/כדור ברזל- מתקן הטלה/total", 3).catch(()=>{});;
-    fbSet("db/armoryMaster/רחפן איבו/total", 3).catch(()=>{});;
-    fbSet("db/armoryMaster/אורלי/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/ערמון/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/ישלט/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/פיגיון/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/מטריס 30/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/עמית איכון/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/עכבר/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/אלפא/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/כוונת MUNS/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/יחצ״ג מיני כוכב/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/מטל סרוג 10/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/מטל סרוג 20/total", 1).catch(()=>{});;
-    fbSet("db/armoryMaster/משקפת 42*10/total", 38).catch(()=>{});;
-    fbSet("db/armoryMaster/סמן PACK/total", 2).catch(()=>{});;
-    fbSet("db/armoryMaster/סמן לייזר למפקד/total", 1).catch(()=>{});;
-        fbSet("db/armoryMasterSeededV3", true).catch(()=>{});
-        // עדכן db state עם הכמויות החדשות
-        fbGet("db/armoryMaster").then(master=>{
-          if(master) setDb(prev=>({...prev, armoryMaster: master}));
-        }).catch(()=>{});
       }
     }).catch(()=>{});
     fbGet("db/armoryMasterSeededV2").then(seededV2=>{
