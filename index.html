@@ -2123,116 +2123,153 @@ const DAILY_RIGHT = window.DAILY_RIGHT_DATA;
 function DailyLiveStock({db, soldiers}){
   const masterData = db.armoryMaster||{};
   const allSols = getSoldiers(db);
+  const [hiddenItems, setHiddenItems] = React.useState(()=>{
+    try{ return new Set(JSON.parse(localStorage.getItem("dailyHiddenItems")||"[]")); }catch(e){return new Set();}
+  });
+  const [showAddItem, setShowAddItem] = React.useState(false);
+  const [addSearch, setAddSearch] = React.useState("");
 
-  // חשב signedIds כולל ערבות מרוכזת
+  function toggleHide(alias){
+    setHiddenItems(prev=>{
+      const n = new Set(prev);
+      n.has(alias)?n.delete(alias):n.add(alias);
+      try{localStorage.setItem("dailyHiddenItems",JSON.stringify([...n]));}catch(e){}
+      return n;
+    });
+  }
+
+  // חשב signedIds
   const signedIds = new Set(Object.keys(db.signatures||{}));
   Object.values(db.bulkGuarantors||{}).forEach(g=>{
     Object.keys(g.remaining||{}).forEach(id=>signedIds.add(id));
     Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
   });
 
-  // liveTotals לא נדרש — total נלקח מ-armoryMaster ישירות
-
-  // ספור השאלות (חתומים בלבד)
-  const allLoans = {};
-  allSols.forEach(s=>{
-    if(!signedIds.has(s.id)) return;
-    const sig = db.signatures?.[s.id];
-    const asgn = db.assignments?.[s.id]!==undefined ? db.assignments[s.id] : s.assigned||{};
-    const itemsToCount = (sig?.partial&&sig?.items)
-      ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])) : asgn;
-    Object.keys(itemsToCount||{}).forEach(raw=>{
-      const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1;
-    });
-  });
-  Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
-    if(!signedIds.has(solId)) return;
-    if(allSols.find(s=>s.id===solId)) return;
-    const sig=db.signatures?.[solId];
-    const itemsToCount=(sig?.partial&&sig?.items)
-      ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])):asgn;
-    Object.keys(itemsToCount||{}).forEach(raw=>{
-      const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1;
-    });
-  });
-
-  // חשב liveTotal בדיוק כמו מלאי ארמון (assignments + unitItems)
+  // ספור liveTotal
   const liveCounts = {};
   allSols.forEach(s=>{
-    // רק db.assignments — ללא fallback ל-s.assigned הסטטי
     const asgn=db.assignments?.[s.id]||{};
-    Object.keys(asgn||{}).forEach(k=>{
-      const n=cleanItemName(k); liveCounts[n]=(liveCounts[n]||0)+1;
-    });
+    Object.keys(asgn||{}).forEach(k=>{ const n=cleanItemName(k); liveCounts[n]=(liveCounts[n]||0)+1; });
   });
   Object.values(db.unitItems||{}).forEach(v=>{
     const n=cleanItemName(v.n||v.name||"");
     if(n) liveCounts[n]=(liveCounts[n]||0)+1;
   });
 
-  // בנה רשימת פריטים — total = liveTotal (assignments+unitItems) כמו מלאי ארמון
-  const seenNames = new Set();
-  const rows = Object.entries(masterData)
-    .map(([name,info])=>{
-      const clean = cleanItemName(name);
-      const total = liveCounts[clean]||0;
-      if(!total) return null;
-      if(seenNames.has(clean)) return null; // מנע כפילות שמות
-      seenNames.add(clean);
-      const loans = allLoans[clean]||0;
-      const stock = total - loans;
-      return {name:clean, makat:info.makat, total, loans, stock, ok:stock>=0};
-    })
-    .filter(Boolean)
-    .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  // ספור השאלות (חתומים בלבד)
+  const allLoans = {};
+  allSols.forEach(s=>{
+    if(!signedIds.has(s.id)) return;
+    const sig=db.signatures?.[s.id];
+    const asgn=db.assignments?.[s.id]||{};
+    const items=(sig?.partial&&sig?.items)?Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])):asgn;
+    Object.keys(items||{}).forEach(raw=>{ const n=cleanItemName(raw); allLoans[n]=(allLoans[n]||0)+1; });
+  });
 
-  if(!rows.length) return (
-    <div style={{...S.card,textAlign:"center",color:"var(--color-text-muted)",padding:20}}>
-      אין נתוני מלאי ב-Firebase — עדכן כמויות בדשבורד ארמון
-    </div>
-  );
+  // בנה פריטים מ-DAILY_LEFT + DAILY_RIGHT (עם מק"ט ושם מלא)
+  const allDailyItems = [...(window.DAILY_LEFT_DATA||[]),...(window.DAILY_RIGHT_DATA||[])];
 
-  const allOk = rows.every(r=>r.ok);
-  const issues = rows.filter(r=>!r.ok);
+  // הוסף פריטים מ-armoryMaster שלא ב-DAILY
+  const dailyAliases = new Set(allDailyItems.map(i=>cleanItemName(i.alias||i.name||"")));
+  Object.entries(masterData).forEach(([name])=>{
+    const clean=cleanItemName(name);
+    if(!dailyAliases.has(clean) && liveCounts[clean]>0){
+      allDailyItems.push({msd:"—", makat:masterData[name]?.makat||"", fullname:name, alias:name});
+    }
+  });
+
+  // סנן וחשב
+  const seenAliases = new Set();
+  const rows = allDailyItems.map(item=>{
+    const alias = cleanItemName(item.alias||item.name||"");
+    if(seenAliases.has(alias)) return null;
+    seenAliases.add(alias);
+    const total = liveCounts[alias]||0;
+    if(!total && !hiddenItems.has(alias)) return null;
+    const loans = allLoans[alias]||0;
+    const stock = total - loans;
+    return {...item, alias, total, loans, stock, ok:stock>=0, hidden:hiddenItems.has(alias)};
+  }).filter(Boolean);
+
+  const visibleRows = rows.filter(r=>!r.hidden);
+  const hiddenRows = rows.filter(r=>r.hidden);
+  const allOk = visibleRows.filter(r=>r.total>0).every(r=>r.ok);
+  const issues = visibleRows.filter(r=>!r.ok);
+
+  const TH = {padding:"5px 8px",textAlign:"center",borderBottom:"2px solid var(--color-border-default)",
+    fontWeight:700,fontSize:11,background:"var(--color-bg-subtle)"};
+  const TD = (ok) => ({padding:"4px 8px",borderBottom:"1px solid var(--color-border-muted)",
+    fontSize:12,textAlign:"center",
+    color:ok===true?"var(--color-success-fg)":ok===false?"var(--color-danger-fg)":"inherit"});
 
   return (
-    <div style={{...S.card,marginBottom:4}}>
+    <div style={{...S.card,marginBottom:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontWeight:800,fontSize:15}}>📦 מצב מלאי עכשיו</div>
-        <div style={{fontSize:12,color:allOk?"var(--color-success-fg)":"var(--color-danger-fg)",fontWeight:700}}>
-          {allOk?"✅ הכל תקין":("⚠️ "+issues.length+" חריגות")}
+        <div style={{fontWeight:800,fontSize:15}}>📦 מצב מלאי — {new Date().toLocaleDateString("he-IL")}</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <span style={{fontSize:12,color:allOk?"var(--color-success-fg)":"var(--color-danger-fg)",fontWeight:700}}>
+            {allOk?"✅ הכל תקין":("⚠️ "+issues.length+" חריגות")}
+          </span>
+          <button onClick={()=>setShowAddItem(p=>!p)}
+            style={{...S.btn("blue"),padding:"4px 10px",fontSize:11}}>+ הוסף פריט</button>
         </div>
       </div>
+
+      {showAddItem&&(
+        <div style={{marginBottom:10,padding:"8px 10px",background:"var(--color-bg-subtle)",borderRadius:8,border:"1px solid var(--color-border-default)"}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>הוסף פריט לתצוגה:</div>
+          <input value={addSearch} onChange={e=>setAddSearch(e.target.value)}
+            placeholder="חפש שם פריט..."
+            style={{...S.input,marginBottom:8,fontSize:12}}/>
+          <div style={{maxHeight:120,overflowY:"auto"}}>
+            {hiddenRows.filter(r=>!addSearch||r.alias.includes(addSearch)||r.fullname.includes(addSearch)).map(r=>(
+              <div key={r.alias} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"4px 8px",borderRadius:4,background:"var(--color-bg-canvas)",marginBottom:2}}>
+                <span style={{fontSize:12}}>{r.fullname||r.alias}</span>
+                <button onClick={()=>{toggleHide(r.alias);setShowAddItem(false);}}
+                  style={{...S.btn("green"),padding:"2px 8px",fontSize:11}}>הצג</button>
+              </div>
+            ))}
+            {hiddenRows.length===0&&<div style={{fontSize:11,color:"var(--color-text-muted)"}}>אין פריטים מוסתרים</div>}
+          </div>
+        </div>
+      )}
+
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
-            <tr style={{background:"var(--color-bg-subtle)"}}>
-              {["פריט","מקט","כולל","השאלה","בארמון"].map(h=>(
-                <th key={h} style={{padding:"5px 8px",textAlign:"center",borderBottom:"2px solid var(--color-border-default)",fontWeight:700,fontSize:11}}>{h}</th>
+            <tr>
+              {["מ"ד","מקט","שם פריט","כולל","השאלה","בארמון",""].map((h,i)=>(
+                <th key={i} style={{...TH,textAlign:i<2?"center":"right"}}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r,i)=>(
-              <tr key={r.name} style={{background:!r.ok?"rgba(255,0,0,0.06)":i%2?"var(--color-bg-subtle)":"transparent"}}>
-                <td style={{padding:"4px 8px",fontWeight:600,borderBottom:"1px solid var(--color-border-muted)"}}>{r.name}</td>
-                <td style={{padding:"4px 8px",textAlign:"center",fontFamily:"monospace",fontSize:10,borderBottom:"1px solid var(--color-border-muted)",color:"var(--color-text-muted)"}}>{r.makat||""}</td>
-                <td style={{padding:"4px 8px",textAlign:"center",fontWeight:700,borderBottom:"1px solid var(--color-border-muted)"}}>{r.total}</td>
-                <td style={{padding:"4px 8px",textAlign:"center",color:"var(--color-warning-fg)",borderBottom:"1px solid var(--color-border-muted)"}}>{r.loans}</td>
-                <td style={{padding:"4px 8px",textAlign:"center",fontWeight:800,
-                  color:r.ok?"var(--color-success-fg)":"var(--color-danger-fg)",
-                  borderBottom:"1px solid var(--color-border-muted)"}}>{r.stock}</td>
+            {visibleRows.filter(r=>r.total>0).map((r,i)=>(
+              <tr key={r.alias+"_"+i} style={{background:!r.ok?"rgba(255,0,0,0.04)":i%2?"var(--color-bg-subtle)":"transparent"}}>
+                <td style={{...TD(),textAlign:"center",color:"var(--color-text-muted)",fontSize:10}}>{r.msd}</td>
+                <td style={{...TD(),textAlign:"center",fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}}>{r.makat||""}</td>
+                <td style={{...TD(),textAlign:"right",fontWeight:600}}>{r.fullname||r.alias}</td>
+                <td style={{...TD(),fontWeight:700}}>{r.total}</td>
+                <td style={{...TD(),color:"var(--color-warning-fg)"}}>{r.loans}</td>
+                <td style={{...TD(r.ok),fontWeight:800}}>{r.stock}</td>
+                <td style={{...TD(),padding:"2px 4px"}}>
+                  <button onClick={()=>toggleHide(r.alias)} title="הסתר פריט"
+                    style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-muted)",fontSize:12,padding:"2px 4px"}}>✕</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
       {issues.length>0&&(
-        <div style={{marginTop:8,padding:"6px 10px",background:"rgba(255,0,0,0.06)",borderRadius:6,border:"1px solid var(--color-danger-fg)"}}>
+        <div style={{marginTop:8,padding:"6px 10px",background:"rgba(255,0,0,0.06)",borderRadius:6,
+          border:"1px solid var(--color-danger-fg)"}}>
           <div style={{fontSize:11,fontWeight:700,color:"var(--color-danger-fg)",marginBottom:4}}>⚠️ חריגות:</div>
           {issues.map(r=>(
-            <div key={r.name} style={{fontSize:11,color:"var(--color-danger-fg)"}}>
-              {r.name} — צפוי {r.total}, בהשאלה {r.loans}, חסר {Math.abs(r.stock)}
+            <div key={r.alias} style={{fontSize:11,color:"var(--color-danger-fg)"}}>
+              {r.fullname||r.alias} — כולל {r.total}, השאלה {r.loans}, חסר {Math.abs(r.stock)}
             </div>
           ))}
         </div>
@@ -2240,6 +2277,7 @@ function DailyLiveStock({db, soldiers}){
     </div>
   );
 }
+
 
 function DailyModal({db,onClose,type,auth,soldiers=[]}){
   // תאריך ושעה עם אפשרות עריכה
@@ -7460,16 +7498,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           }).catch(()=>{});
         });
       }
-    }).catch(()=>{});
-
-    // DEBUG: ספור M4 מ-unitItems
-    fbGet("db/unitItems").then(unitItems=>{
-      if(!unitItems) return;
-      const m4units = Object.entries(unitItems).filter(([,v])=>
-        (v.n||v.name||"")==="M4"
-      );
-      console.log("[DEBUG] M4 ב-unitItems: "+m4units.length+" רשומות:");
-      m4units.forEach(([k,v])=>console.log("  key="+k+" serial="+v.s+" unit="+v.u));
     }).catch(()=>{});
 
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
