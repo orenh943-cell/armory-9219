@@ -2153,7 +2153,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
   });
   const allSolsDaily = getSoldiers(db);
-  const masterData2 = db.armoryMaster&&Object.keys(db.armoryMaster).length>0 ? db.armoryMaster : ARMORY_MASTER;
+  const masterData2 = db.armoryMaster||{}; // רק Firebase — ללא fallback לנתונים סטטיים
 
   // בנה: makat(string) -> {name, total}
   // מ-armoryMaster: כל entry יש לו makat
@@ -2227,13 +2227,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: armoryMaster (Firebase) הוא המקור הסמכותי > DAILY_ITEMS fallback
+    // total: רק מ-Firebase (armoryMaster) — lockedTotals עוקף אם הוגדר ידנית
     const masterTotal = armEntry?.total||0;
-    const dailyTotal = (DAILY_ITEMS||[]).find(d=>
-      cleanItemName(d.name)===amName || cleanItemName(d.name)===cleanAlias
-    )?.total||0;
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
-      : masterTotal>0 ? masterTotal : dailyTotal;
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : masterTotal;
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
@@ -2516,26 +2512,33 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                         title="הסר פריט">✕</button>
                     </span>
                   </td>
-                  <td style={{...TDC(),background:bg,cursor:"pointer",position:"relative"}}
-                    onClick={()=>setEditingTotal(editingTotal===item.msd?null:item.msd)}
-                    title="לחץ לעריכה/נעילה">
-                    {editingTotal===item.msd?(
-                      <input autoFocus type="number" defaultValue={lockedTotals[item.msd]??item.total??0}
-                        style={{width:50,textAlign:"center",border:"1px solid var(--color-accent-fg)",borderRadius:4,fontSize:11,padding:"1px 3px"}}
-                        onBlur={e=>{
-                          const v=parseInt(e.target.value);
-                          if(!isNaN(v)) setLockedTotals(p=>({...p,[item.msd]:v}));
-                          setEditingTotal(null);
-                        }}
-                        onKeyDown={e=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape")setEditingTotal(null);}}/>
-                    ):(
-                      <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
-                        {lockedTotals[item.msd]!==undefined?
-                          <span style={{color:"var(--color-accent-fg)",fontWeight:800}}>🔒{lockedTotals[item.msd]}</span>:
-                          <span style={{fontWeight:700}}>{item.total||""}</span>
+                  <td style={{...TDC(),background:bg,position:"relative"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                      {editingTotal===item.msd?(
+                        <input autoFocus type="number" defaultValue={lockedTotals[item.msd]??item.total??0}
+                          style={{width:48,textAlign:"center",border:"2px solid var(--color-accent-fg)",borderRadius:4,fontSize:11,padding:"1px 3px"}}
+                          onBlur={e=>{
+                            const v=parseInt(e.target.value);
+                            if(!isNaN(v)) setLockedTotals(p=>({...p,[item.msd]:v}));
+                            setEditingTotal(null);
+                          }}
+                          onKeyDown={e=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape")setEditingTotal(null);}}/>
+                      ):(
+                        <span style={{fontWeight:700,color:lockedTotals[item.msd]!==undefined?"var(--color-accent-fg)":"inherit"}}>
+                          {lockedTotals[item.msd]!==undefined?lockedTotals[item.msd]:item.total||""}
+                        </span>
+                      )}
+                      <button onClick={e=>{e.stopPropagation();
+                        if(lockedTotals[item.msd]!==undefined){
+                          setLockedTotals(p=>{const n={...p};delete n[item.msd];return n;});
+                        } else {
+                          setEditingTotal(item.msd);
                         }
-                      </span>
-                    )}
+                      }} title={lockedTotals[item.msd]!==undefined?"שחרר נעילה":"נעל כמות"}
+                        style={{background:"none",border:"none",cursor:"pointer",fontSize:10,padding:"0 1px",opacity:0.6,color:lockedTotals[item.msd]!==undefined?"var(--color-accent-fg)":"var(--color-text-muted)"}}>
+                        {lockedTotals[item.msd]!==undefined?"🔒":"✏️"}
+                      </button>
+                    </div>
                   </td>
                   <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{item.loans||0}</td>
                   <td style={{...TDC(item.ok),background:bg,color:item.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{item.total!=null?item.stock:""}</td>
