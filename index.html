@@ -2156,18 +2156,24 @@ function DailyLiveStock({db, soldiers}){
     });
   });
 
-  // ספור סידוריים מ-db/serials — זה המקור האמיתי לכמות
-  const serialCounts = {};
-  getSerials(db).forEach(s=>{
-    const n = cleanItemName(s.name);
-    if(n) serialCounts[n] = (serialCounts[n]||0)+1;
+  // חשב liveTotal בדיוק כמו מלאי ארמון (assignments + unitItems)
+  const liveCounts = {};
+  allSols.forEach(s=>{
+    const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
+    Object.keys(asgn||{}).forEach(k=>{
+      const n=cleanItemName(k); liveCounts[n]=(liveCounts[n]||0)+1;
+    });
+  });
+  Object.values(db.unitItems||{}).forEach(v=>{
+    const n=cleanItemName(v.n||v.name||"");
+    if(n) liveCounts[n]=(liveCounts[n]||0)+1;
   });
 
-  // בנה רשימת פריטים — total = ספירת סידוריים מ-Firebase
+  // בנה רשימת פריטים — total = liveTotal (assignments+unitItems) כמו מלאי ארמון
   const rows = Object.entries(masterData)
     .map(([name,info])=>{
       const clean = cleanItemName(name);
-      const total = serialCounts[clean]||0; // ספירת סידוריים בפועל
+      const total = liveCounts[clean]||0;
       if(!total) return null;
       const loans = allLoans[clean]||0;
       const stock = total - loans;
@@ -2338,14 +2344,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: ספירת סידוריים מ-db/serials — זה המקור האמיתי
-    // lockedTotals עוקף אם הוגדר ידנית
-    const serialCount = getSerials(db).filter(s=>
-      cleanItemName(s.name)===amName || cleanItemName(s.name)===cleanAlias
-    ).length;
+    // total: liveByName (assignments+unitItems) כמו מלאי ארמון — lockedTotals עוקף
+    const liveCount = (liveByName[amName]||0) + (amName!==cleanAlias?(liveByName[cleanAlias]||0):0);
     const masterTotal = armEntry?.total||0;
     const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
-      : serialCount>0 ? serialCount : masterTotal;
+      : liveCount>0 ? liveCount : masterTotal;
 
     // השאלות: לפי שם נרמל
     const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
