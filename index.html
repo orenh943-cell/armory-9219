@@ -2085,14 +2085,16 @@ function DailyLiveStock({db, soldiers}){
   const [notes, setNotes] = React.useState(db.dailyNotes||{});
   // סנכרן כשdb.dailyNotes מתעדכן
   React.useEffect(()=>{ if(db.dailyNotes) setNotes(db.dailyNotes); },[db.dailyNotes]);
-  function setNote(alias, val){
+  function setNote(key, val){
     setNotes(prev=>{
       const n={...prev};
-      if(val.trim()) n[alias]=val; else delete n[alias];
+      if(val.trim()) n[key]=val; else delete n[key];
       fbSet("db/dailyNotes", n).catch(()=>{});
       return n;
     });
   }
+  // key = makat string (ייחודי, ללא בעיות גרשיים)
+  function noteKey(r){ return r.makat ? String(r.makat) : cleanItemName(r.alias||r.name||""); }
 
   function toggleHide(alias){
     setHiddenItems(prev=>{
@@ -2219,7 +2221,7 @@ function DailyLiveStock({db, soldiers}){
                 <td style={{...TD(),color:"var(--color-warning-fg)"}}>{r.loans}</td>
                 <td style={{...TD(r.ok),fontWeight:800}}>{r.stock}</td>
                 <td style={{...TD(),textAlign:"right",minWidth:100}}>
-                  <input value={notes[r.alias]||""} onChange={e=>setNote(r.alias,e.target.value)}
+                  <input value={notes[noteKey(r)]||""} onChange={e=>setNote(noteKey(r),e.target.value)}
                     placeholder="הערה..."
                     style={{width:"100%",background:"transparent",border:"none",borderBottom:"1px solid var(--color-border-muted)",
                       fontSize:11,padding:"1px 4px",color:"var(--color-text-primary)",outline:"none",direction:"rtl"}}/>
@@ -2397,7 +2399,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.alias]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||"")]||"")+"</td></tr>"
     ).join("");
     const rightRows = rightCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
@@ -2406,7 +2408,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.alias]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||"")]||"")+"</td></tr>"
     ).join("");
     const maxRows = Math.max(leftCalc.length, rightCalc.length);
     const leftArr = leftCalc; const rightArr = rightCalc;
@@ -2610,7 +2612,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                     <td style={{...TDC(),background:bg}}>{L.total||""}</td>
                     <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{L.loans||0}</td>
                     <td style={{...TDC(L.ok),background:bg,color:L.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{L.total!=null?L.stock:""}</td>
-                    <td style={{...TD(),background:bg}}></td>
+                    <td style={{...TD(),background:bg,textAlign:"right",fontSize:10,color:"#555"}}>
+                      {(db.dailyNotes||{})[L.makat?String(L.makat):cleanItemName(L.alias||"")]||""}
+                    </td>
                   </>):<td colSpan={7} style={{border:"1px solid var(--color-border-muted)",background:bg}}/>}
                   {R?(<>
                     <td style={{...TD(),background:bg,textAlign:"center"}}>{R.msd}</td>
@@ -2626,7 +2630,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                     <td style={{...TDC(),background:bg}}>{R.total||""}</td>
                     <td style={{...TDC(),background:bg,color:"var(--color-warning-fg)"}}>{R.loans||0}</td>
                     <td style={{...TDC(R.ok),background:bg,color:R.ok?"var(--color-success-fg)":"var(--color-danger-fg)"}}>{R.total!=null?R.stock:""}</td>
-                    <td style={{...TD(),background:bg}}></td>
+                    <td style={{...TD(),background:bg,textAlign:"right",fontSize:10,color:"#555"}}>
+                      {(db.dailyNotes||{})[R.makat?String(R.makat):cleanItemName(R.alias||"")]||""}
+                    </td>
                   </>):<td colSpan={7} style={{border:"1px solid var(--color-border-muted)",background:bg}}/>}
                 </tr>
               );
