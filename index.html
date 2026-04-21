@@ -2131,18 +2131,7 @@ function DailyLiveStock({db, soldiers}){
     Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
   });
 
-  // חשב liveTotal לכל פריט (בדיוק כמו מלאי הארמון)
-  const liveTotals = {};
-  Object.values(db.unitItems||{}).forEach(v=>{
-    const n=cleanItemName(v.n||v.name||"");
-    if(n) liveTotals[n]=(liveTotals[n]||0)+1;
-  });
-  allSols.forEach(s=>{
-    const asgn=db.assignments?.[s.id]!==undefined?db.assignments[s.id]:s.assigned||{};
-    Object.keys(asgn||{}).forEach(k=>{
-      const n=cleanItemName(k); liveTotals[n]=(liveTotals[n]||0)+1;
-    });
-  });
+  // liveTotals לא נדרש — total נלקח מ-armoryMaster ישירות
 
   // ספור השאלות (חתומים בלבד)
   const allLoans = {};
@@ -2167,11 +2156,11 @@ function DailyLiveStock({db, soldiers}){
     });
   });
 
-  // בנה רשימת פריטים — liveTotal הוא המקור, armoryMaster נותן מקט בלבד
+  // בנה רשימת פריטים — total מ-armoryMaster (Firebase) בלבד
   const rows = Object.entries(masterData)
     .map(([name,info])=>{
       const clean = cleanItemName(name);
-      const total = liveTotals[clean]||0; // ספירה חיה מ-assignments+unitItems
+      const total = info.total||0; // רק מ-armoryMaster/total ב-Firebase
       if(!total) return null;
       const loans = allLoans[clean]||0;
       const stock = total - loans;
@@ -2182,7 +2171,7 @@ function DailyLiveStock({db, soldiers}){
 
   if(!rows.length) return (
     <div style={{...S.card,textAlign:"center",color:"var(--color-text-muted)",padding:20}}>
-      אין נתוני מלאי ב-Firebase — עדכן ב-armoryMaster
+      אין נתוני מלאי ב-Firebase — עדכן כמויות בדשבורד ארמון
     </div>
   );
 
