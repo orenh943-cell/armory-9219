@@ -2082,6 +2082,17 @@ function DailyLiveStock({db, soldiers}){
   });
   const [showAddItem, setShowAddItem] = React.useState(false);
   const [addSearch, setAddSearch] = React.useState("");
+  const [notes, setNotes] = React.useState(()=>{
+    try{ return JSON.parse(localStorage.getItem("dailyNotes")||"{}"); }catch(e){return {};}
+  });
+  function setNote(alias, val){
+    setNotes(prev=>{
+      const n={...prev};
+      if(val.trim()) n[alias]=val; else delete n[alias];
+      try{localStorage.setItem("dailyNotes",JSON.stringify(n));}catch(e){}
+      return n;
+    });
+  }
 
   function toggleHide(alias){
     setHiddenItems(prev=>{
@@ -2193,8 +2204,8 @@ function DailyLiveStock({db, soldiers}){
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
             <tr>
-              {["מד","מקט","שם פריט","כולל","השאלה","בארמון",""].map((h,i)=>(
-                <th key={i} style={{...TH,textAlign:i<2?"center":"right"}}>{h}</th>
+              {["מד","מקט","שם פריט","כולל","השאלה","בארמון","הערות",""].map((h,i)=>(
+                <th key={i} style={{...TH,textAlign:i<2?"center":i===6?"right":"right"}}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -2207,6 +2218,12 @@ function DailyLiveStock({db, soldiers}){
                 <td style={{...TD(),fontWeight:700}}>{r.total}</td>
                 <td style={{...TD(),color:"var(--color-warning-fg)"}}>{r.loans}</td>
                 <td style={{...TD(r.ok),fontWeight:800}}>{r.stock}</td>
+                <td style={{...TD(),textAlign:"right",minWidth:100}}>
+                  <input value={notes[r.alias]||""} onChange={e=>setNote(r.alias,e.target.value)}
+                    placeholder="הערה..."
+                    style={{width:"100%",background:"transparent",border:"none",borderBottom:"1px solid var(--color-border-muted)",
+                      fontSize:11,padding:"1px 4px",color:"var(--color-text-primary)",outline:"none",direction:"rtl"}}/>
+                </td>
                 <td style={{...TD(),padding:"2px 4px"}}>
                   <button onClick={()=>toggleHide(r.alias)} title="הסתר פריט"
                     style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-muted)",fontSize:12,padding:"2px 4px"}}>✕</button>
@@ -2372,6 +2389,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
 
   function handlePrint(){
+    const savedNotes = (() => { try{ return JSON.parse(localStorage.getItem("dailyNotes")||"{}"); }catch(e){return {};} })();
     const leftRows = leftCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
@@ -2379,7 +2397,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc'></td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.alias]||"")+"</td></tr>"
     ).join("");
     const rightRows = rightCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
@@ -2388,7 +2406,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc'></td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.alias]||"")+"</td></tr>"
     ).join("");
     const maxRows = Math.max(leftCalc.length, rightCalc.length);
     const leftArr = leftCalc; const rightArr = rightCalc;
