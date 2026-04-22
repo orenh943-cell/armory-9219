@@ -14064,156 +14064,258 @@ function printUnitFull(db, soldiers, unit, squad){
 
 // ===== הדפסת 1008 — רשימת חיילים + נשק + חתימות בלבד =====
 function printInspectionReport(db, soldiers, unit){
-  // מבחן נשק = testCert שהחייל העלה בזמן החתימה
   const certs = db.testCerts||{};
-  const sigs = db.signatures||{};
-  const unitSoldiers = soldiers.filter(s=>s.unit===unit&&db.signatures?.[s.id]);
+  const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
+    .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
-  const rows = unitSoldiers.map(s=>{
+  const pages = allSols.map(s=>{
     const cert = certs[s.id];
-    const sig = sigs[s.id];
+    const sig = db.signatures?.[s.id];
     const asgn = db.assignments?.[s.id]||{};
     const weps = Object.keys(asgn).filter(k=>WEAPON_KEYS.includes(k)).join(", ")||"—";
-    const certImg = cert?.img ? `<img src="${cert.img}" style="height:60px;border-radius:4px;border:1px solid #ddd"/>` : "—";
-    const certDate = cert?.date ? new Date(cert.date).toLocaleDateString("he-IL") : "—";
-    return `<tr>
-      <td style="font-weight:bold">${s.name}</td>
-      <td style="font-family:monospace;font-size:11px">${s.id}</td>
-      <td>${s.squad||"—"}</td>
-      <td style="font-size:11px">${weps}</td>
-      <td style="text-align:center">${certImg}</td>
-      <td style="text-align:center;font-size:11px">${certDate}</td>
-      <td style="text-align:center;font-size:11px">${sig?.signedAt||"—"}</td>
-    </tr>`;
+    const certImg = cert?.img?`<img src="${cert.img}" style="max-width:100%;max-height:300px;border:1px solid #ccc;border-radius:6px;margin-top:8px" alt="תעודת מבחן"/>`:
+      `<div style="border:2px dashed #ccc;padding:30px;text-align:center;color:#999;border-radius:6px;margin-top:8px">אין תעודת מבחן</div>`;
+    const certDate = cert?.date?new Date(cert.date).toLocaleDateString("he-IL"):"—";
+    const expDate = cert?.date?new Date(new Date(cert.date).getTime()+183*86400000).toLocaleDateString("he-IL"):"—";
+    return `
+    <div class="page">
+      <div class="header">
+        <div>
+          <div class="title">אישור מבחן נשק</div>
+          <div class="sub">גדוד 9219 — פלוגה ${unit}</div>
+        </div>
+        <div class="date">הופק: ${new Date().toLocaleDateString("he-IL")}</div>
+      </div>
+      <div class="info-grid">
+        <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
+        <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
+        <div class="box"><div class="lbl">נשק</div><div class="val" style="font-size:12px">${weps}</div></div>
+        <div class="box"><div class="lbl">תאריך חתימה</div><div class="val">${sig?.signedAt||"—"}</div></div>
+        <div class="box"><div class="lbl">תאריך מבחן</div><div class="val">${certDate}</div></div>
+        <div class="box"><div class="lbl">תוקף עד</div><div class="val">${expDate}</div></div>
+      </div>
+      <div style="text-align:center">${certImg}</div>
+    </div>`;
   }).join("");
 
-  const win=window.open("","_blank");
-  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
   <title>מבחן נשק — פלוגה ${unit}</title>
-  <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
-  h1{text-align:center;font-size:18px;border-bottom:3px solid #1a1a2e;padding-bottom:8px}
-  table{width:100%;border-collapse:collapse;margin:12px 0}
-  th{background:#1a1a2e;color:#fff;padding:7px 8px;text-align:right;font-size:11px}
-  td{border:1px solid #ddd;padding:6px 8px;vertical-align:middle}
-  @media print{button{display:none}}</style>
-  </head><body>
-  <h1>📋 מבחן נשק — פלוגה ${unit}</h1>
-  <p style="text-align:center;color:#666">הופק: ${new Date().toLocaleDateString("he-IL")} • ${unitSoldiers.length} חיילים חתומים</p>
-  <table><thead><tr><th>שם</th><th>מ.א</th><th>מחלקה</th><th>נשק</th><th>תעודת מבחן</th><th>תאריך מבחן</th><th>תאריך חתימה</th></tr></thead>
-  <tbody>${rows}</tbody></table>
-  <button onclick="window.print()" style="padding:10px 24px;font-size:14px;margin-top:10px;cursor:pointer">🖨️ הדפס</button>
-  </body></html>`);
-  win.document.close();
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;direction:rtl;margin:0;padding:0;font-size:12px}
+    .page{padding:20px;max-width:700px;margin:0 auto;page-break-after:always}
+    .page:last-child{page-break-after:auto}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:14px}
+    .title{font-size:20px;font-weight:800;color:#1a1a2e}
+    .sub{font-size:12px;color:#555}
+    .date{font-size:11px;color:#555}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+    .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
+    .lbl{font-size:10px;color:#777;margin-bottom:2px}
+    .val{font-weight:700;font-size:13px}
+    @media print{button{display:none}.page{page-break-after:always}.page:last-child{page-break-after:auto}}
+  </style></head><body>
+  ${pages}
+  <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
+  </body></html>`;
+  const w=window.open("","_blank");w.document.write(html);w.document.close();
 }
-
 function printExitForms(db, soldiers, unit){
-  const exitForms = db.exitForms||{};
-  const unitSoldiers = soldiers.filter(s=>s.unit===unit);
+  const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
+    .sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
-  const rows = unitSoldiers.map(s=>{
-    const forms = Object.values(exitForms).filter(f=>f.soldierId===s.id)
+  const pages = allSols.map(s=>{
+    const forms = Object.values(db.exitForms||{})
+      .filter(f=>f.soldierId===s.id)
       .sort((a,b)=>b.createdAt>a.createdAt?1:-1);
-    if(!forms.length) return `<tr style="background:#fff8f8">
-      <td>${s.name}</td><td style="font-family:monospace;font-size:11px">${s.id}</td>
-      <td>—</td><td style="color:#cf222e;font-weight:bold">אין טופס</td>
-      <td>—</td><td>—</td><td>—</td></tr>`;
-    return forms.map(f=>`<tr style="background:${f.status==="אושר"?"#f0fff0":f.status==="נדחה"?"#fff8f8":"#fffbf0"}">
-      <td>${s.name}</td><td style="font-family:monospace;font-size:11px">${s.id}</td>
-      <td>${f.weaponType||"—"}</td>
-      <td style="font-weight:bold;color:${f.status==="אושר"?"#2ea043":f.status==="נדחה"?"#cf222e":"#e67e22"}">${f.status}</td>
-      <td>${f.createdAt||"—"}</td>
-      <td>${f.mpName||"—"} ${f.mpDate?"("+f.mpDate+")":""}</td>
-      <td>${f.magadName||"—"} ${f.magadDate?"("+f.magadDate+")":""}</td>
-    </tr>`).join("");
+    const form = forms[0]; // הטופס האחרון
+    const statusColor = form?.status==="אושר"?"#2ea043":form?.status==="נדחה"?"#cf222e":"#e67e22";
+    const statusLabel = form?.status||"אין טופס";
+    const answers = form?.answers||[];
+    const QUESTIONS = [
+      "האם שמרת על כלי הנשק שברשותך?",
+      "האם כל הציוד שקיבלת מהארמון ברשותך?",
+      "האם אתה מתחייב להחזיר את כל הציוד בסיום?",
+      "האם ידוע לך על נזק לציוד?",
+      "האם קיבלת הדרכה על שמירת נשק בבית?",
+      "האם הנשק יישמר בכספת/נעילה מאובטחת?",
+      "האם יש לך ילדים קטנים בבית?",
+      "האם עברת אירוע טראומטי לאחרונה?",
+      "האם אתה תחת השפעת תרופות/אלכוהול?",
+      "האם יש מניעה רפואית/ביטחונית לנשיאת נשק?"
+    ];
+    const answersRows = answers.map((a,i)=>`
+      <tr style="background:${i%2?"#f9f9f9":"#fff"}">
+        <td style="font-size:11px">${i+1}. ${QUESTIONS[i]||""}</td>
+        <td style="text-align:center;font-weight:bold;color:${a==="כן"?"#2ea043":"#cf222e"}">${a||"—"}</td>
+      </tr>`).join("");
+    const soldierSigImg = form?.soldierSig?`<img src="${form.soldierSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
+      `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`;
+    return `
+    <div class="page">
+      <div class="header">
+        <div>
+          <div class="title">טופס יציאה הביתה עם נשק</div>
+          <div class="sub">גדוד 9219 — פלוגה ${unit}</div>
+        </div>
+        <div class="date">הופק: ${new Date().toLocaleDateString("he-IL")}</div>
+      </div>
+      <div class="info-grid">
+        <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
+        <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
+        <div class="box"><div class="lbl">כלי נשק</div><div class="val" style="font-size:12px">${form?.weaponType||"—"}</div></div>
+        <div class="box"><div class="lbl">כתובת</div><div class="val" style="font-size:11px">${form?.address||"—"}, ${form?.city||""}</div></div>
+        <div class="box"><div class="lbl">סטטוס</div><div class="val" style="color:${statusColor}">${statusLabel}</div></div>
+        <div class="box"><div class="lbl">תאריך מילוי</div><div class="val">${form?.createdAt||"—"}</div></div>
+      </div>
+      ${form?`
+      <table>
+        <thead><tr><th>שאלה</th><th style="width:60px">תשובה</th></tr></thead>
+        <tbody>${answersRows}</tbody>
+      </table>
+      <div class="sig-area">
+        <div class="sig-box">
+          <div class="lbl">חתימת חייל</div>
+          <div class="sig-img">${soldierSigImg}</div>
+        </div>
+        <div class="sig-box">
+          <div class="lbl">מ"פ — ${form.mpName||"—"}</div>
+          <div class="sig-img">${form.mpSig?`<img src="${form.mpSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
+            `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`}</div>
+          <div class="sig-date">${form.mpDate||""}</div>
+        </div>
+        <div class="sig-box">
+          <div class="lbl">מגד — ${form.magadName||"—"}</div>
+          <div class="sig-img">${form.magadSig?`<img src="${form.magadSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
+            `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`}</div>
+          <div class="sig-date">${form.magadDate||""} ${form.magadDecision?"— "+form.magadDecision:""}</div>
+        </div>
+      </div>`:`<div style="text-align:center;padding:30px;color:#999;border:2px dashed #ccc;border-radius:6px">אין טופס יציאה</div>`}
+    </div>`;
   }).join("");
 
-  const win=window.open("","_blank");
-  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
   <title>יציאה הביתה — פלוגה ${unit}</title>
-  <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
-  h1{text-align:center;font-size:18px;border-bottom:3px solid #1a1a2e;padding-bottom:8px}
-  table{width:100%;border-collapse:collapse;margin:12px 0}
-  th{background:#1a1a2e;color:#fff;padding:7px 8px;text-align:right;font-size:11px}
-  td{border:1px solid #ddd;padding:6px 8px}@media print{button{display:none}}</style>
-  </head><body>
-  <h1>🏠 יציאה הביתה — פלוגה ${unit}</h1>
-  <p style="text-align:center;color:#666">הופק: ${new Date().toLocaleDateString("he-IL")} • ${unitSoldiers.length} חיילים</p>
-  <table><thead><tr><th>שם</th><th>מ.א</th><th>נשק</th><th>סטטוס</th><th>נוצר</th><th>מ"פ</th><th>מגד</th></tr></thead>
-  <tbody>${rows}</tbody></table>
-  <button onclick="window.print()" style="padding:10px 24px;font-size:14px;margin-top:10px;cursor:pointer">🖨️ הדפס</button>
-  </body></html>`);
-  win.document.close();
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;direction:rtl;margin:0;padding:0;font-size:12px}
+    .page{padding:20px;max-width:700px;margin:0 auto;page-break-after:always}
+    .page:last-child{page-break-after:auto}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:14px}
+    .title{font-size:20px;font-weight:800;color:#1a1a2e}
+    .sub{font-size:12px;color:#555}
+    .date{font-size:11px;color:#555}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+    .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
+    .lbl{font-size:10px;color:#777;margin-bottom:2px}
+    .val{font-weight:700;font-size:13px}
+    table{width:100%;border-collapse:collapse;margin-bottom:14px}
+    th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:right;font-size:11px}
+    td{padding:6px 8px;border:1px solid #ccc}
+    .sig-area{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px}
+    .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px;text-align:center}
+    .sig-img{min-height:44px;display:flex;align-items:center;justify-content:center;margin:6px 0}
+    .sig-date{font-size:10px;color:#777}
+    @media print{button{display:none}.page{page-break-after:always}.page:last-child{page-break-after:auto}}
+  </style></head><body>
+  ${pages}
+  <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
+  </body></html>`;
+  const w=window.open("","_blank");w.document.write(html);w.document.close();
 }
-
 function print1008(db, soldiers, unit){
   const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
     .sort((a,b)=>{
-      const sq = (a.squad||"").localeCompare(b.squad||"","he");
-      if(sq!==0) return sq;
-      return a.name.localeCompare(b.name,"he");
+      const sq=(a.squad||"").localeCompare(b.squad||"","he");
+      return sq!==0?sq:a.name.localeCompare(b.name,"he");
     });
+  if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
-  const rows = allSols.map((s,i)=>{
+  const pages = allSols.map(s=>{
     const sig = db.signatures?.[s.id];
     const asgn = db.assignments?.[s.id]||{};
     const weps = Object.entries(asgn).filter(([k])=>WEAPON_KEYS.includes(k));
-    const weapons = weps.map(([k,v])=>k+(v&&v!==1?" ("+v+")":"")).join(", ")||"—";
-    const serials = weps.map(([,v])=>v&&v!==1?String(v):"").filter(Boolean).join(", ")||"—";
-    const sigImg = sig?.sigData?`<img src="${sig.sigData}" style="height:32px" alt="חתימה"/>`:"";
-    return `<tr>
-      <td style="text-align:center">${i+1}</td>
-      <td style="font-family:monospace">${s.id}</td>
-      <td><strong>${s.name}</strong></td>
-      <td style="font-size:10px">${s.squad||"—"}</td>
-      <td style="font-size:10px">${weapons}</td>
-      <td style="font-family:monospace;font-size:10px">${serials}</td>
-      <td>${sigImg}</td>
-    </tr>`;
+    const sigImg = sig?.sigData?`<img src="${sig.sigData}" style="height:45px;border:1px solid #ccc;border-radius:4px" alt="חתימה"/>`:
+      `<div style="border:1px solid #999;height:45px;width:120px;display:inline-block"></div>`;
+    const rows = weps.map(([k,v])=>`
+      <tr>
+        <td style="font-weight:bold;font-size:13px">${k}</td>
+        <td style="font-family:monospace;font-size:12px">${v&&v!==1?String(v):"—"}</td>
+      </tr>`).join("");
+    return `
+    <div class="page">
+      <div class="header">
+        <div>
+          <div class="title">טופס 1008</div>
+          <div class="sub">גדוד 9219 — פלוגה ${unit}</div>
+        </div>
+        <div class="date">תאריך: ${new Date().toLocaleDateString("he-IL")}</div>
+      </div>
+      <div class="info-grid">
+        <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
+        <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
+        <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
+        <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
+      </div>
+      <table>
+        <thead><tr><th>שם האמצעי</th><th>מספר סידורי / צ'</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="disclaimer">
+        עם הגיעך לביצוע שירות מילואים פעיל, הינך מקבל לידך אמצעים לוגיסטיים יקרי ערך.
+        באחריותך האישית לוודא שאמצעים אלו חוזרים לרשות הצבא בסיום שירותך.
+        מרגע שהוחתמת על טופס זה הינך אחראי ישיר לכשירותו ואבטחתו של הציוד.
+      </div>
+      <div class="sig-area">
+        <div class="sig-box">
+          <div class="lbl">חתימת החייל</div>
+          <div class="sig-img">${sigImg}</div>
+          <div class="sig-date">תאריך חתימה: ${sig?.signedAt||"—"}</div>
+        </div>
+        <div class="sig-box">
+          <div class="lbl">מנפק — ${sig?.issuerName||"אחראי ארמון"}</div>
+          <div class="sig-img">
+            ${sig?.issuerSig?`<img src="${sig.issuerSig}" style="height:45px;border:1px solid #ccc;border-radius:4px" alt="מנפק"/>`:
+              `<div style="border:1px solid #999;height:45px;width:120px;display:inline-block"></div>`}
+          </div>
+        </div>
+      </div>
+    </div>`;
   }).join("");
 
-  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-  <title>1008 — פלוגה ${unit}</title>
+  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <title>טופס 1008 — פלוגה ${unit}</title>
   <style>
-    body{font-family:Arial,sans-serif;direction:rtl;padding:16px;font-size:11px;color:#000}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:16px}
-    .header h1{font-size:16px;margin:0;color:#1a1a2e}
-    .header .meta{font-size:11px;text-align:left;color:#555}
-    table{width:100%;border-collapse:collapse}
-    th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:right;font-size:10px}
-    td{padding:5px 8px;border:1px solid #ccc;vertical-align:middle}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;direction:rtl;margin:0;padding:0;font-size:12px;color:#000}
+    .page{padding:20px;max-width:700px;margin:0 auto;page-break-after:always}
+    .page:last-child{page-break-after:auto}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:14px}
+    .title{font-size:20px;font-weight:800;color:#1a1a2e}
+    .sub{font-size:12px;color:#555;margin-top:2px}
+    .date{font-size:11px;color:#555;text-align:left}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+    .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
+    .lbl{font-size:10px;color:#777;margin-bottom:2px}
+    .val{font-weight:700;font-size:14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:14px}
+    th{background:#1a1a2e;color:#fff;padding:7px 10px;text-align:right;font-size:11px}
+    td{padding:8px 10px;border:1px solid #ccc;font-size:12px}
     tr:nth-child(even){background:#f9f9f9}
-    .sig-block{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:12px}
-    .sig-line{border-top:1px solid #000;padding-top:4px;margin-top:20px}
-    @media print{button{display:none}}
+    .disclaimer{font-size:10px;color:#666;border:1px solid #ddd;padding:8px 10px;border-radius:4px;margin-bottom:14px;line-height:1.5}
+    .sig-area{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px}
+    .sig-box{border:1px solid #ccc;padding:10px;border-radius:4px;text-align:center}
+    .sig-img{min-height:50px;display:flex;align-items:center;justify-content:center;margin:8px 0}
+    .sig-date{font-size:10px;color:#777;margin-top:4px}
+    @media print{button{display:none}.page{page-break-after:always}.page:last-child{page-break-after:auto}}
   </style></head><body>
-  <div class="header">
-    <div>
-      <h1>טופס 1008 — חיילים חתומים</h1>
-      <div style="font-size:12px;color:#555">פלוגה ${unit} | גדוד 9219</div>
-    </div>
-    <div class="meta">
-      <div>תאריך: ${new Date().toLocaleDateString("he-IL")}</div>
-      <div>סה"כ: ${allSols.length} חיילים</div>
-    </div>
-  </div>
-  <table>
-    <thead><tr><th>#</th><th>מ.א</th><th>שם</th><th>מחלקה</th><th>נשק</th><th>סידורי</th><th>חתימת חייל</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="sig-block">
-    <div>
-      <div>אחראי ארמון: _______________</div>
-      <div class="sig-line">חתימה</div>
-    </div>
-    <div>
-      <div>מ"פ: _______________</div>
-      <div class="sig-line">חתימה</div>
-    </div>
-  </div>
-  <button onclick="window.print()" style="padding:10px 24px;font-size:14px;margin-top:16px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px">🖨️ הדפס</button>
+  ${pages}
+  <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
   </body></html>`;
 
-  const w = window.open("","_blank");
+  const w=window.open("","_blank");
   w.document.write(html);
   w.document.close();
 }
