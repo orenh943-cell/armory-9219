@@ -6181,11 +6181,17 @@ function GreenEyesView({db, setDb}) {
         const allSols = typeof getSoldiers==="function" ? getSoldiers(db) : [];
         allSols.filter(s=>s.unit===unit).forEach(s=>{
           if(!signedIds.has(s.id)) return;
+          const sig = db?.signatures?.[s.id];
           const asgn = db?.assignments?.[s.id]||{};
-          Object.entries(asgn).forEach(([k,v])=>{
+          // רק פריטים שנכללו בחתימה בפועל
+          const signedItems = (sig?.items && sig.items.length>0)
+            ? Object.fromEntries(sig.items.map(k=>[k, asgn[k]||1]))
+            : asgn;
+          Object.entries(signedItems).forEach(([k,v])=>{
+            if(!v||v===1) return; // רק פריטים עם סידורי/צ
             const n = typeof cleanItemName==="function" ? cleanItemName(k) : k;
             if(!unitEquip[n]) unitEquip[n]=[];
-            unitEquip[n].push({soldierName:s.name, serial:v&&v!==1?String(v):null});
+            unitEquip[n].push({soldierName:s.name, serial:String(v)});
           });
         });
         const items = Object.entries(unitEquip).sort((a,b)=>a[0].localeCompare(b[0],"he"));
@@ -6445,12 +6451,18 @@ ${link}`;
                                 const equip = {};
                                 getSoldiers(db).filter(s=>s.unit===unit).forEach(s=>{
                                   if(!signedIds.has(s.id)) return;
+                                  const sig = db.signatures?.[s.id];
                                   const asgn = db.assignments?.[s.id]||{};
-                                  Object.entries(asgn).forEach(([k,v])=>{
+                                  // רק פריטים שנכללו בחתימה בפועל
+                                  const signedItems = (sig?.items && sig.items.length>0)
+                                    ? Object.fromEntries(sig.items.map(k=>[k, asgn[k]||1]))
+                                    : asgn;
+                                  Object.entries(signedItems).forEach(([k,v])=>{
+                                    if(!v||v===1) return; // רק פריטים עם סידורי/צ
                                     const n=cleanItemName(k);
                                     if(!equip[n]) equip[n]={count:0,serials:[]};
                                     equip[n].count++;
-                                    if(v&&v!==1) equip[n].serials.push(String(v));
+                                    equip[n].serials.push(String(v));
                                   });
                                 });
                                 const items = Object.entries(equip).sort((a,b)=>b[1].count-a[1].count);
@@ -8467,7 +8479,9 @@ ${exitLink}
               }} style={{...S.btn("green"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>🖨️ הדפס</button>}
               {perms.canDownload&&<button onClick={()=>downloadSignaturesZip(db, filtered.filter(s=>s.signature), filterUnit, filterSquad)} style={{...S.btn("blue"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>📥 ZIP{filterUnit!=="הכל"?" — פלוגה "+filterUnit:""}</button>}
               {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>printUnitFull(db, filtered.filter(s=>db.signatures?.[s.id]), filterUnit, filterSquad)} style={{...S.btn("purple"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>📋 הדפס פלוגה מלא</button>}
-              {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>print1008(db, filtered.filter(s=>db.signatures?.[s.id]), filterUnit)} style={{...S.btn("green"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>📄 הדפס 1008</button>}
+              {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>print1008(db, filtered.filter(s=>db.signatures?.[s.id]), filterUnit)} style={{...S.btn("green"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>📄 1008</button>}
+              {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>printInspectionReport(db, filtered, filterUnit)} style={{...S.btn("orange"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>🔍 בוחן נשק</button>}
+              {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>printExitForms(db, filtered, filterUnit)} style={{...S.btn("purple"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>🏠 יציאה הביתה</button>}
             </div>
             <div style={{...S.card,padding:0,overflow:"hidden"}}>
               <div style={{overflowX:"auto"}}>
@@ -14049,6 +14063,88 @@ function printUnitFull(db, soldiers, unit, squad){
 }
 
 // ===== הדפסת 1008 — רשימת חיילים + נשק + חתימות בלבד =====
+function printInspectionReport(db, soldiers, unit){
+  // מבחן נשק = testCert שהחייל העלה בזמן החתימה
+  const certs = db.testCerts||{};
+  const sigs = db.signatures||{};
+  const unitSoldiers = soldiers.filter(s=>s.unit===unit&&db.signatures?.[s.id]);
+
+  const rows = unitSoldiers.map(s=>{
+    const cert = certs[s.id];
+    const sig = sigs[s.id];
+    const asgn = db.assignments?.[s.id]||{};
+    const weps = Object.keys(asgn).filter(k=>WEAPON_KEYS.includes(k)).join(", ")||"—";
+    const certImg = cert?.img ? `<img src="${cert.img}" style="height:60px;border-radius:4px;border:1px solid #ddd"/>` : "—";
+    const certDate = cert?.date ? new Date(cert.date).toLocaleDateString("he-IL") : "—";
+    return `<tr>
+      <td style="font-weight:bold">${s.name}</td>
+      <td style="font-family:monospace;font-size:11px">${s.id}</td>
+      <td>${s.squad||"—"}</td>
+      <td style="font-size:11px">${weps}</td>
+      <td style="text-align:center">${certImg}</td>
+      <td style="text-align:center;font-size:11px">${certDate}</td>
+      <td style="text-align:center;font-size:11px">${sig?.signedAt||"—"}</td>
+    </tr>`;
+  }).join("");
+
+  const win=window.open("","_blank");
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <title>מבחן נשק — פלוגה ${unit}</title>
+  <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+  h1{text-align:center;font-size:18px;border-bottom:3px solid #1a1a2e;padding-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:12px 0}
+  th{background:#1a1a2e;color:#fff;padding:7px 8px;text-align:right;font-size:11px}
+  td{border:1px solid #ddd;padding:6px 8px;vertical-align:middle}
+  @media print{button{display:none}}</style>
+  </head><body>
+  <h1>📋 מבחן נשק — פלוגה ${unit}</h1>
+  <p style="text-align:center;color:#666">הופק: ${new Date().toLocaleDateString("he-IL")} • ${unitSoldiers.length} חיילים חתומים</p>
+  <table><thead><tr><th>שם</th><th>מ.א</th><th>מחלקה</th><th>נשק</th><th>תעודת מבחן</th><th>תאריך מבחן</th><th>תאריך חתימה</th></tr></thead>
+  <tbody>${rows}</tbody></table>
+  <button onclick="window.print()" style="padding:10px 24px;font-size:14px;margin-top:10px;cursor:pointer">🖨️ הדפס</button>
+  </body></html>`);
+  win.document.close();
+}
+
+function printExitForms(db, soldiers, unit){
+  const exitForms = db.exitForms||{};
+  const unitSoldiers = soldiers.filter(s=>s.unit===unit);
+
+  const rows = unitSoldiers.map(s=>{
+    const forms = Object.values(exitForms).filter(f=>f.soldierId===s.id)
+      .sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+    if(!forms.length) return `<tr style="background:#fff8f8">
+      <td>${s.name}</td><td style="font-family:monospace;font-size:11px">${s.id}</td>
+      <td>—</td><td style="color:#cf222e;font-weight:bold">אין טופס</td>
+      <td>—</td><td>—</td><td>—</td></tr>`;
+    return forms.map(f=>`<tr style="background:${f.status==="אושר"?"#f0fff0":f.status==="נדחה"?"#fff8f8":"#fffbf0"}">
+      <td>${s.name}</td><td style="font-family:monospace;font-size:11px">${s.id}</td>
+      <td>${f.weaponType||"—"}</td>
+      <td style="font-weight:bold;color:${f.status==="אושר"?"#2ea043":f.status==="נדחה"?"#cf222e":"#e67e22"}">${f.status}</td>
+      <td>${f.createdAt||"—"}</td>
+      <td>${f.mpName||"—"} ${f.mpDate?"("+f.mpDate+")":""}</td>
+      <td>${f.magadName||"—"} ${f.magadDate?"("+f.magadDate+")":""}</td>
+    </tr>`).join("");
+  }).join("");
+
+  const win=window.open("","_blank");
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <title>יציאה הביתה — פלוגה ${unit}</title>
+  <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px;font-size:12px}
+  h1{text-align:center;font-size:18px;border-bottom:3px solid #1a1a2e;padding-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin:12px 0}
+  th{background:#1a1a2e;color:#fff;padding:7px 8px;text-align:right;font-size:11px}
+  td{border:1px solid #ddd;padding:6px 8px}@media print{button{display:none}}</style>
+  </head><body>
+  <h1>🏠 יציאה הביתה — פלוגה ${unit}</h1>
+  <p style="text-align:center;color:#666">הופק: ${new Date().toLocaleDateString("he-IL")} • ${unitSoldiers.length} חיילים</p>
+  <table><thead><tr><th>שם</th><th>מ.א</th><th>נשק</th><th>סטטוס</th><th>נוצר</th><th>מ"פ</th><th>מגד</th></tr></thead>
+  <tbody>${rows}</tbody></table>
+  <button onclick="window.print()" style="padding:10px 24px;font-size:14px;margin-top:10px;cursor:pointer">🖨️ הדפס</button>
+  </body></html>`);
+  win.document.close();
+}
+
 function print1008(db, soldiers, unit){
   const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
     .sort((a,b)=>{
