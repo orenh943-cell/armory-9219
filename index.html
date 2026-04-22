@@ -1927,6 +1927,8 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         testCerts:newTestCerts
       };
       fbSet("db/signatures/"+auth.soldierId, sigEntry).catch(e=>console.warn("sig err:",e));
+      // נקה סימון נשלח — החייל חתם
+      fbSet("db/waSent/"+auth.soldierId, null).catch(()=>{});
       // שמור עדכון remaining ל-Firebase
       fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(e=>console.warn("guarantors err:",e));
       // נקה sessionStorage
@@ -7897,6 +7899,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       setDb(prev=>({...prev, dailyNotes:notes||{}}));
     });
 
+    // טעינת נשלח WA
+    const offWaSent = fbOn("db/waSent", (sent)=>{
+      setDb(prev=>({...prev, waSent:sent||{}}));
+    });
+
     // טעינת הגדרות ירוק בעיניים
     fbGet("db/greenEyesSettings").then(settings=>{
       if(settings) setDb(prev=>({...prev, greenEyesSettings:settings}));
@@ -8054,6 +8061,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const signLink=link+"?sign="+soldier.id+"&b="+encoded+issuerParam;
     const msg=`שלום ${soldier.name},\nנא לחתום על טופס ההחתמה האישי:\n${signLink}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,"_blank");
+    // סמן ששלחנו לחייל
+    const sentEntry = {
+      sentAt: new Date().toLocaleString("he-IL"),
+      sentBy: auth?.name||auth?.username||"מנהל",
+      type: "sign"
+    };
+    fbSet("db/waSent/"+soldier.id, sentEntry).catch(()=>{});
+    setDb(prev=>({...prev, waSent:{...(prev.waSent||{}), [soldier.id]:sentEntry}}));
   }
 
   function sendTestAndExitWA(soldier){
@@ -8369,7 +8384,10 @@ ${exitLink}
                 const weps=Object.entries(liveAssigned).filter(([k])=>WEAPON_KEYS.includes(k));
                 const sig=db.signatures?.[s.id];
                 return (
-                  <div key={s.id} style={{...S.card,marginBottom:0,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                  <div key={s.id} style={{...S.card,marginBottom:0,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",
+                    background:sig?"var(--color-success-bg)":db.waSent?.[s.id]?"rgba(255,165,0,0.08)":"var(--color-bg-default)",
+                    borderRight:sig?"3px solid var(--color-success-fg)":db.waSent?.[s.id]?"3px solid var(--color-warning-fg)":"3px solid transparent"
+                  }}>
                     <div style={{flex:"0 0 auto",background:readyScore>=3?"var(--color-success-bg)":readyScore>=2?"var(--color-warning-bg)":"var(--color-bg-subtle)",border:`1px solid ${readyScore>=3?"var(--color-success-fg)":readyScore>=2?"var(--color-warning-fg)":"var(--color-border-muted)"}`,borderRadius:8,padding:"4px 10px",textAlign:"center",minWidth:36}}>
                       <div style={{fontWeight:800,fontSize:16,color:readyScore>=3?"var(--color-success-fg)":readyScore>=2?"var(--color-warning-fg)":"var(--color-text-muted)"}}>{readyScore}</div>
                       <div style={{fontSize:9,color:"var(--color-text-muted)"}}>מ-4</div>
@@ -8390,7 +8408,20 @@ ${exitLink}
                     })()}
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
                       {!sig&&s.guarantee&&<Badge color="purple" small>🛡️ ערב: {s.guarantee.repName}</Badge>}
-                      {!sig&&perms.canSign&&<button onClick={()=>sendWhatsApp(s)} style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
+                      {!sig&&perms.canSign&&(()=>{
+                        const sent = db.waSent?.[s.id];
+                        return (<>
+                          <button onClick={()=>sendWhatsApp(s)}
+                            style={{...S.btn("wa"),padding:"6px 12px",fontSize:"var(--text-sm)",
+                              opacity:sent?0.7:1,
+                              border:sent?"2px solid var(--color-warning-fg)":undefined}}>
+                            {sent?"💬 שלח שוב":"💬 שלח לחתימה"}
+                          </button>
+                          {sent&&<span style={{fontSize:10,color:"var(--color-warning-fg)",whiteSpace:"nowrap"}}>
+                            ✉️ נשלח {sent.sentAt}
+                          </span>}
+                        </>);
+                      })()}
                       {!sig&&canSignAdmin(auth)&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
                       {!sig&&canSignAdmin(auth)&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                       {!sig&&perms.canSign&&<button onClick={()=>setSignInPersonSoldier(s)} style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>✍️ חתום ליד</button>}
@@ -14128,30 +14159,38 @@ function printExitForms(db, soldiers, unit){
   if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
   // שימוש ב-buildFormHtml — זהה לטופס בפרופיל חייל
-  const pages = allSols.map(s=>{
+  const w2 = window.open("","_blank");
+  const exitPages = allSols.map(s=>{
     const forms = Object.values(db.exitForms||{})
       .filter(f=>f.soldierId===s.id)
       .sort((a,b)=>b.createdAt>a.createdAt?1:-1);
     const form = forms[0];
-    if(!form) return `<div style="padding:20px;text-align:center;color:#999;border:2px dashed #ccc;border-radius:8px;margin:20px">
-      <b>${s.name}</b> — אין טופס יציאה
+    if(!form) return `<div style="padding:40px;text-align:center;color:#999;border:2px dashed #ccc;border-radius:8px;margin:40px;font-size:16px">
+      <div style="font-size:32px;margin-bottom:12px">📋</div>
+      <b>${s.name} (${s.id})</b><br/>אין טופס יציאה
     </div>`;
-    return buildFormHtml(form);
+    const fullHtml = buildFormHtml(form);
+    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    return bodyMatch ? bodyMatch[1] : fullHtml;
   });
 
-  const combined = pages.map((html,i)=>{
-    const body = html.replace(/[\s\S]*<body[^>]*>/,'').replace(/<\/body>[\s\S]*/,'');
-    return `<div style="page-break-after:${i<pages.length-1?"always":"auto"}">${body}</div>`;
-  }).join("");
+  // קח CSS מהטופס הראשון
+  const firstExitForm = Object.values(db.exitForms||{}).find(f=>f.soldierId===allSols[0]?.id);
+  const firstExitHtml = firstExitForm ? buildFormHtml(firstExitForm) : "";
+  const exitHeadMatch = firstExitHtml.match(/<head[^>]*>([\s\S]*)<\/head>/i);
+  const exitHeadContent = exitHeadMatch ? exitHeadMatch[1] : '<meta charset="UTF-8">';
 
-  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-  <title>יציאה הביתה — פלוגה ${unit}</title>
-  <style>@media print{button{display:none}}</style>
-  </head><body>
-  ${combined}
-  <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
-  </body></html>`;
-  const w=window.open("","_blank");w.document.write(html);w.document.close();
+  const allExitPages = exitPages.map((body,i)=>
+    `<div style="page-break-after:${i<exitPages.length-1?"always":"auto"};page-break-inside:avoid">${body}</div>`
+  ).join("");
+
+  w2.document.write(`<!DOCTYPE html><html dir="rtl"><head>${exitHeadContent}
+    <style>@media print{button{display:none !important}.print-btn{display:none !important}}</style>
+  </head><body>${allExitPages}
+  <button class="print-btn" onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:12px 28px;font-size:15px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,0.4);z-index:9999">
+    🖨️ הדפס הכל — ${allSols.length} טפסים
+  </button></body></html>`);
+  w2.document.close();
 }
 function print1008(db, soldiers, unit){
   const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
@@ -14161,30 +14200,37 @@ function print1008(db, soldiers, unit){
     });
   if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
-  // שימוש ב-buildSignatureFormHtml — זהה לטופס בפרופיל חייל
+  // פתח iframe נסתר לכל טופס ואחד אחרי השני — זהה לפרופיל חייל
+  const w = window.open("","_blank");
   const pages = allSols.map(s=>{
     const sig = db.signatures?.[s.id];
     const asgn = db.assignments?.[s.id]||{};
     const assigned = (sig?.partial&&sig?.items&&sig.items.length>0)
       ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])) : asgn;
-    return buildSignatureFormHtml(s, sig, assigned);
+    // חלץ רק את תוכן ה-body מה-HTML
+    const fullHtml = buildSignatureFormHtml(s, sig, assigned);
+    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    return bodyMatch ? bodyMatch[1] : fullHtml;
   });
 
-  // עטוף בדף אחד עם page-break בין חיילים
-  const combined = pages.map((html,i)=>{
-    // הוצא את ה-body מכל טופס והוסף page-break
-    const body = html.replace(/[\s\S]*<body[^>]*>/,'').replace(/<\/body>[\s\S]*/,'');
-    return `<div style="page-break-after:${i<pages.length-1?"always":"auto"}">${body}</div>`;
-  }).join("");
+  // בנה HTML אחד עם כל הטפסים — CSS מה-buildSignatureFormHtml כבר נכלל
+  const firstFull = buildSignatureFormHtml(allSols[0], db.signatures?.[allSols[0].id], 
+    (()=>{ const s=allSols[0]; const sig=db.signatures?.[s.id]; const asgn=db.assignments?.[s.id]||{};
+      return (sig?.partial&&sig?.items)? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])):asgn; })());
+  const headMatch = firstFull.match(/<head[^>]*>([\s\S]*)<\/head>/i);
+  const headContent = headMatch ? headMatch[1] : "";
 
-  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-  <title>טופס 1008 — פלוגה ${unit}</title>
-  <style>@media print{button{display:none}}</style>
-  </head><body>
-  ${combined}
-  <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
-  </body></html>`;
-  const w=window.open("","_blank");w.document.write(html);w.document.close();
+  const allPages = pages.map((body,i)=>
+    `<div style="page-break-after:${i<pages.length-1?"always":"auto"};page-break-inside:avoid">${body}</div>`
+  ).join("");
+
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head>${headContent}
+    <style>@media print{button{display:none !important}.print-btn{display:none !important}}</style>
+  </head><body>${allPages}
+  <button class="print-btn" onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:12px 28px;font-size:15px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,0.4);z-index:9999">
+    🖨️ הדפס הכל — ${allSols.length} טפסים
+  </button></body></html>`);
+  w.document.close();
 }
 
 function downloadSignaturesZip(db, signedSoldiers, filterUnit, filterSquad){
