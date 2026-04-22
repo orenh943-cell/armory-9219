@@ -14158,39 +14158,79 @@ function printExitForms(db, soldiers, unit){
     .sort((a,b)=>a.name.localeCompare(b.name,"he"));
   if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
-  // שימוש ב-buildFormHtml — זהה לטופס בפרופיל חייל
-  const w2 = window.open("","_blank");
-  const exitPages = allSols.map(s=>{
+  // שימוש ב-printExitForm — זהה לטופס בפרופיל חייל
+  const pages = allSols.map(s=>{
     const forms = Object.values(db.exitForms||{})
       .filter(f=>f.soldierId===s.id)
       .sort((a,b)=>b.createdAt>a.createdAt?1:-1);
     const form = forms[0];
-    if(!form) return `<div style="padding:40px;text-align:center;color:#999;border:2px dashed #ccc;border-radius:8px;margin:40px;font-size:16px">
-      <div style="font-size:32px;margin-bottom:12px">📋</div>
-      <b>${s.name} (${s.id})</b><br/>אין טופס יציאה
+    if(!form) return null;
+    // קח HTML מ-printExitForm אבל אל תפתח חלון — החזר כ-string
+    const questionsHtml = EXIT_QUESTIONS.map((q,i)=>`
+      <tr>
+        <td style="text-align:center;padding:5px 8px;border:1px solid #ccc;font-weight:bold">${i+1}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc">${q}</td>
+        <td style="text-align:center;padding:5px 8px;border:1px solid #ccc;font-weight:bold">${form.answers?.[i]||"—"}</td>
+        <td style="text-align:center;padding:5px 8px;border:1px solid #ccc">${form.commanderDecisions?.[i]||"—"}</td>
+      </tr>`).join("");
+    return `
+    <div style="page-break-after:always;page-break-inside:avoid;padding:20px;font-family:Arial,sans-serif;direction:rtl;color:#000;font-size:12px;max-width:780px;margin:0 auto">
+      <h2 style="text-align:center;font-size:15px;border-bottom:2px solid #000;padding-bottom:6px;text-decoration:underline">אישור יציאה הביתה עם כלי נשק לחופשה — גדוד 9219</h2>
+      <div style="margin:14px 0;padding:10px;border:1px solid #aaa;border-radius:4px">
+        <div style="font-weight:bold;font-size:13px;text-decoration:underline;margin-bottom:6px">סעיף 1 — שאלון לבחינת הוצאת כלי נשק מהיחידה</div>
+        <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:11px">
+          <thead><tr>
+            <th style="width:35px;border:1px solid #ccc;padding:5px 8px;background:#e8edf5">מס"ד</th>
+            <th style="border:1px solid #ccc;padding:5px 8px;background:#e8edf5">הנושא</th>
+            <th style="width:70px;border:1px solid #ccc;padding:5px 8px;background:#e8edf5">הקף בעיגול</th>
+            <th style="width:110px;border:1px solid #ccc;padding:5px 8px;background:#e8edf5">החלטת המפקד</th>
+          </tr></thead>
+          <tbody>${questionsHtml}</tbody>
+        </table>
+      </div>
+      <div style="margin:14px 0;padding:10px;border:1px solid #aaa;border-radius:4px">
+        <div style="font-weight:bold;font-size:13px;text-decoration:underline;margin-bottom:6px">סעיף 2 — הצהרת החייל</div>
+        <p>א. כתובת מגורים: ${form.address||"___"} &nbsp;&nbsp; יישוב: ${form.city||"___"}</p>
+        <p>ב. הריני שתודרכתי והבנתי את האחריות ליציאה עם כלי נשק לחופשה ואקפיד על ההנחיות הבאות:</p>
+        <ol style="margin-right:20px;font-size:11px">
+          <li><b>כלי הנשק האישי יינעל בארון או בכספת.</b></li>
+          <li><b>מחסניות כלי הנשק יוחזקו בנפרד מכלי הנשק האישי.</b></li>
+          <li>אקפיד להרחיק את כלי הנשק שלי מהחדר האישי ריק מאדם.</li>
+          <li>הנני מתחייב כי כלל המידע הנמסר הינו אמת.</li>
+        </ol>
+        <p>שם החייל: <b>${form.soldierName}</b> &nbsp;&nbsp; מ.א: ${form.soldierId} &nbsp;&nbsp; סוג כלי הנשק: ${form.weaponType||"—"}</p>
+        <p>חתימה: ${form.soldierSig?`<img src="${form.soldierSig}" style="height:36px;border:1px solid #ccc"/>`:"_______________"} &nbsp;&nbsp; תאריך: ${form.createdAt}</p>
+      </div>
+      <div style="margin:14px 0;padding:10px;border:1px solid #aaa;border-radius:4px">
+        <div style="font-weight:bold;font-size:13px;text-decoration:underline;margin-bottom:6px">סעיף 3 — המלצת מ"פ או מפקד מסגרת</div>
+        <p>${form.mpNote||"___________________________"}</p>
+        <p>שם המפקד: ${form.mpName||"_______________"} &nbsp;&nbsp; חתימה: ${form.mpSig?`<img src="${form.mpSig}" style="height:36px;border:1px solid #ccc"/>`:"_______________"} &nbsp;&nbsp; תאריך: ${form.mpDate||"___"}</p>
+      </div>
+      <div style="margin:14px 0;padding:10px;border:1px solid #aaa;border-radius:4px">
+        <div style="font-weight:bold;font-size:13px;text-decoration:underline;margin-bottom:6px">סעיף 4 — החלטת מפקד היחידה</div>
+        <p>בהתבסס על המדווח, הריני מאשר / <b>לא מאשר</b> יציאת החייל עם כלי נשק לחופשה.</p>
+        <p>שם המפקד: ${form.magadName||"_______________"} &nbsp;&nbsp; חתימה: ${form.magadSig?`<img src="${form.magadSig}" style="height:36px;border:1px solid #ccc"/>`:"_______________"} &nbsp;&nbsp; תאריך: ${form.magadDate||"___"}</p>
+        ${form.magadDecision?`<p style="font-weight:bold;font-size:14px;color:${form.magadDecision==="מאשר"?"#27ae60":"#c0392b"}">החלטה: ${form.magadDecision}</p>`:""}
+      </div>
     </div>`;
-    const fullHtml = buildFormHtml(form);
-    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    return bodyMatch ? bodyMatch[1] : fullHtml;
-  });
+  }).filter(Boolean);
 
-  // קח CSS מהטופס הראשון
-  const firstExitForm = Object.values(db.exitForms||{}).find(f=>f.soldierId===allSols[0]?.id);
-  const firstExitHtml = firstExitForm ? buildFormHtml(firstExitForm) : "";
-  const exitHeadMatch = firstExitHtml.match(/<head[^>]*>([\s\S]*)<\/head>/i);
-  const exitHeadContent = exitHeadMatch ? exitHeadMatch[1] : '<meta charset="UTF-8">';
+  if(!pages.length){alert("אין טפסי יציאה לחיילים חתומים בפלוגה "+unit);return;}
 
-  const allExitPages = exitPages.map((body,i)=>
-    `<div style="page-break-after:${i<exitPages.length-1?"always":"auto"};page-break-inside:avoid">${body}</div>`
-  ).join("");
-
-  w2.document.write(`<!DOCTYPE html><html dir="rtl"><head>${exitHeadContent}
-    <style>@media print{button{display:none !important}.print-btn{display:none !important}}</style>
-  </head><body>${allExitPages}
+  const w=window.open("","_blank");
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <title>יציאה הביתה — פלוגה ${unit}</title>
+  <style>
+    *{box-sizing:border-box}
+    @media print{button{display:none !important}.print-btn{display:none !important}}
+    @page{margin:15mm}
+  </style>
+  </head><body>
+  ${pages.join("")}
   <button class="print-btn" onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:12px 28px;font-size:15px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:8px;box-shadow:0 3px 12px rgba(0,0,0,0.4);z-index:9999">
-    🖨️ הדפס הכל — ${allSols.length} טפסים
+    🖨️ הדפס הכל — ${pages.length} טפסים
   </button></body></html>`);
-  w2.document.close();
+  w.document.close();
 }
 function print1008(db, soldiers, unit){
   const allSols = [...soldiers.filter(s=>db.signatures?.[s.id])]
@@ -14326,6 +14366,11 @@ function buildSignatureFormHtml(s, sig, assigned){
 
   const issuerSig = sig.issuerSig||null;
   const issuerName = sig.issuerName||"אחראי ארמון";
+  // שלוף פרטי מנפק מ-USERS או dynamicUsers
+  const allUsersForSig = {...USERS, ...(typeof db!=="undefined"?db.dynamicUsers||{}:{})};
+  const issuerEntry = Object.values(allUsersForSig).find(u=>u.name===issuerName);
+  const issuerPhone = issuerEntry?.phone||"";
+  const issuerIdNum = issuerEntry?.soldierId||issuerEntry?.id||"";
 
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
 <title>טופס החתמה במקום 1008 — ${s.name}</title>
@@ -14380,9 +14425,9 @@ function buildSignatureFormHtml(s, sig, assigned){
 <div class="sig-block">
   <div class="sig-side sig-left">
     <div class="sig-title">פרטי מנפק</div>
-    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">${issuerIdNum||"&nbsp;"}</div></div>
     <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">${issuerName}</div></div>
-    <div class="sig-row"><div class="sl">טלפון נייד</div><div class="sv">&nbsp;</div></div>
+    <div class="sig-row"><div class="sl">טלפון נייד</div><div class="sv">${issuerPhone||"&nbsp;"}</div></div>
     <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${sig.signedAt||"&nbsp;"}</div></div>
     <div class="sig-row"><div class="sl">חתימה</div><div class="sv" style="min-height:46px">${issuerSig?`<img src="${issuerSig}" style="height:42px;max-width:100%"/>`:"&nbsp;"}</div></div>
   </div>
