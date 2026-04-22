@@ -14090,6 +14090,7 @@ function printInspectionReport(db, soldiers, unit){
       <div class="info-grid">
         <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
         <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
+        <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
         <div class="box"><div class="lbl">נשק</div><div class="val" style="font-size:12px">${weps}</div></div>
         <div class="box"><div class="lbl">תאריך חתימה</div><div class="val">${sig?.signedAt||"—"}</div></div>
         <div class="box"><div class="lbl">תאריך מבחן</div><div class="val">${certDate}</div></div>
@@ -14126,101 +14127,28 @@ function printExitForms(db, soldiers, unit){
     .sort((a,b)=>a.name.localeCompare(b.name,"he"));
   if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
+  // שימוש ב-buildFormHtml — זהה לטופס בפרופיל חייל
   const pages = allSols.map(s=>{
     const forms = Object.values(db.exitForms||{})
       .filter(f=>f.soldierId===s.id)
       .sort((a,b)=>b.createdAt>a.createdAt?1:-1);
-    const form = forms[0]; // הטופס האחרון
-    const statusColor = form?.status==="אושר"?"#2ea043":form?.status==="נדחה"?"#cf222e":"#e67e22";
-    const statusLabel = form?.status||"אין טופס";
-    const answers = form?.answers||[];
-    const QUESTIONS = [
-      "האם שמרת על כלי הנשק שברשותך?",
-      "האם כל הציוד שקיבלת מהארמון ברשותך?",
-      "האם אתה מתחייב להחזיר את כל הציוד בסיום?",
-      "האם ידוע לך על נזק לציוד?",
-      "האם קיבלת הדרכה על שמירת נשק בבית?",
-      "האם הנשק יישמר בכספת/נעילה מאובטחת?",
-      "האם יש לך ילדים קטנים בבית?",
-      "האם עברת אירוע טראומטי לאחרונה?",
-      "האם אתה תחת השפעת תרופות/אלכוהול?",
-      "האם יש מניעה רפואית/ביטחונית לנשיאת נשק?"
-    ];
-    const answersRows = answers.map((a,i)=>`
-      <tr style="background:${i%2?"#f9f9f9":"#fff"}">
-        <td style="font-size:11px">${i+1}. ${QUESTIONS[i]||""}</td>
-        <td style="text-align:center;font-weight:bold;color:${a==="כן"?"#2ea043":"#cf222e"}">${a||"—"}</td>
-      </tr>`).join("");
-    const soldierSigImg = form?.soldierSig?`<img src="${form.soldierSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
-      `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`;
-    return `
-    <div class="page">
-      <div class="header">
-        <div>
-          <div class="title">טופס יציאה הביתה עם נשק</div>
-          <div class="sub">גדוד 9219 — פלוגה ${unit}</div>
-        </div>
-        <div class="date">הופק: ${new Date().toLocaleDateString("he-IL")}</div>
-      </div>
-      <div class="info-grid">
-        <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
-        <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
-        <div class="box"><div class="lbl">כלי נשק</div><div class="val" style="font-size:12px">${form?.weaponType||"—"}</div></div>
-        <div class="box"><div class="lbl">כתובת</div><div class="val" style="font-size:11px">${form?.address||"—"}, ${form?.city||""}</div></div>
-        <div class="box"><div class="lbl">סטטוס</div><div class="val" style="color:${statusColor}">${statusLabel}</div></div>
-        <div class="box"><div class="lbl">תאריך מילוי</div><div class="val">${form?.createdAt||"—"}</div></div>
-      </div>
-      ${form?`
-      <table>
-        <thead><tr><th>שאלה</th><th style="width:60px">תשובה</th></tr></thead>
-        <tbody>${answersRows}</tbody>
-      </table>
-      <div class="sig-area">
-        <div class="sig-box">
-          <div class="lbl">חתימת חייל</div>
-          <div class="sig-img">${soldierSigImg}</div>
-        </div>
-        <div class="sig-box">
-          <div class="lbl">מ"פ — ${form.mpName||"—"}</div>
-          <div class="sig-img">${form.mpSig?`<img src="${form.mpSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
-            `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`}</div>
-          <div class="sig-date">${form.mpDate||""}</div>
-        </div>
-        <div class="sig-box">
-          <div class="lbl">מגד — ${form.magadName||"—"}</div>
-          <div class="sig-img">${form.magadSig?`<img src="${form.magadSig}" style="height:40px;border:1px solid #ccc;border-radius:4px"/>`:
-            `<div style="border:1px solid #999;height:40px;width:100px;display:inline-block"></div>`}</div>
-          <div class="sig-date">${form.magadDate||""} ${form.magadDecision?"— "+form.magadDecision:""}</div>
-        </div>
-      </div>`:`<div style="text-align:center;padding:30px;color:#999;border:2px dashed #ccc;border-radius:6px">אין טופס יציאה</div>`}
+    const form = forms[0];
+    if(!form) return `<div style="padding:20px;text-align:center;color:#999;border:2px dashed #ccc;border-radius:8px;margin:20px">
+      <b>${s.name}</b> — אין טופס יציאה
     </div>`;
+    return buildFormHtml(form);
+  });
+
+  const combined = pages.map((html,i)=>{
+    const body = html.replace(/[\s\S]*<body[^>]*>/,'').replace(/<\/body>[\s\S]*/,'');
+    return `<div style="page-break-after:${i<pages.length-1?"always":"auto"}">${body}</div>`;
   }).join("");
 
   const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
   <title>יציאה הביתה — פלוגה ${unit}</title>
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;direction:rtl;margin:0;padding:0;font-size:12px}
-    .page{padding:20px;max-width:700px;margin:0 auto;page-break-after:always}
-    .page:last-child{page-break-after:auto}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:14px}
-    .title{font-size:20px;font-weight:800;color:#1a1a2e}
-    .sub{font-size:12px;color:#555}
-    .date{font-size:11px;color:#555}
-    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-    .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
-    .lbl{font-size:10px;color:#777;margin-bottom:2px}
-    .val{font-weight:700;font-size:13px}
-    table{width:100%;border-collapse:collapse;margin-bottom:14px}
-    th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:right;font-size:11px}
-    td{padding:6px 8px;border:1px solid #ccc}
-    .sig-area{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px}
-    .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px;text-align:center}
-    .sig-img{min-height:44px;display:flex;align-items:center;justify-content:center;margin:6px 0}
-    .sig-date{font-size:10px;color:#777}
-    @media print{button{display:none}.page{page-break-after:always}.page:last-child{page-break-after:auto}}
-  </style></head><body>
-  ${pages}
+  <style>@media print{button{display:none}}</style>
+  </head><body>
+  ${combined}
   <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
   </body></html>`;
   const w=window.open("","_blank");w.document.write(html);w.document.close();
@@ -14233,91 +14161,30 @@ function print1008(db, soldiers, unit){
     });
   if(!allSols.length){alert("אין חיילים חתומים בפלוגה "+unit);return;}
 
+  // שימוש ב-buildSignatureFormHtml — זהה לטופס בפרופיל חייל
   const pages = allSols.map(s=>{
     const sig = db.signatures?.[s.id];
     const asgn = db.assignments?.[s.id]||{};
-    const weps = Object.entries(asgn).filter(([k])=>WEAPON_KEYS.includes(k));
-    const sigImg = sig?.sigData?`<img src="${sig.sigData}" style="height:45px;border:1px solid #ccc;border-radius:4px" alt="חתימה"/>`:
-      `<div style="border:1px solid #999;height:45px;width:120px;display:inline-block"></div>`;
-    const rows = weps.map(([k,v])=>`
-      <tr>
-        <td style="font-weight:bold;font-size:13px">${k}</td>
-        <td style="font-family:monospace;font-size:12px">${v&&v!==1?String(v):"—"}</td>
-      </tr>`).join("");
-    return `
-    <div class="page">
-      <div class="header">
-        <div>
-          <div class="title">טופס 1008</div>
-          <div class="sub">גדוד 9219 — פלוגה ${unit}</div>
-        </div>
-        <div class="date">תאריך: ${new Date().toLocaleDateString("he-IL")}</div>
-      </div>
-      <div class="info-grid">
-        <div class="box"><div class="lbl">שם מלא</div><div class="val">${s.name}</div></div>
-        <div class="box"><div class="lbl">מספר אישי</div><div class="val" style="font-family:monospace">${s.id}</div></div>
-        <div class="box"><div class="lbl">פלוגה</div><div class="val">${s.unit||"—"}</div></div>
-        <div class="box"><div class="lbl">מחלקה</div><div class="val">${s.squad||"—"}</div></div>
-      </div>
-      <table>
-        <thead><tr><th>שם האמצעי</th><th>מספר סידורי / צ'</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="disclaimer">
-        עם הגיעך לביצוע שירות מילואים פעיל, הינך מקבל לידך אמצעים לוגיסטיים יקרי ערך.
-        באחריותך האישית לוודא שאמצעים אלו חוזרים לרשות הצבא בסיום שירותך.
-        מרגע שהוחתמת על טופס זה הינך אחראי ישיר לכשירותו ואבטחתו של הציוד.
-      </div>
-      <div class="sig-area">
-        <div class="sig-box">
-          <div class="lbl">חתימת החייל</div>
-          <div class="sig-img">${sigImg}</div>
-          <div class="sig-date">תאריך חתימה: ${sig?.signedAt||"—"}</div>
-        </div>
-        <div class="sig-box">
-          <div class="lbl">מנפק — ${sig?.issuerName||"אחראי ארמון"}</div>
-          <div class="sig-img">
-            ${sig?.issuerSig?`<img src="${sig.issuerSig}" style="height:45px;border:1px solid #ccc;border-radius:4px" alt="מנפק"/>`:
-              `<div style="border:1px solid #999;height:45px;width:120px;display:inline-block"></div>`}
-          </div>
-        </div>
-      </div>
-    </div>`;
+    const assigned = (sig?.partial&&sig?.items&&sig.items.length>0)
+      ? Object.fromEntries(sig.items.map(k=>[k,asgn[k]||1])) : asgn;
+    return buildSignatureFormHtml(s, sig, assigned);
+  });
+
+  // עטוף בדף אחד עם page-break בין חיילים
+  const combined = pages.map((html,i)=>{
+    // הוצא את ה-body מכל טופס והוסף page-break
+    const body = html.replace(/[\s\S]*<body[^>]*>/,'').replace(/<\/body>[\s\S]*/,'');
+    return `<div style="page-break-after:${i<pages.length-1?"always":"auto"}">${body}</div>`;
   }).join("");
 
   const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
   <title>טופס 1008 — פלוגה ${unit}</title>
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;direction:rtl;margin:0;padding:0;font-size:12px;color:#000}
-    .page{padding:20px;max-width:700px;margin:0 auto;page-break-after:always}
-    .page:last-child{page-break-after:auto}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:8px;margin-bottom:14px}
-    .title{font-size:20px;font-weight:800;color:#1a1a2e}
-    .sub{font-size:12px;color:#555;margin-top:2px}
-    .date{font-size:11px;color:#555;text-align:left}
-    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-    .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
-    .lbl{font-size:10px;color:#777;margin-bottom:2px}
-    .val{font-weight:700;font-size:14px}
-    table{width:100%;border-collapse:collapse;margin-bottom:14px}
-    th{background:#1a1a2e;color:#fff;padding:7px 10px;text-align:right;font-size:11px}
-    td{padding:8px 10px;border:1px solid #ccc;font-size:12px}
-    tr:nth-child(even){background:#f9f9f9}
-    .disclaimer{font-size:10px;color:#666;border:1px solid #ddd;padding:8px 10px;border-radius:4px;margin-bottom:14px;line-height:1.5}
-    .sig-area{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px}
-    .sig-box{border:1px solid #ccc;padding:10px;border-radius:4px;text-align:center}
-    .sig-img{min-height:50px;display:flex;align-items:center;justify-content:center;margin:8px 0}
-    .sig-date{font-size:10px;color:#777;margin-top:4px}
-    @media print{button{display:none}.page{page-break-after:always}.page:last-child{page-break-after:auto}}
-  </style></head><body>
-  ${pages}
+  <style>@media print{button{display:none}}</style>
+  </head><body>
+  ${combined}
   <button onclick="window.print()" style="position:fixed;bottom:20px;left:20px;padding:10px 24px;font-size:14px;cursor:pointer;background:#1a1a2e;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🖨️ הדפס הכל (${allSols.length} טפסים)</button>
   </body></html>`;
-
-  const w=window.open("","_blank");
-  w.document.write(html);
-  w.document.close();
+  const w=window.open("","_blank");w.document.write(html);w.document.close();
 }
 
 function downloadSignaturesZip(db, signedSoldiers, filterUnit, filterSquad){
