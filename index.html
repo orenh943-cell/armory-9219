@@ -10631,6 +10631,9 @@ function VisutTab({db, setDb, soldiers, auth}){
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
         if(n!==name) return;
+        // Only count unit-assigned items (not soldier - those are in assignments)
+        const t=v.t||v.assignedType||"unit";
+        if(t==="soldier") return;
         const u=v.u||v.unit||"גדודי";
         liveByUnit[u]=(liveByUnit[u]||0)+1;
       });
@@ -11194,11 +11197,20 @@ function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDo
 
   function assign(){
     if(!soldierId) return;
-    const item = db.unitItems?.[uid];
-    if(!item) return;
+    // Find item by uid, or by name+serial if uid is stale
+    let item = db.unitItems?.[uid];
+    let actualUid = uid;
+    if(!item){
+      // Search by itemName and unit
+      const found = Object.entries(db.unitItems||{}).find(([k,v])=>{
+        const n=cleanItemName(v.n||v.name||"");
+        return n===cleanItemName(itemName) && (v.u||v.unit||"")===unit && (v.t||v.assignedType||"unit")==="unit";
+      });
+      if(found){ actualUid=found[0]; item=found[1]; }
+    }
     // Move from unitItems (unit assignment) to assignments (soldier assignment)
     const nUnitItems = {...db.unitItems};
-    delete nUnitItems[uid];
+    if(item) delete nUnitItems[actualUid];
     const prevAssigned = db.assignments?.[soldierId]||{};
     const newAssignedRaw = {...prevAssigned,[itemName]:item.s||item.serial||1};
     // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
@@ -11206,7 +11218,7 @@ function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDo
     const nAssignments = {...(db.assignments||{}),[soldierId]:newAssigned};
     const ndb={...db, unitItems:nUnitItems, assignments:nAssignments};
     setDb(ndb);
-    fbSet("db/unitItems/"+uid, null).catch(()=>{});
+    if(item) fbSet("db/unitItems/"+actualUid, null).catch(()=>{});
     fbSet("db/assignments/"+soldierId, sanitizeForFirebase(nAssignments[soldierId])).catch(()=>{});
     logAction("שיוך_אמצעי", itemName+" שויך לחייל "+selectedSol?.name, "מערכת");
     onDone();
