@@ -2401,6 +2401,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     }).catch(()=>doHandlePrint(db.dailyNotes||{}));
   }
   function doHandlePrint(savedNotes){
+    // DEBUG: log notes keys
+    if(Object.keys(savedNotes).length>0){
+      console.log("dailyNotes keys:", Object.keys(savedNotes));
+      console.log("leftCalc makatKeys:", leftCalc.map(i=>i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")));
+    }
     const leftRows = leftCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
