@@ -1199,6 +1199,16 @@ const WEAPON_BUNDLES = {
 };
 const WEAPON_KEYS = ["M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש"];
 
+// מחזיר את שמות האביזרים של bundle (תומך במערך פשוט או באובייקט {fixed, dynamic})
+function getBundleAccessoryNames(bundle){
+  if(!bundle) return [];
+  if(Array.isArray(bundle)) return bundle;
+  const names = [];
+  if(Array.isArray(bundle.fixed)) names.push(...bundle.fixed);
+  if(Array.isArray(bundle.dynamic)) names.push(...bundle.dynamic.map(d=>d.name).filter(Boolean));
+  return names;
+}
+
 // חישוב סידורי נגזר של קנה מסידורי המקלע
 function deriveBarrelSerial(weaponSerial, rule){
   if(!weaponSerial || weaponSerial===1 || weaponSerial===true) return null;
@@ -3811,8 +3821,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                   return (
                 <div key={rowKey} style={{padding:"8px 12px",background:isSelected?"#dbeafe":someSelected?"#1a3a5c":"var(--color-bg-canvas)",borderRadius:8,marginBottom:4}}>
                   {/* סמן אם זה אביזר חבילה */}
-                  {(()=>{const isBundle=Object.values(WEAPON_BUNDLES).some(b=>b.includes(clean));
-                  const bundleParent=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                  {(()=>{const isBundle=Object.values(WEAPON_BUNDLES).some(b=>getBundleAccessoryNames(b).includes(clean));
+                  const bundleParent=Object.entries(WEAPON_BUNDLES).find(([,b])=>getBundleAccessoryNames(b).includes(clean))?.[0];
                   return isBundle&&bundleParent&&Object.keys(assigned).some(k=>cleanItemName(k)===bundleParent)?
                     <div style={{fontSize:9,color:"var(--color-text-muted)",marginBottom:2,paddingRight:4}}>
                       📎 אביזר של {bundleParent}
@@ -3912,7 +3922,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               })}
               {retSel.some(name=>{
                 const clean=cleanItemName(name);
-                const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>getBundleAccessoryNames(b).includes(clean))?.[0];
                 if(parentWeapon) return false; // אביזרי חבילה — לא מבקשים ארון נפרד
                 return !retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;
               })&&retSel.length>0&&(
@@ -3924,7 +3934,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 disabled={!retSel.length||retSel.some(name=>{
                   const clean=cleanItemName(name);
                   // אם זה אביזר חבילה — בדוק שלנשק שלו יש ארון
-                  const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(clean))?.[0];
+                  const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>getBundleAccessoryNames(b).includes(clean))?.[0];
                   if(parentWeapon){
                     const parentCab=retCabinet[parentWeapon]?.cabName||Object.values(retCabinet).find(v=>v?.cabName)?.cabName;
                     return !parentCab&&!retCabinet[clean]?.cabName&&!retCabinet[name]?.cabName;
@@ -4016,8 +4026,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         <div style={{marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>בחר את הפריטים עליהם תרצה להחתים:</div>
         <div style={{marginBottom:12}}>
           {groupAssigned(assigned,db).map(([name,g])=>{
-              const isBundle=Object.values(WEAPON_BUNDLES).some(b=>b.includes(name));
-              const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>b.includes(name))?.[0];
+              const isBundle=Object.values(WEAPON_BUNDLES).some(b=>getBundleAccessoryNames(b).includes(name));
+              const parentWeapon=Object.entries(WEAPON_BUNDLES).find(([,b])=>getBundleAccessoryNames(b).includes(name))?.[0];
               const isSelected=partialSel.includes(name+(g.serial||""));
               return (
             <div key={name+(g.serial||"")} style={{marginBottom:4}}>
