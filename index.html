@@ -2261,6 +2261,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
   const [editTime, setEditTime] = useState(now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}));
   const [mgrSig, setMgrSig] = useState(()=>db.userSigs?.[auth?.username]||null);
+  React.useEffect(()=>{ window._dailySetDb = setDb; return ()=>{ window._dailySetDb=null; }; },[setDb]);
   const [soferSig, setSoferSig] = useState(null);
   const [showPad, setShowPad] = useState(false);
   const [showSoferPad, setShowSoferPad] = useState(false);
@@ -2401,11 +2402,6 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     }).catch(()=>doHandlePrint(db.dailyNotes||{}));
   }
   function doHandlePrint(savedNotes){
-    // DEBUG: log notes keys
-    if(Object.keys(savedNotes).length>0){
-      console.log("dailyNotes keys:", Object.keys(savedNotes));
-      console.log("leftCalc makatKeys:", leftCalc.map(i=>i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")));
-    }
     const leftRows = leftCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
@@ -2413,7 +2409,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+((savedNotes[i.makat?String(i.makat):""]||savedNotes[cleanItemName(i.alias||i.name||"")]||"")||"")+"</td></tr>"
     ).join("");
     const rightRows = rightCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
@@ -2422,7 +2418,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+((savedNotes[i.makat?String(i.makat):""]||savedNotes[cleanItemName(i.alias||i.name||"")]||"")||"")+"</td></tr>"
     ).join("");
     const maxRows = Math.max(leftCalc.length, rightCalc.length);
     const leftArr = leftCalc; const rightArr = rightCalc;
@@ -2514,8 +2510,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     if(window._pendingDailyFormKey){
       try{
         const encoded = btoa(unescape(encodeURIComponent(_fullDailyHtml.substring(0,400000))));
-        fbSet("db/dailyFormsHtml/"+window._pendingDailyFormKey, {html:encoded, savedAt:new Date().toISOString()}).catch(()=>{});
-        setDb(prev=>({...prev, dailyFormsHtml:{...(prev.dailyFormsHtml||{}), [window._pendingDailyFormKey]:{html:encoded, savedAt:new Date().toISOString()}}}));
+        const savedEntry = {html:encoded, savedAt:new Date().toISOString()};
+        fbSet("db/dailyFormsHtml/"+window._pendingDailyFormKey, savedEntry).catch(()=>{});
+        if(window._dailySetDb) window._dailySetDb(prev=>({...prev, dailyFormsHtml:{...(prev.dailyFormsHtml||{}), [window._pendingDailyFormKey]:savedEntry}}));
       }catch(e){ console.warn("save html err",e); }
       window._pendingDailyFormKey = null;
     }
