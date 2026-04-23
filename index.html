@@ -1371,6 +1371,11 @@ function saveDB(db){
   fbSet("db/weaponLocations", safe.weaponLocations).catch(e=>console.warn("FB err:",e));
   fbSet("db/cabinets", safe.cabinets).catch(e=>console.warn("FB err:",e));
   if(safe.cabinetNames && Object.keys(safe.cabinetNames).length) fbSet("db/cabinetNames", safe.cabinetNames).catch(e=>console.warn("FB err:",e));
+  // הוספה: שמירת קולקציות קריטיות נוספות כדי שלא ייעלמו
+  if(safe.assignments && Object.keys(safe.assignments).length) fbSet("db/assignments", safe.assignments).catch(e=>console.warn("FB err:",e));
+  if(safe.assignmentMeta && Object.keys(safe.assignmentMeta).length) fbSet("db/assignmentMeta", safe.assignmentMeta).catch(e=>console.warn("FB err:",e));
+  if(safe.exitForms && Object.keys(safe.exitForms).length) fbSet("db/exitForms", safe.exitForms).catch(e=>console.warn("FB err:",e));
+  if(safe.inspections && Object.keys(safe.inspections).length) fbSet("db/inspections", safe.inspections).catch(e=>console.warn("FB err:",e));
   // NEVER bulk-overwrite these — written individually via fbSet on each change:
   // signatures → written in doSign, archiveAndClearSig
   // testCerts  → written in TestCertView.save()
@@ -7712,7 +7717,6 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
           <div style={{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}}>פעולות מהירות</div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {perms.canEdit&&<button onClick={()=>setAddModal(true)} style={{...S.btn("green"),textAlign:"right"}}>👤 הוסף חייל</button>}
-            {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),textAlign:"right"}}>➕ משיכה / החזרה</button>}
             <button onClick={()=>setTab("signatures")} style={{...S.btn("wa"),textAlign:"right"}}>💬 חתימות</button>
             {perms.canBulkSign&&<button onClick={()=>setBulkModal(true)} style={{...S.btn("purple"),textAlign:"right"}}>✍️ ערבות מרוכזת</button>}
             <button onClick={()=>buildDailyReport(soldiers,db)} style={{...S.btn("blue"),textAlign:"right"}}>📊 דוח יומי</button>
@@ -8459,7 +8463,6 @@ ${exitLink}
               <div style={{display:"flex",gap:8}}>
               <button onClick={()=>exportSoldiersJSON(soldiers,db)} style={{...S.btn("gray"),fontSize:"var(--text-base)"}}>📊 הורד נתוני Excel</button>
               <button onClick={()=>setAddModal(true)} style={{...S.btn("green"),fontSize:"var(--text-base)"}}>👤 הוסף חייל</button>
-              {perms.canCheckout&&<button onClick={()=>setQuickModal(true)} style={{...S.btn("blue"),fontSize:"var(--text-base)"}}>➕ משיכה / החזרה</button>}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
