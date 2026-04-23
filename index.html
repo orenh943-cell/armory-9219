@@ -2255,13 +2255,12 @@ function DailyLiveStock({db, soldiers}){
 }
 
 
-function DailyModal({db,onClose,type,auth,soldiers=[]}){
+function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
   // תאריך ושעה עם אפשרות עריכה
   const now = new Date();
   const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
   const [editTime, setEditTime] = useState(now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}));
   const [mgrSig, setMgrSig] = useState(()=>db.userSigs?.[auth?.username]||null);
-  React.useEffect(()=>{ window._dailySetDb = setDb; return ()=>{ window._dailySetDb=null; }; },[setDb]);
   const [soferSig, setSoferSig] = useState(null);
   const [showPad, setShowPad] = useState(false);
   const [showSoferPad, setShowSoferPad] = useState(false);
@@ -2512,7 +2511,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
         const encoded = btoa(unescape(encodeURIComponent(_fullDailyHtml.substring(0,400000))));
         const savedEntry = {html:encoded, savedAt:new Date().toISOString()};
         fbSet("db/dailyFormsHtml/"+window._pendingDailyFormKey, savedEntry).catch(()=>{});
-        if(window._dailySetDb) window._dailySetDb(prev=>({...prev, dailyFormsHtml:{...(prev.dailyFormsHtml||{}), [window._pendingDailyFormKey]:savedEntry}}));
+        if(onSaveHtml) onSaveHtml(window._pendingDailyFormKey, savedEntry);
       }catch(e){ console.warn("save html err",e); }
       window._pendingDailyFormKey = null;
     }
@@ -8793,7 +8792,7 @@ ${exitLink}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
       {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
-      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers}/>}
+      {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers} onSaveHtml={(key,entry)=>setDb(prev=>({...prev,dailyFormsHtml:{...(prev.dailyFormsHtml||{}),[key]:entry}}))}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
       {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
