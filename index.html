@@ -12661,7 +12661,7 @@ function MyStockTab({db, setDb, soldiers, auth}){
                       {/* שיוך לחייל */}
                       {!isSoldier&&<button onClick={()=>setExpandedAddItem("assign::"+JSON.stringify({uid:id,itemName:expandedItem,unit}))}
                         style={{...S.btn("blue"),padding:"2px 7px",fontSize:9,minHeight:22}}>👤</button>}
-                      {canDelete(auth)&&<button onClick={()=>{
+                      {canDelete(auth)&&!isSoldier&&<button onClick={()=>{
                         const ndb={...db,unitItems:{...db.unitItems}};
                         delete ndb.unitItems[id];
                         const nItems={...db.unitItems}; delete nItems[id];
