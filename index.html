@@ -2408,7 +2408,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||"")]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")]||"")+"</td></tr>"
     ).join("");
     const rightRows = rightCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
@@ -2417,7 +2417,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold'>"+(i.total||"")+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center'>"+(i.loans||0)+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;text-align:center;font-weight:bold;color:"+(i.ok?"green":"red")+"'>"+(i.total!=null?i.stock:"")+"</td>"+
-      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||"")]||"")+"</td></tr>"
+      "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;color:#555'>"+(savedNotes[i.makat?String(i.makat):cleanItemName(i.alias||i.name||"")]||"")+"</td></tr>"
     ).join("");
     const maxRows = Math.max(leftCalc.length, rightCalc.length);
     const leftArr = leftCalc; const rightArr = rightCalc;
@@ -2440,9 +2440,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     }).join("")+extraRows;
 
     const win = window.open("","_blank");
-    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    const _fullDailyHtml = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
     <title>ספירת מחסן ארמון 9219</title>
-
   <style>
       *{box-sizing:border-box;margin:0;padding:0}
       @page{size:A4 landscape;margin:8mm}
@@ -2503,17 +2502,18 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     </div>
     ${note?`<div style="margin-top:8px;font-size:11px;border:1px solid #ccc;padding:6px;border-radius:4px"><strong>הערות:</strong> ${note}</div>`:""}
     <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
-    </body></html>`);
-    // שמור HTML לארכיון
+    </body></html>`;
+    win.document.write(_fullDailyHtml);
+    win.document.close();
+    // שמור HTML מלא ל-Firebase (כולל הערות)
     if(window._pendingDailyFormKey){
       try{
-        const fullHtml = win.document.documentElement.outerHTML||"";
-        const encoded = btoa(unescape(encodeURIComponent(fullHtml.substring(0,300000))));
+        const encoded = btoa(unescape(encodeURIComponent(_fullDailyHtml.substring(0,400000))));
         fbSet("db/dailyFormsHtml/"+window._pendingDailyFormKey, {html:encoded, savedAt:new Date().toISOString()}).catch(()=>{});
-      }catch(e){}
+        setDb(prev=>({...prev, dailyFormsHtml:{...(prev.dailyFormsHtml||{}), [window._pendingDailyFormKey]:{html:encoded, savedAt:new Date().toISOString()}}}));
+      }catch(e){ console.warn("save html err",e); }
       window._pendingDailyFormKey = null;
     }
-    win.document.close();
   }
 
   return (
@@ -2740,12 +2740,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                       background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",
                       borderRadius:6,maxHeight:150,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"}}>
                       {filtered.map(u=>(
-                        <div key={u.name} onMouseDown={()=>{
-                          setSoferName(u.name);
-                          setSoferID(u.soldierId||u.id||"");
-                          setSoferRank(u.rank||u.roleTitle||"");
-                          setShowSoferSugg(false);
-                        }} style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
+                        <div key={u.name}
+                          onPointerDown={e=>{
+                            e.preventDefault(); // מונע blur לפני הבחירה
+                            setSoferName(u.name);
+                            setSoferID(u.soldierId||u.id||"");
+                            setSoferRank(u.rank||u.roleTitle||"");
+                            setShowSoferSugg(false);
+                          }} style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
                           borderBottom:"1px solid var(--color-border-muted)"}}
                           onMouseEnter={e=>e.currentTarget.style.background="var(--color-bg-subtle)"}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
