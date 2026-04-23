@@ -8058,7 +8058,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     // אם Firebase לא נטען עדיין — נחזיר RAW_SOLDIERS + customSoldiers
     // אם נטען — נחזיר את הכל מ-db.soldiers
     const base=getSoldiers(db);
-    if(process.env.NODE_ENV==="development"||window._dbgSoldiers){
+    if(window._dbgSoldiers){
       console.log("soldiers memo: base.length=",base.length,"db.soldiers keys=",Object.keys(db.soldiers||{}).length,"_soldiersLoaded=",db._soldiersLoaded);
     }
     const guarantors=db.bulkGuarantors||{};
