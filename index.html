@@ -2264,7 +2264,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const now = new Date();
   const [editDate, setEditDate] = useState(now.toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric"}));
   const [editTime, setEditTime] = useState(now.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}));
-  const [mgrSig, setMgrSig] = useState(null);
+  const [mgrSig, setMgrSig] = useState(()=>db.userSigs?.[auth?.username]||null);
   const [soferSig, setSoferSig] = useState(null);
   const [showPad, setShowPad] = useState(false);
   const [showSoferPad, setShowSoferPad] = useState(false);
@@ -2442,21 +2442,24 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     <title>ספירת מחסן ארמון 9219</title>
 
   <style>
-      body{font-family:Arial,sans-serif;direction:rtl;padding:10px;font-size:11px}
-      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a1a2e;padding-bottom:6px;margin-bottom:10px}
-      .header h1{font-size:16px;margin:0;color:#1a1a2e}
-      .meta{display:flex;gap:20px;font-size:11px;margin-bottom:10px}
-      table{width:100%;border-collapse:collapse;margin-bottom:10px}
-      th{background:#1a1a2e;color:#fff;padding:5px 6px;text-align:right;font-size:11px;border:1px solid #1a1a2e}
-      td{border:1px solid #ccc;padding:4px 6px;font-size:11px}
-      .footer{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-      .box{border:1px solid #ccc;padding:8px 10px;border-radius:4px}
-      .box h3{font-size:11px;margin:0 0 6px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:4px}
-      .field{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+      *{box-sizing:border-box;margin:0;padding:0}
+      @page{size:A4 landscape;margin:8mm}
+      body{font-family:Arial,sans-serif;direction:rtl;padding:6px;font-size:9px;width:100%}
+      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a2e;padding-bottom:4px;margin-bottom:6px}
+      .header h1{font-size:13px;margin:0;color:#1a1a2e}
+      .meta{display:flex;gap:16px;font-size:9px;margin-bottom:6px}
+      .tables-wrap{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#1a1a2e;color:#fff;padding:3px 4px;text-align:right;font-size:8px;border:1px solid #1a1a2e}
+      td{border:1px solid #ccc;padding:2px 4px;font-size:8px}
+      .footer{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+      .box{border:1px solid #ccc;padding:5px 8px;border-radius:3px}
+      .box h3{font-size:9px;margin:0 0 4px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:2px}
+      .field{display:flex;justify-content:space-between;margin-bottom:2px;font-size:8px}
       .field .lbl{color:#666}
       .field .val{font-weight:bold}
-      .sig-area{height:35px;border-bottom:1px solid #999;margin-top:8px}
-      @media print{button{display:none}}
+      .sig-area{height:28px;border-bottom:1px solid #999;margin-top:5px}
+      @media print{button{display:none}@page{size:A4 landscape;margin:8mm}}
     </style></head>
     <body>
     <div class="header">
@@ -2484,7 +2487,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
         <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${auth?.name||"אורן חלפון"}</span></div>
         <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${auth?.soldierId||"7680832"}</span></div>
         <div class="field"><span class="lbl">דרגה:</span><span class="val">רסר</span></div>
-        <div class="sig-area"></div>
+        ${mgrSig?`<img src="${mgrSig}" style="height:45px;margin-top:6px;border-radius:4px" alt="חתימה"/>`:'<div class="sig-area"></div>'}
         <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
       </div>
       <div class="box">
@@ -2710,8 +2713,42 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <label style={S.label}>שם ושם משפחה</label>
-            <input value={soferName} onChange={e=>setSoferName(e.target.value)}
-              placeholder="שם הסופר" style={{...S.input,marginBottom:4,fontSize:"var(--text-sm)"}}/>
+            {(()=>{
+              // בנה רשימת כל המשתמשים (USERS + dynamicUsers)
+              const allUsers = Object.values({...USERS,...(db.dynamicUsers||{})})
+                .filter(u=>u.name).sort((a,b)=>a.name.localeCompare(b.name,"he"));
+              const [showSugg, setShowSugg] = React.useState(false);
+              const filtered = allUsers.filter(u=>!soferName||u.name.toLowerCase().includes(soferName.toLowerCase()));
+              return (
+                <div style={{position:"relative"}}>
+                  <input value={soferName}
+                    onChange={e=>{setSoferName(e.target.value);setSoferID("");setSoferRank("");setShowSugg(true);}}
+                    onFocus={()=>setShowSugg(true)}
+                    onBlur={()=>setTimeout(()=>setShowSugg(false),200)}
+                    placeholder="שם הסופר" style={{...S.input,marginBottom:4,fontSize:"var(--text-sm)"}}/>
+                  {showSugg&&filtered.length>0&&(
+                    <div style={{position:"absolute",top:"100%",right:0,left:0,zIndex:100,
+                      background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",
+                      borderRadius:6,maxHeight:150,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"}}>
+                      {filtered.map(u=>(
+                        <div key={u.name} onMouseDown={()=>{
+                          setSoferName(u.name);
+                          setSoferID(u.soldierId||u.id||"");
+                          setSoferRank(u.rank||u.roleTitle||"");
+                          setShowSugg(false);
+                        }} style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
+                          borderBottom:"1px solid var(--color-border-muted)"}}
+                          onMouseEnter={e=>e.currentTarget.style.background="var(--color-bg-subtle)"}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div style={{fontWeight:600}}>{u.name}</div>
+                          <div style={{fontSize:10,color:"var(--color-text-muted)"}}>מ.א {u.soldierId||"—"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <label style={S.label}>מספר אישי</label>
             <input value={soferID} onChange={e=>setSoferID(e.target.value)}
               placeholder="מספר אישי" style={{...S.input,marginBottom:4,fontSize:"var(--text-sm)"}} inputMode="numeric"/>
@@ -2739,6 +2776,16 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
 
       <div style={{display:"flex",gap:10}}>
         <button onClick={()=>{
+          // שמור טופס ל-Firebase
+          const formKey = (type==="open"?"פתיחה":"סגירה")+"_"+(editDate.replace(/\//g,"-"))+"_"+(editTime.replace(/:/g,"-"));
+          const formData = {
+            type, date:editDate, time:editTime,
+            mgrName:auth?.name||"", mgrId:auth?.soldierId||"",
+            soferName, soferID, soferRank,
+            note, savedAt:new Date().toISOString(),
+            items: allCalc.map(i=>({msd:i.msd,makat:i.makat,alias:i.alias,total:i.total,loans:i.loans,stock:i.stock}))
+          };
+          fbSet("db/dailyForms/"+formKey, formData).catch(()=>{});
           logAction(type==="open"?"פתיחת_ארמון":"סגירת_ארמון",
             (type==="open"?"פתיחת ארמון":"סגירת ארמון")+" — "+editDate+" "+editTime,
             auth?.name||"מנהל");
@@ -7909,6 +7956,11 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(settings) setDb(prev=>({...prev, greenEyesSettings:settings}));
     }).catch(()=>{});
 
+    // טעינת היסטוריית טפסים יומיים
+    const offDailyForms = fbOn("db/dailyForms", forms=>{
+      setDb(prev=>({...prev, dailyForms:forms||{}}));
+    });
+
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
     fbGet("db/armoryMaster").then(master=>{
       if(master && Object.keys(master).length>0){
@@ -8468,6 +8520,31 @@ ${exitLink}
                 </div>
               ))}
             </div>
+
+            {/* היסטוריית פתיחות/סגירות */}
+            {(()=>{
+              const forms = db.dailyForms||{};
+              const sorted = Object.entries(forms).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,20);
+              if(!sorted.length) return null;
+              return (
+                <div style={{...S.card,marginTop:16}}>
+                  <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>📋 היסטוריית פתיחות/סגירות</div>
+                  {sorted.map(([key,f])=>(
+                    <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"8px 0",borderBottom:"1px solid var(--color-border-muted)",fontSize:"var(--text-sm)"}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span style={{fontSize:16}}>{f.type==="open"?"🌅":"🌙"}</span>
+                        <div>
+                          <div style={{fontWeight:700}}>{f.type==="open"?"פתיחה":"סגירה"} — {f.date} {f.time}</div>
+                          <div style={{fontSize:10,color:"var(--color-text-muted)"}}>מנהל: {f.mgrName||"—"}</div>
+                        </div>
+                      </div>
+                      <div style={{fontSize:11,color:"var(--color-text-muted)"}}>{f.savedAt?new Date(f.savedAt).toLocaleDateString("he-IL"):""}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
