@@ -2444,23 +2444,28 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     <title>ספירת מחסן ארמון 9219</title>
   <style>
       *{box-sizing:border-box;margin:0;padding:0}
-      @page{size:A4 landscape;margin:8mm}
-      body{font-family:Arial,sans-serif;direction:rtl;padding:6px;font-size:9px;width:100%}
-      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a2e;padding-bottom:4px;margin-bottom:6px}
-      .header h1{font-size:13px;margin:0;color:#1a1a2e}
-      .meta{display:flex;gap:16px;font-size:9px;margin-bottom:6px}
-      .tables-wrap{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
-      table{width:100%;border-collapse:collapse}
-      th{background:#1a1a2e;color:#fff;padding:3px 4px;text-align:right;font-size:8px;border:1px solid #1a1a2e}
-      td{border:1px solid #ccc;padding:2px 4px;font-size:8px}
-      .footer{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
-      .box{border:1px solid #ccc;padding:5px 8px;border-radius:3px}
-      .box h3{font-size:9px;margin:0 0 4px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:2px}
-      .field{display:flex;justify-content:space-between;margin-bottom:2px;font-size:8px}
+      @page{size:A4 landscape;margin:6mm}
+      body{font-family:Arial,sans-serif;direction:rtl;padding:4px;font-size:8px;width:100%}
+      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a2e;padding-bottom:3px;margin-bottom:4px}
+      .header h1{font-size:12px;margin:0;color:#1a1a2e}
+      .meta{display:flex;gap:12px;font-size:8px;margin-bottom:4px}
+      table{width:100%;border-collapse:collapse;margin-bottom:4px}
+      th{background:#1a1a2e;color:#fff;padding:2px 3px;text-align:right;font-size:7px;border:1px solid #1a1a2e;white-space:nowrap}
+      td{border:1px solid #ccc;padding:1px 3px;font-size:7px}
+      td:nth-child(3),td:nth-child(10){font-size:7px;max-width:100px}
+      td:nth-child(1),td:nth-child(2),td:nth-child(4),td:nth-child(5),td:nth-child(6),
+      td:nth-child(8),td:nth-child(9),td:nth-child(11),td:nth-child(12),td:nth-child(13){width:32px;text-align:center;white-space:nowrap}
+      td:nth-child(7),td:nth-child(14){font-size:7px;color:#555}
+      .bottom-wrap{display:flex;align-items:flex-start;gap:6px;margin-top:4px;direction:rtl}
+      .footer{display:flex;flex-direction:column;gap:4px;flex-shrink:0;width:220px}
+      .box{border:1px solid #ccc;padding:4px 6px;border-radius:3px}
+      .box h3{font-size:8px;margin:0 0 3px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:2px}
+      .field{display:flex;justify-content:space-between;margin-bottom:1px;font-size:7px}
       .field .lbl{color:#666}
       .field .val{font-weight:bold}
-      .sig-area{height:28px;border-bottom:1px solid #999;margin-top:5px}
-      @media print{button{display:none}@page{size:A4 landscape;margin:8mm}}
+      .sig-area{height:24px;border-bottom:1px solid #999;margin-top:4px}
+      .notes-area{flex:1;font-size:8px;border:1px solid #ccc;padding:4px 6px;border-radius:3px;min-height:60px}
+      @media print{button{display:none}@page{size:A4 landscape;margin:6mm}}
     </style></head>
     <body>
     <div class="header">
@@ -2482,26 +2487,26 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
       </thead>
       <tbody>${tableRows}</tbody>
     </table>
-    <div class="footer">
-      <div class="box">
-        <h3>אחראי משק הארמון</h3>
-        <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${auth?.name||"אורן חלפון"}</span></div>
-        <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${auth?.soldierId||"7680832"}</span></div>
-        <div class="field"><span class="lbl">דרגה:</span><span class="val">רסר</span></div>
-        ${mgrSig?`<img src="${mgrSig}" style="height:45px;margin-top:6px;border-radius:4px" alt="חתימה"/>`:'<div class="sig-area"></div>'}
-        <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
+    <div class="bottom-wrap">
+      <div class="footer">
+        <div class="box">
+          <h3>אחראי משק הארמון</h3>
+          <div class="field"><span class="lbl">שם:</span><span class="val">${auth?.name||"אורן חלפון"}</span></div>
+          <div class="field"><span class="lbl">מ.א:</span><span class="val">${auth?.soldierId||"7680832"}</span></div>
+          <div class="field"><span class="lbl">דרגה:</span><span class="val">רסר</span></div>
+          ${mgrSig?`<img src="${mgrSig}" style="height:34px;margin-top:3px;border-radius:3px" alt="חתימה"/>`:'<div class="sig-area"></div>'}
+        </div>
+        <div class="box">
+          <h3>בעל תפקיד סופר</h3>
+          <div class="field"><span class="lbl">שם:</span><span class="val">${soferName||"_______________"}</span></div>
+          <div class="field"><span class="lbl">מ.א:</span><span class="val">${soferID||"_______________"}</span></div>
+          <div class="field"><span class="lbl">דרגה:</span><span class="val">${soferRank||"_______________"}</span></div>
+          ${soferSig?`<img src="${soferSig}" style="height:34px;margin-top:3px;border-radius:3px" alt="חתימה"/>`:`<div class="sig-area"></div>`}
+        </div>
       </div>
-      <div class="box">
-        <h3>בעל תפקיד סופר</h3>
-        <div class="field"><span class="lbl">שם ושם משפחה:</span><span class="val">${soferName||"_______________"}</span></div>
-        <div class="field"><span class="lbl">מספר אישי:</span><span class="val">${soferID||"_______________"}</span></div>
-        <div class="field"><span class="lbl">דרגה:</span><span class="val">${soferRank||"_______________"}</span></div>
-        ${soferSig?`<img src="${soferSig}" style="height:45px;margin-top:6px;border-radius:4px" alt="חתימה"/>`:`<div class="sig-area"></div>`}
-        <div style="font-size:9px;color:#888;margin-top:3px">חתימה</div>
-      </div>
+      <div class="notes-area">${note?`<strong>הערות:</strong> ${note}`:""}</div>
     </div>
-    ${note?`<div style="margin-top:8px;font-size:11px;border:1px solid #ccc;padding:6px;border-radius:4px"><strong>הערות:</strong> ${note}</div>`:""}
-    <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
+    <button onclick="window.print()" style="margin-top:8px;padding:6px 18px;font-size:12px;cursor:pointer">🖨️ הדפס</button>
     </body></html>`;
     win.document.write(_fullDailyHtml);
     win.document.close();
@@ -2808,6 +2813,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
             auth?.name||"מנהל");
           handlePrint();
         }} style={{...S.btn("green"),flex:1}}>🖨️ הדפס / PDF</button>
+        <button onClick={()=>{
+          // שלח ל-WA — תחילה הדפס ל-PDF ואז שלח
+          const waMsg = `*ספירת מחסן ארמון — ${type==="open"?"פתיחה":"סגירה"} | גדוד 9219*\nתאריך: ${editDate} ${editTime}\nמנהל: ${auth?.name||"—"}\nסופר: ${soferName||"—"}\n\nהטופס צורף כ-PDF`;
+          window.open("https://wa.me/?text="+encodeURIComponent(waMsg),"_blank");
+        }} style={{...S.btn("wa"),flex:1}}>💬 שלח WA</button>
         <button onClick={onClose} style={{...S.btn(),flex:1}}>סגור</button>
       </div>
 
