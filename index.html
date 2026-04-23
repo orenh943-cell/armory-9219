@@ -2265,6 +2265,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const [showPad, setShowPad] = useState(false);
   const [showSoferPad, setShowSoferPad] = useState(false);
   const [note, setNote] = useState("");
+  const [showSoferSugg, setShowSoferSugg] = useState(false);
   const [extraItems, setExtraItems] = useState([]); // פריטים נוספים שנוסיפו ידנית
   const [showAddItem, setShowAddItem] = useState(false);
   const [hiddenMsds, setHiddenMsds] = useState(()=>{
@@ -2724,19 +2725,17 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <label style={S.label}>שם ושם משפחה</label>
             {(()=>{
-              // בנה רשימת כל המשתמשים (USERS + dynamicUsers)
               const allUsers = Object.values({...USERS,...(db.dynamicUsers||{})})
                 .filter(u=>u.name).sort((a,b)=>a.name.localeCompare(b.name,"he"));
-              const [showSugg, setShowSugg] = React.useState(false);
               const filtered = allUsers.filter(u=>!soferName||u.name.toLowerCase().includes(soferName.toLowerCase()));
               return (
                 <div style={{position:"relative"}}>
                   <input value={soferName}
-                    onChange={e=>{setSoferName(e.target.value);setSoferID("");setSoferRank("");setShowSugg(true);}}
-                    onFocus={()=>setShowSugg(true)}
-                    onBlur={()=>setTimeout(()=>setShowSugg(false),200)}
+                    onChange={e=>{setSoferName(e.target.value);setSoferID("");setSoferRank("");setShowSoferSugg(true);}}
+                    onFocus={()=>setShowSoferSugg(true)}
+                    onBlur={()=>setTimeout(()=>setShowSoferSugg(false),200)}
                     placeholder="שם הסופר" style={{...S.input,marginBottom:4,fontSize:"var(--text-sm)"}}/>
-                  {showSugg&&filtered.length>0&&(
+                  {showSoferSugg&&filtered.length>0&&(
                     <div style={{position:"absolute",top:"100%",right:0,left:0,zIndex:100,
                       background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",
                       borderRadius:6,maxHeight:150,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"}}>
@@ -2745,7 +2744,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
                           setSoferName(u.name);
                           setSoferID(u.soldierId||u.id||"");
                           setSoferRank(u.rank||u.roleTitle||"");
-                          setShowSugg(false);
+                          setShowSoferSugg(false);
                         }} style={{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",
                           borderBottom:"1px solid var(--color-border-muted)"}}
                           onMouseEnter={e=>e.currentTarget.style.background="var(--color-bg-subtle)"}
@@ -8042,6 +8041,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [selSoldier,setSelSoldier]=useState(null);
   const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
   const [dailyType,setDailyType]=useState(null);
+  const [histFilter,setHistFilter]=useState("הכל");
   const [quickModal,setQuickModal]=useState(false);
   const [bulkModal,setBulkModal]=useState(false);
   const [bulkSendModal,setBulkSendModal]=useState(false);
@@ -8563,7 +8563,6 @@ ${exitLink}
             {(()=>{
               const forms = db.dailyForms||{};
               const formsHtml = db.dailyFormsHtml||{};
-              const [histFilter, setHistFilter] = React.useState("הכל");
               const sorted = Object.entries(forms).sort((a,b)=>b[0].localeCompare(a[0]));
               const filtered2 = histFilter==="הכל" ? sorted : sorted.filter(([,f])=>f.type===(histFilter==="פתיחה"?"open":"close"));
               if(!sorted.length) return null;
