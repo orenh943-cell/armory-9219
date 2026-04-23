@@ -3168,10 +3168,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     });
     ndb={...ndb, assignmentMeta:newMeta};
     fbSet("db/assignmentMeta/"+soldier.id, newMeta[soldier.id]).catch(()=>{});
-    // עדכן unitItems — הורד מהפלוגה שנבחרה
+    // עדכן unitItems — הורד מהפלוגה שנבחרה (כולל "גדודי" אם הפריט קיים ב-unitItems של הארמון)
     const newUnitItems2={...(ndb.unitItems||{})};
     valid.forEach(i=>{
-      if(!i.fromUnit||i.fromUnit==="גדודי") return;
+      if(!i.fromUnit) return;
       const qty=Math.max(1,parseInt(i.qty)||1);
       // מצא unitItems זמינים של הפלוגה
       const freeKeys=Object.entries(newUnitItems2).filter(([,v])=>{
@@ -3183,6 +3183,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         return n===cleanItemName(i.name)&&u===i.fromUnit&&t==="unit"&&serialMatch;
       }).map(([k])=>k);
       // עדכן עד qty יחידות
+      // הערה: אם fromUnit="גדודי" והפריט הגיע מ-armoryMaster (ולא מ-unitItems), freeKeys יהיה ריק
+      // וזה בסדר — armoryMaster מחושב דינמית לפי (total - assigned - unitItems)
       for(let q=0;q<Math.min(qty,freeKeys.length);q++){
         newUnitItems2[freeKeys[q]]={...newUnitItems2[freeKeys[q]],
           t:"soldier",assignedType:"soldier",
