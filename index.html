@@ -2434,8 +2434,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     ).join("");
     const tableRows = Array.from({length:maxRows},(_,i)=>{
       const L=leftArr[i]||null; const R=rightArr[i]||null;
-      const Lc=L?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+L.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(L.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(L.fullname||L.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(L.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(L.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(L.ok?"green":"red")+"'>"+(L.total!=null?L.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
-      const Rc=R?"<td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+R.msd+"</td><td style='font-size:9px;padding:3px 5px;border:1px solid #ccc;font-family:monospace'>"+(R.makat||"")+"</td><td style='font-size:10px;padding:3px 5px;border:1px solid #ccc'>"+(R.fullname||R.alias)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc'>"+(R.total||"")+"</td><td style='text-align:center;padding:3px 5px;border:1px solid #ccc'>"+(R.loans||0)+"</td><td style='text-align:center;font-weight:bold;padding:3px 5px;border:1px solid #ccc;color:"+(R.ok?"green":"red")+"'>"+(R.total!=null?R.stock:"")+"</td><td style='padding:3px 5px;border:1px solid #ccc'></td>":"<td colspan='7' style='border:1px solid #ccc'></td>";
+      const Lc=L?"<td class='ctr'>"+L.msd+"</td><td class='ctr'>"+(L.makat||"")+"</td><td class='lft'>"+(L.fullname||L.alias)+"</td><td class='ctr'>"+(L.total||"")+"</td><td class='ctr'>"+(L.loans||0)+"</td><td class='ctr' style='color:"+(L.ok?"green":"red")+"'>"+(L.total!=null?L.stock:"")+"</td><td class='nte'>"+(savedNotes[L.makat?String(L.makat):""]||savedNotes[cleanItemName(L.alias||L.name||"")]||"")+"</td>":"<td colspan='7'></td>";
+      const Rc=R?"<td class='ctr'>"+R.msd+"</td><td class='ctr'>"+(R.makat||"")+"</td><td class='lft'>"+(R.fullname||R.alias)+"</td><td class='ctr'>"+(R.total||"")+"</td><td class='ctr'>"+(R.loans||0)+"</td><td class='ctr' style='color:"+(R.ok?"green":"red")+"'>"+(R.total!=null?R.stock:"")+"</td><td class='nte'>"+(savedNotes[R.makat?String(R.makat):""]||savedNotes[cleanItemName(R.alias||R.name||"")]||"")+"</td>":"<td colspan='7'></td>";
       return "<tr>"+Lc+Rc+"</tr>";
     }).join("")+extraRows;
 
@@ -2444,34 +2444,35 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     <title>ספירת מחסן ארמון 9219</title>
   <style>
       *{box-sizing:border-box;margin:0;padding:0}
-      @page{size:A4 landscape;margin:5mm}
-      body{font-family:Arial,sans-serif;direction:rtl;padding:3px;font-size:7px;width:100%}
-      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a2e;padding-bottom:2px;margin-bottom:3px}
-      .header h1{font-size:11px;margin:0;color:#1a1a2e}
-      table{width:100%;border-collapse:collapse;margin-bottom:3px;table-layout:fixed}
-      col.c-msd{width:18px}
-      col.c-makat{width:54px}
-      col.c-name{width:auto}
-      col.c-total{width:22px}
-      col.c-loans{width:22px}
-      col.c-stock{width:22px}
-      col.c-note{width:60px}
-      th{background:#1a1a2e;color:#fff;padding:1px 2px;text-align:center;font-size:6.5px;border:1px solid #1a1a2e;overflow:hidden}
-      th.name-col{text-align:right}
-      td{border:1px solid #ccc;padding:1px 2px;font-size:6.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-      td.name-col{font-size:6.5px;text-align:right}
-      td.num-col{text-align:center;font-weight:bold}
-      td.note-col{color:#555;font-size:6px}
-      .bottom-wrap{display:flex;align-items:flex-start;gap:5px;margin-top:3px;direction:rtl}
-      .footer{display:flex;flex-direction:column;gap:3px;flex-shrink:0;width:200px}
-      .box{border:1px solid #ccc;padding:3px 5px;border-radius:2px}
-      .box h3{font-size:7px;margin:0 0 2px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:1px}
-      .field{display:flex;justify-content:space-between;margin-bottom:1px;font-size:6.5px}
-      .field .lbl{color:#666}
-      .field .val{font-weight:bold}
-      .sig-area{height:22px;border-bottom:1px solid #999;margin-top:3px}
-      .notes-area{flex:1;font-size:7px;border:1px solid #ccc;padding:3px 5px;border-radius:2px;min-height:50px}
-      @media print{button{display:none}@page{size:A4 landscape;margin:5mm}}
+      @page{size:A4 landscape;margin:6mm}
+      body{font-family:Arial,sans-serif;direction:rtl;padding:4px;font-size:8px;width:100%;font-weight:bold}
+      .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a2e;padding-bottom:3px;margin-bottom:4px}
+      .header h1{font-size:13px;margin:0;color:#1a1a2e;font-weight:bold}
+      table{width:100%;border-collapse:collapse;margin-bottom:4px;table-layout:fixed}
+      /* רוחבים באחוזים — מילאו את כל רוחב העמוד ללא חלל לבן */
+      col.w-msd  {width:3%}     /* מספר שורה: 1-28 */
+      col.w-makat{width:7%}     /* חומר: 9 ספרות */
+      col.w-name {width:19%}    /* שם הפריט: הארוך ביותר "משגר רימון מטול 40 ממ דואט M320A1" */
+      col.w-num  {width:4%}     /* מלאי/השאל/מצאי: עד 3 ספרות */
+      col.w-note {width:9%}     /* הערות */
+      /* סה"כ צד אחד: 3+7+19+4+4+4+9 = 50% × 2 = 100% */
+      th{background:#1a1a2e;color:#fff;padding:4px 4px;text-align:center;font-size:8px;border:1px solid #1a1a2e;font-weight:bold}
+      th.lft{text-align:right}
+      td{border:1px solid #999;padding:3px 5px;font-size:8px;overflow:hidden;word-wrap:break-word;white-space:normal;line-height:1.25;font-weight:bold;color:#000}
+      td.lft{text-align:right}
+      td.ctr{text-align:center;font-weight:bold;white-space:nowrap}
+      td.nte{text-align:right;color:#333;font-size:7.5px}
+      /* חתימות: שניהם במרכז, אחד ליד השני */
+      .bottom-wrap{margin-top:8px;direction:rtl}
+      .footer{display:flex;justify-content:center;align-items:flex-start;gap:24px;margin-bottom:6px}
+      .box{border:1.5px solid #1a1a2e;padding:6px 12px;border-radius:3px;width:260px}
+      .box h3{font-size:10px;margin:0 0 4px;color:#1a1a2e;border-bottom:1.5px solid #1a1a2e;padding-bottom:3px;text-align:center;font-weight:bold}
+      .field{display:flex;justify-content:space-between;margin-bottom:3px;font-size:9px}
+      .field .lbl{color:#444;font-weight:bold}
+      .field .val{font-weight:bold;color:#000}
+      .sig-area{height:28px;border-bottom:1.5px solid #666;margin-top:5px}
+      .notes-area{font-size:8px;border:1px solid #999;padding:4px 6px;border-radius:2px;min-height:24px;width:100%;font-weight:bold}
+      @media print{button{display:none}@page{size:A4 landscape;margin:6mm}}
     </style></head>
     <body>
     <div class="header">
@@ -2486,13 +2487,13 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     </div>
     <table>
       <colgroup>
-        <col class="c-msd"><col class="c-makat"><col class="c-name"><col class="c-total"><col class="c-loans"><col class="c-stock"><col class="c-note">
-        <col class="c-msd"><col class="c-makat"><col class="c-name"><col class="c-total"><col class="c-loans"><col class="c-stock"><col class="c-note">
+        <col class="w-msd"><col class="w-makat"><col class="w-name"><col class="w-num"><col class="w-num"><col class="w-num"><col class="w-note">
+        <col class="w-msd"><col class="w-makat"><col class="w-name"><col class="w-num"><col class="w-num"><col class="w-num"><col class="w-note">
       </colgroup>
       <thead>
         <tr>
-          <th>מסד</th><th>חומר</th><th class="name-col">שם הפריט</th><th>כולל</th><th>השאל</th><th>מצאי</th><th class="name-col">הערות</th>
-          <th>מסד</th><th>חומר</th><th class="name-col">שם הפריט</th><th>כולל</th><th>השאל</th><th>מצאי</th><th class="name-col">הערות</th>
+          <th>מסד</th><th>חומר</th><th class="lft">שם הפריט</th><th>מלאי</th><th>השאל</th><th>מצאי</th><th class="lft">הערות</th>
+          <th>מסד</th><th>חומר</th><th class="lft">שם הפריט</th><th>מלאי</th><th>השאל</th><th>מצאי</th><th class="lft">הערות</th>
         </tr>
       </thead>
       <tbody>${tableRows}</tbody>
@@ -2514,7 +2515,7 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
           ${soferSig?`<img src="${soferSig}" style="height:34px;margin-top:3px;border-radius:3px" alt="חתימה"/>`:`<div class="sig-area"></div>`}
         </div>
       </div>
-      <div class="notes-area">${note?`<strong>הערות:</strong> ${note}`:""}</div>
+      ${note?`<div class="notes-area"><strong>הערות:</strong> ${note}</div>`:""}
     </div>
     <button onclick="window.print()" style="margin-top:8px;padding:6px 18px;font-size:12px;cursor:pointer">🖨️ הדפס</button>
     </body></html>`;
