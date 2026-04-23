@@ -1168,6 +1168,9 @@ function SerialsList({itemName, assignedSerial, db}){
 }
 
 // אביזרי נשק אוטומטיים — כשמשייכים נשק, מתווספים גם האביזרים
+// שני סוגים:
+//   מערך של שמות → אביזרים קבועים עם serial=1 (kit רגיל)
+//   אובייקט {fixed:[...], dynamic:[{name, serialFrom:"last4_slash_2"}]} → kit + קנה עם סידורי נגזר
 const WEAPON_BUNDLES = {
   "M4": [
     "מתפס רב תכליתי עליון",
@@ -1184,8 +1187,69 @@ const WEAPON_BUNDLES = {
     "חסם בית בליעה",
     "דורגל לקלע משופר פלדה",
   ],
+  "מאג": {
+    dynamic: [{ name: "קנה למאג", serialFrom: "last4_slash_2" }],
+  },
+  "נגב 556": {
+    dynamic: [{ name: "קנה לנגב 556", serialFrom: "last4_slash_2" }],
+  },
+  "נגב 762": {
+    dynamic: [{ name: "קנה לנגב 7.62", serialFrom: "last4_slash_2" }],
+  },
 };
 const WEAPON_KEYS = ["M4","M16","קלע סער","מאג","נגב 556","נגב 762","מטולון M320","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש"];
+
+// חישוב סידורי נגזר של קנה מסידורי המקלע
+function deriveBarrelSerial(weaponSerial, rule){
+  if(!weaponSerial || weaponSerial===1 || weaponSerial===true) return null;
+  const s = String(weaponSerial).trim();
+  if(!s) return null;
+  if(rule === "last4_slash_2"){
+    // 4 ספרות אחרונות + "\2"  — דוגמה: 7202578 -> 2578\2
+    const last4 = s.slice(-4);
+    return last4 + "\\2";
+  }
+  return null;
+}
+
+// מוסיף אוטומטית את אביזרי ה-kit של נשק ל-assignments
+// - אביזרים רגילים (kit קבוע): לא דורס קיימים
+// - אביזר דינמי (קנה עם סידורי נגזר): דורס קיים כדי שיתאים לסידורי הנשק
+function applyWeaponBundles(assigned){
+  if(!assigned || typeof assigned !== "object") return assigned;
+  const out = {...assigned};
+  Object.keys(assigned).forEach(itemKey=>{
+    const cleanName = cleanItemName(itemKey);
+    const bundle = WEAPON_BUNDLES[cleanName];
+    if(!bundle) return;
+    // סוג 1: מערך פשוט — kit רגיל, לא דורס
+    if(Array.isArray(bundle)){
+      bundle.forEach(acc=>{
+        const exists = Object.keys(out).some(k=>cleanItemName(k)===acc);
+        if(!exists) out[acc]=1;
+      });
+      return;
+    }
+    // סוג 2: אובייקט עם {fixed, dynamic}
+    if(bundle.fixed){
+      bundle.fixed.forEach(acc=>{
+        const exists = Object.keys(out).some(k=>cleanItemName(k)===acc);
+        if(!exists) out[acc]=1;
+      });
+    }
+    if(bundle.dynamic){
+      const weaponSerial = assigned[itemKey];
+      bundle.dynamic.forEach(({name, serialFrom})=>{
+        const derived = deriveBarrelSerial(weaponSerial, serialFrom);
+        if(!derived) return; // אין סידורי למקלע — לא יוצרים קנה
+        // מצא מפתח קיים של אותו קנה (אם יש) — דרוס עם הסידורי הנדרש
+        const existingKey = Object.keys(out).find(k=>cleanItemName(k)===name);
+        out[existingKey || name] = derived;
+      });
+    }
+  });
+  return out;
+}
 
 // נשקים הדורשים אישור בוחן
 const TEST_REQUIRED_WEAPONS = ["M4","M16","קלע סער"];
@@ -3072,6 +3136,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         nextIdx++;
       }
     });
+    // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
+    const naWithKit = applyWeaponBundles(na);
+    // שמור שינויים חזרה ל-na כדי שהלוגיקה שבהמשך (meta/unitItems) לא תיפגע
+    Object.keys(naWithKit).forEach(k=>{ if(!(k in na)) na[k]=naWithKit[k]; });
 
     let ndb=archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     // Add cabinet items for those marked as inCabinet
@@ -3124,6 +3192,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     });
     ndb={...ndb, unitItems:newUnitItems2};
     fbSet("db/unitItems", newUnitItems2).catch(()=>{});
+    // שמור את ה-assignments המעודכן ל-Firebase (כולל האביזרים האוטומטיים)
+    fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(na)).catch(()=>{});
     onSave(ndb);
     logAction("שיוך", `שויך ל${soldier.name} (${soldier.id}): ${valid.map(i=>i.name+(i.serial?" — "+i.serial:"")+(i.fromUnit?" [מ"+i.fromUnit+"]":"")+(i.inCabinet?" [ארון:"+i.cabName+"]":"")).join(", ")}`, auth?.name);
     setView("profile");
@@ -4349,11 +4419,12 @@ function QuickModal({soldiers,db,onSave,onClose}){
     const na={...assigned};
     valid.forEach(i=>{
       na[i.name]=i.serial||1;
-      // לא מוסיפים אביזרים ל-assignments — הם משויכים בנפרד
     });
-    const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:na},signatures:{...(db.signatures||{})}};
+    // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
+    const naWithKit = applyWeaponBundles(na);
+    const ndb={...db,assignments:{...(db.assignments||{}),[soldier.id]:naWithKit},signatures:{...(db.signatures||{})}};
     delete ndb.signatures[soldier.id];fbDelete("db/signatures/"+soldier.id).catch(()=>{});
-    fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(na)).catch(()=>{});
+    fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(naWithKit)).catch(()=>{});
     onSave(ndb);onClose();
   }
   function doReturn(){
@@ -4508,8 +4579,10 @@ function AddSoldierModal({db, onSave, onClose}){
       delete newDeleted[tid];
       fbSet("db/deletedSoldiers", newDeleted).catch(()=>{});
     }
-    const assigned={};
-    items.filter(i=>i.name).forEach(i=>{assigned[i.name]=i.serial||1;});
+    const assignedRaw={};
+    items.filter(i=>i.name).forEach(i=>{assignedRaw[i.name]=i.serial||1;});
+    // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
+    const assigned = applyWeaponBundles(assignedRaw);
     // Save to db as a new soldier entry
     const newSoldier={id:tid,name:(form.firstName.trim()+" "+form.lastName.trim()).trim(),unit:form.unit,squad:form.squad.trim()==="__custom__"?"":form.squad.trim(),phone:form.phone.trim(),assigned:{}};
     setSaving(true);
@@ -7962,6 +8035,38 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       }
     }).catch(()=>{});
 
+    // ONE-TIME: מיגרציה מאוחדת של כל ה-kits — כולל מאג/נגב עם קנה דינמי
+    // משלים את ה-migrations הישנים: אם חסר אביזר כלשהו (M4/M16/קלע סער/מאג/נגב) — מוסיף
+    // לקנה: אם הסידורי הקיים לא תואם למקלע, עדכן שיתאים
+    fbGet("db/allBundlesV1").then(done=>{
+      if(!done){
+        fbGet("db/assignments").then(allAssignments=>{
+          if(!allAssignments){ fbSet("db/allBundlesV1", true).catch(()=>{}); return; }
+          const updates = {};
+          Object.entries(allAssignments).forEach(([solId, asgn])=>{
+            if(!asgn || typeof asgn !== "object") return;
+            // הפעלה של applyWeaponBundles נותנת לנו מצב יעד (קבוע + דינמי בבת אחת)
+            const target = applyWeaponBundles(asgn);
+            // בדיקה אם משהו באמת השתנה (נוספו מפתחות או שונה ערך של קנה)
+            let changed = false;
+            Object.keys(target).forEach(k=>{
+              if(!(k in asgn) || String(asgn[k]) !== String(target[k])) changed = true;
+            });
+            if(changed) updates[solId] = target;
+          });
+          if(Object.keys(updates).length>0){
+            console.log("[bundle-all] משלים אביזרים חסרים/קנה ל-"+Object.keys(updates).length+" חיילים");
+            Object.entries(updates).forEach(([solId,asgn])=>{
+              fbSet("db/assignments/"+solId, sanitizeForFirebase(asgn)).catch(()=>{});
+            });
+          } else {
+            console.log("[bundle-all] כל החיילים מעודכנים ✅");
+          }
+          fbSet("db/allBundlesV1", true).catch(()=>{});
+        }).catch(()=>{});
+      }
+    }).catch(()=>{});
+
     // ONE-TIME: migrate RAW_SOLDIERS to db/soldiers if not done yet
     fbGet("db/soldiersMigratedV1").then(done=>{
       if(!done){
@@ -9262,7 +9367,10 @@ function AddUnitItemForm({db, setDb, onDone}){
     if(assignType==="soldier"&&soldierId&&serial.trim()){
       const asgn = {...(ndb.assignments?.[soldierId]||{})};
       asgn[name.trim()] = serial.trim();
-      ndb = {...ndb, assignments:{...(ndb.assignments||{}),[soldierId]:asgn}};
+      // הוספה אוטומטית של אביזרי הנשק (kit)
+      const asgnWithKit = applyWeaponBundles(asgn);
+      ndb = {...ndb, assignments:{...(ndb.assignments||{}),[soldierId]:asgnWithKit}};
+      fbSet("db/assignments/"+soldierId, sanitizeForFirebase(asgnWithKit)).catch(()=>{});
     }
     setDb(ndb);
     logAction("הוספת_פריט", name.trim()+" הוסף למלאי פלוגה "+unit, "מערכת");
@@ -9432,7 +9540,9 @@ function InventoryTab({db, setDb, soldiers, auth}){
     const soldier = soldiers.find(s=>s.id===soldierId);
     if(!soldier) return;
     const assigned = db.assignments?.[soldierId]!==undefined ? db.assignments[soldierId] : soldier.assigned||{};
-    const newAssigned = {...assigned, [item.name]: item.serial||1};
+    const newAssignedRaw = {...assigned, [item.name]: item.serial||1};
+    // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
+    const newAssigned = applyWeaponBundles(newAssignedRaw);
     const newUnitItems={...db.unitItems};
     newUnitItems[id] = {...item, assignedType:"soldier", assignedSoldierId:soldierId};
     const newDb={...db,
@@ -9441,6 +9551,7 @@ function InventoryTab({db, setDb, soldiers, auth}){
       unitItems:newUnitItems
     };
     delete newDb.signatures[soldierId];
+    fbSet("db/assignments/"+soldierId, sanitizeForFirebase(newAssigned)).catch(()=>{});
     setDb(newDb); setShowAssign(null);
   }
 
@@ -11074,7 +11185,10 @@ function AssignUnitItemToSoldier({uid, itemName, unit, db, setDb, soldiers, onDo
     const nUnitItems = {...db.unitItems};
     delete nUnitItems[uid];
     const prevAssigned = db.assignments?.[soldierId]||{};
-    const nAssignments = {...(db.assignments||{}),[soldierId]:{...prevAssigned,[itemName]:item.s||item.serial||1}};
+    const newAssignedRaw = {...prevAssigned,[itemName]:item.s||item.serial||1};
+    // הוספה אוטומטית של אביזרי הנשק (kit) לפי WEAPON_BUNDLES
+    const newAssigned = applyWeaponBundles(newAssignedRaw);
+    const nAssignments = {...(db.assignments||{}),[soldierId]:newAssigned};
     const ndb={...db, unitItems:nUnitItems, assignments:nAssignments};
     setDb(ndb);
     fbSet("db/unitItems/"+uid, null).catch(()=>{});
