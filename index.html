@@ -4470,8 +4470,8 @@ function AddSoldierModal({db, onSave, onClose}){
   }
 
   const [saving, setSaving] = React.useState(false);
-  const [uploadedFile, setUploadedFile] = React.useState(existing.fileData||null);
-  const [uploadedFileName, setUploadedFileName] = React.useState(existing.fileName||"");
+  const [uploadedFile, setUploadedFile] = React.useState(null);
+  const [uploadedFileName, setUploadedFileName] = React.useState("");
   const fileInputRef = React.useRef(null);
 
   function handleFileUpload(e){
