@@ -12721,8 +12721,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
                         {item.name} — פלוגה {u}
                       </div>
                       {/* חיילים עם פריט זה */}
-                      {soldiers.filter(s=>s.unit===u&&((db.assignments?.[s.id]||{})[item.name]!==undefined)).map(s=>{
-                        const serial=(db.assignments?.[s.id]||{})[item.name];
+                      {soldiers.filter(s=>s.unit===u&&Object.keys(db.assignments?.[s.id]||{}).some(k=>cleanItemName(k)===item.name)).map(s=>{
+                        const serial=(()=>{const asgn=db.assignments?.[s.id]||{};const key=Object.keys(asgn).find(k=>cleanItemName(k)===item.name);return key?asgn[key]:undefined;})();
                         const sig=db.signatures?.[s.id];
                         return (
                           <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
