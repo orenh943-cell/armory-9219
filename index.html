@@ -733,22 +733,18 @@ const RAW_SOLDIERS = window.RAW_SOLDIERS_DATA;
 // This is the transition bridge — once migration is complete, only db.soldiers will be used
 function getSoldiers(db){
   const deleted = db.deletedSoldiers||{};
-  if(db.soldiers && Object.keys(db.soldiers).length > 0){
-    const merged = {...db.soldiers};
-    Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{ merged[id]=s; });
-    RAW_SOLDIERS.forEach(s=>{ if(!merged[s.id]) merged[s.id]=s; });
-    // סנן חיילים מחוקים
-    Object.keys(deleted).forEach(id=>{ delete merged[id]; });
-    // סנן כפילויות לפי ID
-    const seen = new Set();
-    return Object.values(merged).filter(s=>{
-      if(seen.has(s.id)) return false;
-      seen.add(s.id); return true;
-    });
-  }
+  // תמיד מיזוג מלא: db.soldiers + customSoldiers + RAW_SOLDIERS
+  const merged = {};
+  // 1. RAW_SOLDIERS כבסיס
+  RAW_SOLDIERS.forEach(s=>{ if(s.id && !deleted[s.id]) merged[s.id]=s; });
+  // 2. customSoldiers מעל
+  Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{ if(!deleted[id]) merged[id]=s; });
+  // 3. db.soldiers (Firebase) — מעדכן / מוסיף
+  Object.entries(db.soldiers||{}).forEach(([id,s])=>{ if(!deleted[id]) merged[id]={...merged[id],...s,id}; });
+  // סנן חסרי שם
   const seen = new Set();
-  return [...Object.values(db.customSoldiers||{}), ...RAW_SOLDIERS].filter(s=>{
-    if(seen.has(s.id)||deleted[s.id]) return false;
+  return Object.values(merged).filter(s=>{
+    if(!s.id||!s.name||seen.has(s.id)) return false;
     seen.add(s.id); return true;
   });
 }
@@ -2398,7 +2394,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
   const TDC = (ok) => ({...TD(ok),textAlign:"center",fontWeight:"bold"});
 
   function handlePrint(){
-    const savedNotes = db.dailyNotes||{};
+    // טען הערות עדכניות מ-Firebase (לא מ-db שעשוי להיות ישן)
+    fbGet("db/dailyNotes").then(liveNotes=>{
+      doHandlePrint(liveNotes||{});
+    }).catch(()=>doHandlePrint(db.dailyNotes||{}));
+  }
+  function doHandlePrint(savedNotes){
     const leftRows = leftCalc.map(i=>
       "<tr><td style='padding:4px 6px;border:1px solid #ccc;font-size:10px'>"+i.msd+"</td>"+
       "<td style='padding:4px 6px;border:1px solid #ccc;font-size:10px;font-family:monospace'>"+(i.makat||"")+"</td>"+
@@ -2502,6 +2503,15 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
     ${note?`<div style="margin-top:8px;font-size:11px;border:1px solid #ccc;padding:6px;border-radius:4px"><strong>הערות:</strong> ${note}</div>`:""}
     <button onclick="window.print()" style="margin-top:10px;padding:8px 20px;font-size:14px;cursor:pointer">🖨️ הדפס</button>
     </body></html>`);
+    // שמור HTML לארכיון
+    if(window._pendingDailyFormKey){
+      try{
+        const fullHtml = win.document.documentElement.outerHTML||"";
+        const encoded = btoa(unescape(encodeURIComponent(fullHtml.substring(0,300000))));
+        fbSet("db/dailyFormsHtml/"+window._pendingDailyFormKey, {html:encoded, savedAt:new Date().toISOString()}).catch(()=>{});
+      }catch(e){}
+      window._pendingDailyFormKey = null;
+    }
     win.document.close();
   }
 
@@ -2785,6 +2795,11 @@ function DailyModal({db,onClose,type,auth,soldiers=[]}){
             note, savedAt:new Date().toISOString(),
             items: allCalc.map(i=>({msd:i.msd,makat:i.makat,alias:i.alias,total:i.total,loans:i.loans,stock:i.stock}))
           };
+          // שמור גם את ה-HTML המלא לאחזור עתידי
+          // נשמור אחרי doHandlePrint שבונה את ה-HTML
+          const _origDoHandlePrint = window._dailyFormHtmlCapture;
+          window._pendingDailyFormKey = formKey;
+          window._pendingDailyFormData = formData;
           fbSet("db/dailyForms/"+formKey, formData).catch(()=>{});
           logAction(type==="open"?"פתיחת_ארמון":"סגירת_ארמון",
             (type==="open"?"פתיחת ארמון":"סגירת ארמון")+" — "+editDate+" "+editTime,
@@ -7709,7 +7724,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     });
     // db/soldiers listener — replaces RAW_SOLDIERS + customSoldiers
     fbOn("db/soldiers", (soldiers)=>{
-      if(soldiers) setDb(prev=>({...prev, soldiers: soldiers}));
+      if(soldiers) setDb(prev=>({...prev, soldiers: soldiers, _soldiersLoaded:true}));
+      else setDb(prev=>({...prev, _soldiersLoaded:true}));
     });
     fbOn("db/armoryMaster", (master)=>{
       if(master) setDb(prev=>({...prev, armoryMaster: master}));
@@ -7960,6 +7976,9 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const offDailyForms = fbOn("db/dailyForms", forms=>{
       setDb(prev=>({...prev, dailyForms:forms||{}}));
     });
+    fbGet("db/dailyFormsHtml").then(htmls=>{
+      if(htmls) setDb(prev=>({...prev, dailyFormsHtml:htmls}));
+    }).catch(()=>{});
 
     // armoryMaster: תמיד מ-Firebase בלבד — ללא fallback לנתונים סטטיים
     fbGet("db/armoryMaster").then(master=>{
@@ -8036,7 +8055,12 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     const signatures = db.signatures||{};
     const customSoldiers = db.customSoldiers||{};
     const custom=Object.values(customSoldiers);
+    // אם Firebase לא נטען עדיין — נחזיר RAW_SOLDIERS + customSoldiers
+    // אם נטען — נחזיר את הכל מ-db.soldiers
     const base=getSoldiers(db);
+    if(process.env.NODE_ENV==="development"||window._dbgSoldiers){
+      console.log("soldiers memo: base.length=",base.length,"db.soldiers keys=",Object.keys(db.soldiers||{}).length,"_soldiersLoaded=",db._soldiersLoaded);
+    }
     const guarantors=db.bulkGuarantors||{};
     // Normalize unit names
     function normUnit(u){ const t=(u||"").trim(); if(t==="אגמ"||t.includes("אג")) return "אגמ"; if(t==="פלסמ"||t.includes("פלס")) return "פלסמ"; return t; }
@@ -8051,7 +8075,21 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       return {...s,unit:normUnit(s.unit),assigned:soldierAssigned,signature:signatures[s.id]?.sigData||null,signedAt:signatures[s.id]?.signedAt||null,guarantee:guarantee||null};
     });
   },[db]);
-  const filtered=useMemo(()=>{let l=soldiers;if(filterUnit!=="הכל")l=l.filter(s=>s.unit===filterUnit);if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.id.includes(q)||(s.squad||"").toLowerCase().includes(q)||(s.phone||"").includes(q)||(s.unit||"").includes(q));}return l;},[soldiers,filterUnit,search]);
+  const filtered=useMemo(()=>{
+    let l=soldiers;
+    if(filterUnit!=="הכל") l=l.filter(s=>s.unit===filterUnit);
+    if(search.trim()){
+      const q=search.trim().toLowerCase();
+      l=l.filter(s=>
+        (s.name||"").toLowerCase().includes(q)||
+        (s.id||"").includes(q)||
+        (s.squad||"").toLowerCase().includes(q)||
+        (s.phone||"").includes(q)||
+        (s.unit||"").includes(q)
+      );
+    }
+    return l;
+  },[soldiers,filterUnit,search]);
 
   const withWeapons=useMemo(()=>soldiers.filter(s=>Object.keys(db.assignments?.[s.id]||{}).some(k=>WEAPON_KEYS.includes(k))).length,[soldiers]);
   const signedCount=useMemo(()=>soldiers.filter(s=>s.signature).length,[soldiers]);
@@ -8524,24 +8562,85 @@ ${exitLink}
             {/* היסטוריית פתיחות/סגירות */}
             {(()=>{
               const forms = db.dailyForms||{};
-              const sorted = Object.entries(forms).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,20);
+              const formsHtml = db.dailyFormsHtml||{};
+              const [histFilter, setHistFilter] = React.useState("הכל");
+              const sorted = Object.entries(forms).sort((a,b)=>b[0].localeCompare(a[0]));
+              const filtered2 = histFilter==="הכל" ? sorted : sorted.filter(([,f])=>f.type===(histFilter==="פתיחה"?"open":"close"));
               if(!sorted.length) return null;
+
+              function reprintForm(key, f){
+                const stored = formsHtml[key];
+                if(stored?.html){
+                  try{
+                    const html = decodeURIComponent(escape(atob(stored.html)));
+                    const w = window.open("","_blank");
+                    w.document.write(html);
+                    w.document.close();
+                    return;
+                  }catch(e){}
+                }
+                // אם אין HTML שמור — הודע
+                alert("לא נמצא HTML שמור לטופס זה.
+טפסים שנשמרו לפני עדכון זה לא כוללים HTML.");
+              }
+
+              function downloadZip(){
+                if(typeof fflate==="undefined"){alert("ספריית ZIP לא נטענה");return;}
+                const files = {};
+                filtered2.forEach(([key,f])=>{
+                  const stored = formsHtml[key];
+                  if(!stored?.html) return;
+                  try{
+                    const html = decodeURIComponent(escape(atob(stored.html)));
+                    const label = (f.type==="open"?"פתיחה":"סגירה")+"_"+(f.date||"").replace(/\//g,"-")+"_"+(f.time||"").replace(/:/g,"-")+".html";
+                    files[label] = fflate.strToU8(html);
+                  }catch(e){}
+                });
+                if(!Object.keys(files).length){alert("אין טפסים שמורים להורדה");return;}
+                fflate.zip(files,{level:6},(err,data)=>{
+                  if(err){alert("שגיאה: "+err.message);return;}
+                  const blob=new Blob([data],{type:"application/zip"});
+                  const url=URL.createObjectURL(blob);
+                  const a=document.createElement("a");
+                  a.href=url;a.download="טפסים_יומיים.zip";a.click();
+                  setTimeout(()=>URL.revokeObjectURL(url),1000);
+                });
+              }
+
               return (
                 <div style={{...S.card,marginTop:16}}>
-                  <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>📋 היסטוריית פתיחות/סגירות</div>
-                  {sorted.map(([key,f])=>(
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                    <div style={{fontWeight:800,fontSize:14}}>📋 היסטוריית פתיחות/סגירות</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {["הכל","פתיחה","סגירה"].map(v=>(
+                        <button key={v} onClick={()=>setHistFilter(v)}
+                          style={{...S.btn(histFilter===v?"blue":"neutral"),padding:"4px 10px",fontSize:11}}>{v}</button>
+                      ))}
+                      <button onClick={downloadZip} style={{...S.btn("green"),padding:"4px 10px",fontSize:11}}>📥 ZIP הכל</button>
+                    </div>
+                  </div>
+                  {filtered2.slice(0,30).map(([key,f])=>{
+                    const hasHtml = !!(db.dailyFormsHtml?.[key]?.html);
+                    return (
                     <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                      padding:"8px 0",borderBottom:"1px solid var(--color-border-muted)",fontSize:"var(--text-sm)"}}>
+                      padding:"8px 0",borderBottom:"1px solid var(--color-border-muted)"}}>
                       <div style={{display:"flex",gap:8,alignItems:"center"}}>
                         <span style={{fontSize:16}}>{f.type==="open"?"🌅":"🌙"}</span>
                         <div>
-                          <div style={{fontWeight:700}}>{f.type==="open"?"פתיחה":"סגירה"} — {f.date} {f.time}</div>
-                          <div style={{fontSize:10,color:"var(--color-text-muted)"}}>מנהל: {f.mgrName||"—"}</div>
+                          <div style={{fontWeight:700,fontSize:"var(--text-sm)"}}>{f.type==="open"?"פתיחה":"סגירה"} — {f.date} {f.time}</div>
+                          <div style={{fontSize:10,color:"var(--color-text-muted)"}}>מנהל: {f.mgrName||"—"} {f.soferName?" | סופר: "+f.soferName:""}</div>
                         </div>
                       </div>
-                      <div style={{fontSize:11,color:"var(--color-text-muted)"}}>{f.savedAt?new Date(f.savedAt).toLocaleDateString("he-IL"):""}</div>
+                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                        {hasHtml?(
+                          <button onClick={()=>reprintForm(key,f)}
+                            style={{...S.btn("blue"),padding:"4px 10px",fontSize:11}}>🖨️ הדפס</button>
+                        ):(
+                          <span style={{fontSize:10,color:"var(--color-text-muted)"}}>אין HTML</span>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               );
             })()}
