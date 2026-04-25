@@ -7847,16 +7847,14 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
 function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [db,setDb]=useState(()=>initDB());
   const [tab,setTab]=useState("dashboard");
-  const [lastRefresh,setLastRefresh]=useState(new Date());
-  const [dashModal,setDashModal]=useState(null); // "signed" | "unsigned" | "withWeapon" | "all"
+    const [dashModal,setDashModal]=useState(null); // "signed" | "unsigned" | "withWeapon" | "all"
   const [searchModal,setSearchModal]=useState(false);
   const [dashUnitFilter,setDashUnitFilter]=useState("הכל");
 
   // רענון אוטומטי כל 60 שניות
   useEffect(()=>{
     const interval=setInterval(()=>{
-      setLastRefresh(new Date());
-    },60000);
+          },60000);
     return ()=>clearInterval(interval);
   },[]);
 
@@ -8530,10 +8528,6 @@ ${exitLink}
           <button onClick={toggleTheme} className="theme-toggle" style={{minHeight:32}}>
             {theme==="dark"?"☀️":"🌙"}
           </button>
-        </div>
-        <div className="desktop-only" style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:12,fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>
-          <span>🔄 רענון אחרון: {lastRefresh.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
-          <button onClick={()=>setLastRefresh(new Date())} style={{background:"none",border:"1px solid var(--color-border-default)",borderRadius:6,padding:"2px 8px",color:"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-xs)"}}>רענן עכשיו</button>
         </div>
 
         {tab==="dashboard"&&(
