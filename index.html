@@ -9042,7 +9042,7 @@ ${exitLink}
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} onSendTestAndExitWA={sendTestAndExitWA} auth={auth} soldiers={soldiers}/>}
       {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
-      {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>
+      {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
       {bulkExitModal&&<BulkExitSignModal db={db} setDb={setDb} soldiers={soldiers} auth={auth} onClose={()=>setBulkExitModal(false)}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers} onSaveHtml={(key,entry)=>setDb(prev=>({...prev,dailyFormsHtml:{...(prev.dailyFormsHtml||{}),[key]:entry}}))}/>}
