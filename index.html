@@ -8928,6 +8928,10 @@ ${exitLink}
               {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>print1008(db, filtered.filter(s=>db.signatures?.[s.id]), filterUnit)} style={{...S.btn("green"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>📄 1008</button>}
               {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>printInspectionReport(db, filtered, filterUnit)} style={{...S.btn("orange"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>🔍 בוחן נשק</button>}
               {perms.canDownload&&filterUnit!=="הכל"&&<button onClick={()=>printExitForms(db, filtered, filterUnit)} style={{...S.btn("purple"),padding:"8px 14px",fontSize:"var(--text-base)",whiteSpace:"nowrap"}}>🏠 יציאה הביתה</button>}
+              <button onClick={()=>exportSignedSoldiersExcel(filtered.filter(s=>s.signature),db)}
+                style={{...S.btn("teal"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>
+                📊 Excel חתומים
+              </button>
             </div>
             <div style={{...S.card,padding:0,overflow:"hidden"}}>
               <div style={{overflowX:"auto"}}>
@@ -15172,6 +15176,220 @@ async function exportSoldiersExcelJS(soldiers, db){
   const a = document.createElement("a");
   a.href=url; a.download="מצב_חיילים_9219_"+TODAY.split("/").join("-")+".xlsx"; a.click();
   setTimeout(function(){URL.revokeObjectURL(url);},2000);
+}
+
+
+// ════════════════════════════════════════════════════════
+// ייצוא מלאי פלוגה לאקסל
+// ════════════════════════════════════════════════════════
+async function exportUnitInventoryExcel(unit, db){
+  if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה, נסה שוב"); return; }
+  if(!unit||unit==="הכל"){ alert("יש לבחור פלוגה ספציפית תחילה"); return; }
+
+  const TODAY = new Date().toLocaleDateString("he-IL");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "ארמון 9219";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("מלאי פלוגה "+unit, {views:[{rightToLeft:true}]});
+
+  const C = {
+    NAVY:{argb:"FF1A3A6B"}, WHITE:{argb:"FFFFFFFF"},
+    GRAY:{argb:"FFE8EEF7"}, ALT:{argb:"FFF4F7FB"},
+    GREEN_BG:{argb:"FFD6F5E3"}, GREEN_FG:{argb:"FF1A7A3C"},
+    RED_BG:{argb:"FFFFE0E0"}, RED_FG:{argb:"FFA01020"},
+  };
+  const thin = (a)=>({style:"thin",color:{argb:a}});
+  const border = (a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
+  const fill = (c)=>({type:"pattern",pattern:"solid",fgColor:c});
+  const AL_C = {horizontal:"center",vertical:"middle",readingOrder:2};
+  const AL_R = {horizontal:"right",vertical:"middle",readingOrder:2};
+
+  // Header row 1 - title
+  ws.mergeCells("A1:G1");
+  const t1 = ws.getCell("A1");
+  t1.value = "מלאי פלוגה "+unit+" | גדוד 9219 | הופק: "+TODAY;
+  t1.font = {bold:true,size:16,color:C.WHITE,name:"Arial"};
+  t1.fill = fill(C.NAVY);
+  t1.alignment = AL_C;
+  ws.getRow(1).height = 36;
+
+  // Header row 2 - columns
+  const HDRS = ["#","שם פריט","מקט","כמות כוללת","מוקצה לחייל","פנוי","מספרי סידורי"];
+  const WIDS = [5, 28, 16, 14, 16, 10, 40];
+  const hdrRow = ws.getRow(2);
+  hdrRow.height = 22;
+  HDRS.forEach((h,i)=>{
+    const cell = hdrRow.getCell(i+1);
+    cell.value = h;
+    cell.font = {bold:true,size:11,color:C.WHITE,name:"Arial"};
+    cell.fill = fill(C.NAVY);
+    cell.alignment = AL_C;
+    cell.border = border("FFC5CEE0");
+    ws.getColumn(i+1).width = WIDS[i];
+  });
+
+  // Build inventory from armoryMaster + assignments + unitItems
+  const master = db.armoryMaster||{};
+  const allSols = getSoldiers(db).filter(s=>s.unit===unit);
+  let rowIdx = 3;
+
+  Object.entries(master).forEach(([name, info],idx)=>{
+    const total = info.total||0;
+    const makat = info.makat||getMakat(name,db)||"";
+
+    // Assigned to soldiers in this unit
+    const assignedSols = [];
+    const serials = [];
+    allSols.forEach(sol=>{
+      const asgn = db.assignments?.[sol.id]||{};
+      Object.entries(asgn).forEach(([k,v])=>{
+        if(cleanItemName(k)===name){
+          assignedSols.push(sol.name);
+          if(v&&v!==1&&v!==true) serials.push(String(v));
+        }
+      });
+    });
+
+    // Unit items (unassigned)
+    const unitItemCount = Object.values(db.unitItems||{}).filter(v=>{
+      const t=v.t||v.assignedType||"unit";
+      return cleanItemName(v.n||v.name||"")===name && (v.u||v.unit||"")===unit && t==="unit";
+    }).length;
+
+    Object.values(db.unitItems||{}).forEach(v=>{
+      if(cleanItemName(v.n||v.name||"")===name && (v.u||v.unit||"")===unit){
+        if(v.s||v.serial) serials.push(String(v.s||v.serial));
+      }
+    });
+
+    const assigned = assignedSols.length;
+    const free = Math.max(0, total - assigned - unitItemCount);
+    const alt = idx%2===1;
+
+    const dataRow = ws.getRow(rowIdx);
+    dataRow.height = 20;
+    const vals = [rowIdx-2, name, makat, total, assigned>0?assigned+" ("+assignedSols.slice(0,3).join(", ")+(assignedSols.length>3?"...":"")+")":" —", free, serials.join(", ")||"—"];
+    const bgs = [C.GRAY, alt?C.ALT:{argb:"FFFFFFFF"}, alt?C.ALT:{argb:"FFFFFFFF"},
+      alt?C.ALT:{argb:"FFFFFFFF"},
+      assigned>0?C.GREEN_BG:alt?C.ALT:{argb:"FFFFFFFF"},
+      free===0?C.RED_BG:alt?C.ALT:{argb:"FFFFFFFF"},
+      alt?C.ALT:{argb:"FFFFFFFF"}];
+    vals.forEach((v,i)=>{
+      const cell = dataRow.getCell(i+1);
+      cell.value = v;
+      cell.font = {size:10,name:"Arial"};
+      cell.fill = fill(bgs[i]);
+      cell.alignment = i===0?AL_C:AL_R;
+      cell.border = border("FFC5CEE0");
+    });
+    rowIdx++;
+  });
+
+  ws.views = [{state:"frozen",ySplit:2,rightToLeft:true}];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download="מלאי_פלוגה_"+unit+"_"+TODAY.replace(/\//g,"-")+".xlsx";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ════════════════════════════════════════════════════════
+// ייצוא חיילים חתומים + ציוד לאקסל
+// ════════════════════════════════════════════════════════
+async function exportSignedSoldiersExcel(soldiers, db){
+  if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה, נסה שוב"); return; }
+
+  const TODAY = new Date().toLocaleDateString("he-IL");
+  const sigs = db.signatures||{};
+  const signedSols = soldiers.filter(s=>sigs[s.id]);
+
+  if(!signedSols.length){ alert("אין חיילים חתומים כרגע"); return; }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "ארמון 9219";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("חיילים חתומים", {views:[{rightToLeft:true}]});
+
+  const C = {
+    NAVY:{argb:"FF1A3A6B"}, WHITE:{argb:"FFFFFFFF"},
+    GRAY:{argb:"FFE8EEF7"}, ALT:{argb:"FFF4F7FB"},
+    GREEN_BG:{argb:"FFD6F5E3"},
+  };
+  const thin=(a)=>({style:"thin",color:{argb:a}});
+  const border=(a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
+  const fill=(c)=>({type:"pattern",pattern:"solid",fgColor:c});
+  const AL_C={horizontal:"center",vertical:"middle",readingOrder:2};
+  const AL_R={horizontal:"right",vertical:"middle",readingOrder:2};
+
+  // Title
+  ws.mergeCells("A1:H1");
+  const t1 = ws.getCell("A1");
+  t1.value = "חיילים חתומים על ציוד | גדוד 9219 | הופק: "+TODAY+" | סהכ: "+signedSols.length+" חיילים";
+  t1.font = {bold:true,size:15,color:C.WHITE,name:"Arial"};
+  t1.fill = fill(C.NAVY);
+  t1.alignment = AL_C;
+  ws.getRow(1).height = 34;
+
+  // Column headers
+  const HDRS = ["#","מ.א","שם חייל","פלוגה","מחלקה","תאריך חתימה","נשק","כל הציוד"];
+  const WIDS = [5, 12, 22, 12, 14, 18, 30, 50];
+  const hdrRow = ws.getRow(2);
+  hdrRow.height = 22;
+  HDRS.forEach((h,i)=>{
+    const cell = hdrRow.getCell(i+1);
+    cell.value = h;
+    cell.font = {bold:true,size:11,color:C.WHITE,name:"Arial"};
+    cell.fill = fill(C.NAVY);
+    cell.alignment = AL_C;
+    cell.border = border("FFC5CEE0");
+    ws.getColumn(i+1).width = WIDS[i];
+  });
+
+  // Data rows — one row per soldier
+  signedSols.forEach((sol,idx)=>{
+    const sig = sigs[sol.id];
+    const assigned = db.assignments?.[sol.id]||{};
+    const weps = Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(cleanItemName(k)));
+    const allItems = Object.entries(assigned).map(([k,v])=>cleanItemName(k)+(v&&v!==1&&v!==true?" ("+v+")":"")).join(", ");
+    const alt = idx%2===1;
+    const bg = alt?C.ALT:{argb:"FFFFFFFF"};
+
+    const dataRow = ws.getRow(idx+3);
+    dataRow.height = 22;
+    const vals = [
+      idx+1,
+      sol.id,
+      sol.name,
+      sol.unit||"—",
+      sol.squad||"—",
+      sig.signedAt||"—",
+      weps.map(cleanItemName).join(", ")||"ללא נשק",
+      allItems||"—",
+    ];
+    vals.forEach((v,i)=>{
+      const cell = dataRow.getCell(i+1);
+      cell.value = v;
+      cell.font = {size:10,name:"Arial"};
+      cell.fill = fill(i===0?C.GRAY:bg);
+      cell.alignment = i===0?AL_C:AL_R;
+      cell.border = border("FFC5CEE0");
+      if(i===7) cell.alignment = {...AL_R, wrapText:true};
+    });
+    dataRow.height = 28;
+  });
+
+  ws.views = [{state:"frozen",ySplit:2,rightToLeft:true}];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download="חיילים_חתומים_"+TODAY.replace(/\//g,"-")+".xlsx";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 
