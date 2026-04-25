@@ -3363,10 +3363,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
   const [editPhone, setEditPhone] = useState(soldier.phone||"");
   const [editUnit, setEditUnit] = useState(soldier.unit||"");
   const [editSquad, setEditSquad] = useState(soldier.squad||"");
+  const [editNotes, setEditNotes] = useState(soldier.notes||"");
+  const [editFakal, setEditFakal] = useState(soldier.fakal||"");
 
   function saveEdit(){
     if(!editName.trim()){alert("שם לא יכול להיות ריק");return;}
-    const updated = {...soldier, name:editName.trim(), phone:editPhone.trim(), unit:editUnit.trim(), squad:editSquad.trim()};
+    const updated = {...soldier, name:editName.trim(), phone:editPhone.trim(), unit:editUnit.trim(), squad:editSquad.trim(), notes:editNotes.trim(), fakal:editFakal.trim()};
     const ndb = {
       ...db,
       soldiers:{...(db.soldiers||{}), [soldier.id]:updated},
@@ -3439,11 +3441,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                   <div><label style={S.label}>טלפון</label><input value={editPhone} onChange={e=>setEditPhone(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
                   <div><label style={S.label}>פלוגה</label><input value={editUnit} onChange={e=>setEditUnit(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
                   <div><label style={S.label}>מחלקה</label><input value={editSquad} onChange={e=>setEditSquad(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                  <div style={{gridColumn:"1/-1"}}><label style={S.label}>📋 פקל</label><input value={editFakal} onChange={e=>setEditFakal(e.target.value)} placeholder="מספר פקל..." style={{...S.input,fontFamily:"monospace"}}/></div>
+                  <div style={{gridColumn:"1/-1"}}><label style={S.label}>💬 הערות</label><textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="הערות על החייל..." rows={2} style={{...S.input,resize:"vertical",fontFamily:"inherit"}}/></div>
                 </div>
                 <button onClick={saveEdit} style={{...S.btn("green"),width:"100%",fontWeight:700}}>💾 שמור שינויים</button>
               </div>
             : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                {[["פלוגה",soldier.unit],["מחלקה",soldier.squad||"—"],["טלפון",soldier.phone||"—"],["מ. אישי",soldier.id]].map(([l,v])=>(
+                {[["פלוגה",soldier.unit],["מחלקה",soldier.squad||"—"],["טלפון",soldier.phone||"—"],["פקל",soldier.fakal||"—"],["מ. אישי",soldier.id]].map(([l,v])=>(
               <div key={l} style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"9px 12px"}}>
                 <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}}>{l}</div>
                 <div style={{fontWeight:600,fontSize:"var(--text-base)",marginTop:2}}>{v}</div>
@@ -3451,6 +3455,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
             ))}
           </div>
           }
+          {soldier.notes&&(
+            <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"10px 14px",marginBottom:8,border:"1px solid var(--color-border-muted)"}}>
+              <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>💬 הערות</div>
+              <div style={{fontSize:"var(--text-sm)",whiteSpace:"pre-wrap"}}>{soldier.notes}</div>
+            </div>
+          )}
           <div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"10px 14px",marginBottom:12}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
