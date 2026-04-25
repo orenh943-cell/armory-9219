@@ -1372,7 +1372,6 @@ function saveDB(db){
   fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/customSoldiers", safe.customSoldiers).catch(e=>console.warn("FB err:",e));
   fbSet("db/brokenItems", safe.brokenItems).catch(e=>console.warn("FB err:",e));
-  fbSet("db/bulkGuarantors", safe.bulkGuarantors).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPerms", safe.userPerms).catch(e=>console.warn("FB err:",e));
   fbSet("db/userPasswords", safe.userPasswords).catch(e=>console.warn("FB err:",e));
   fbSet("db/dynamicUsers", safe.dynamicUsers).catch(e=>console.warn("FB err:",e));
@@ -3324,6 +3323,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               sn:null,assignedSoldierName:null,
               returnedFrom:soldier.name,
               returnedAt:new Date().toLocaleDateString("he-IL")};
+            fbSet("db/unitItems/"+existingKey, newUI[existingKey]).catch(()=>{});
             ndb={...ndb, unitItems:newUI};
           } else {
             const newUI={...(ndb.unitItems||{}),[uid]:{
@@ -3334,6 +3334,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               addedAt:new Date().toLocaleDateString("he-IL"),
             }};
             ndb={...ndb, unitItems:newUI};
+            fbSet("db/unitItems/"+uid, newUI[uid]).catch(()=>{});
           }
           // נקה meta
           if(metaKey){
@@ -3347,6 +3348,14 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
           }
         }
       });
+    }
+    // שמור assignments ל-Firebase ישירות
+    if(!signoffMode){
+      fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(na)).catch(()=>{});
+    }
+    // שמור unitItems ל-Firebase
+    if(ndb.unitItems && Object.keys(ndb.unitItems).length){
+      fbSet("db/unitItems", sanitizeForFirebase(ndb.unitItems)).catch(()=>{});
     }
     onSave(ndb);
     logAction(signoffMode?"זיכוי_חתימה":"ביטול_שיוך", signoffMode?`זוכתה חתימה של ${soldier.name} (${soldier.id})`:`בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
@@ -7853,12 +7862,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [searchModal,setSearchModal]=useState(false);
   const [dashUnitFilter,setDashUnitFilter]=useState("הכל");
 
-  // רענון אוטומטי כל 60 שניות
-  useEffect(()=>{
-    const interval=setInterval(()=>{
-          },60000);
-    return ()=>clearInterval(interval);
-  },[]);
+
 
   // האזנה ל-Firebase בזמן אמת
   useEffect(()=>{
@@ -7925,10 +7929,6 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
         const arr = Array.isArray(serials) ? serials : Object.values(serials);
         setDb(prev=>({...prev, serials: arr}));
       }
-    });
-    // db/deletedSoldiers listener
-    fbOn("db/deletedSoldiers", (deleted)=>{
-      if(deleted) setDb(prev=>({...prev, deletedSoldiers: deleted}));
     });
     // db/deletedSoldiers listener
     fbOn("db/deletedSoldiers", (deleted)=>{
@@ -13179,13 +13179,23 @@ function DashDetailModal({type, soldiers, db, onClose}){
       const hasWeapon=Object.keys(db.assignments?.[s.id]||{}).some(k=>WEAPON_KEYS.includes(k));
       return hasWeapon && !db.signatures?.[s.id];
     });
-    else if(type==="withWeapon") list=list.filter(s=>Object.keys(db.assignments?.[s.id]||{}).some(k=>WEAPON_KEYS.includes(k)));
+    else if(type==="withWeapon") list=list.filter(s=>Object.keys(db.assignments?.[s.id]||{}).some(k=>WEAPON_KEYS.includes(cleanItemName(k))));
     else if(type==="exitform") return []; // handled separately
+    else if(type==="testedCount") list=list.filter(s=>{
+      const needsTest=TEST_REQUIRED_WEAPONS.some(w=>Object.keys(db.assignments?.[s.id]||{}).includes(w));
+      if(!needsTest) return false;
+      return getTestStatus(db,s.id).valid;
+    });
+    else if(type==="notest") list=list.filter(s=>{
+      const needsTest=TEST_REQUIRED_WEAPONS.some(w=>Object.keys(db.assignments?.[s.id]||{}).includes(w));
+      if(!needsTest) return false;
+      return !getTestStatus(db,s.id).valid;
+    });
     if(unitFilter!=="הכל") list=list.filter(s=>s.unit===unitFilter);
     return list;
   },[type, soldiers, db, unitFilter]);
 
-  const TITLES = {signed:"✅ חיילים חתומים", unsigned:"⏳ טרם חתמו", withWeapon:"🔫 חיילים עם נשק", all:"🪖 כל החיילים", exitform:"🏠 מילאו טופס יציאה"};
+  const TITLES = {signed:"✅ חיילים חתומים", unsigned:"⏳ טרם חתמו", withWeapon:"🔫 חיילים עם נשק", testedCount:"🎓 עשו בוחן", notest:"📋 ללא בוחן", all:"🪖 כל החיילים", exitform:"🏠 מילאו טופס יציאה"};
 
   // תצוגת טפסי יציאה
   if(type==="exitform") return (
