@@ -881,7 +881,7 @@ const DAILY_ITEMS = [
 const USERS = {
   "אורן": {role:"admin", pass:"7680832", name:"אורן חלפון", soldierId:"7680832"},
   "מתן": {role:"admin", pass:"7492961", name:"מתן ניסים דיין", soldierId:"7492961"},
-  "יעקב": {role:"admin", pass:"8278560", name:"יעקב שרון", soldierId:"8278560"},
+  "יעקב": {role:"admin", pass:"7152543", name:"יעקב שרון", soldierId:"7152543"},
 
 
 };
@@ -3095,6 +3095,9 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
   const [retSel,setRetSel]=useState([]);
   const [retCabinet,setRetCabinet]=useState({}); // name -> {inCabinet:bool, cabName:str}
   const [signoffMode,setSignoffMode]=useState(false); // true = זיכוי (keep assignments, just clear sig)
+  const [transferItem,setTransferItem]=useState(null); // {name, serial, rowKey}
+  const [transferSearch,setTransferSearch]=useState("");
+  const [transferSolId,setTransferSolId]=useState("");
   const _allAssigned=db.assignments[soldier.id]??soldier.assigned??{};
   const _sig=db.signatures?.[soldier.id];
   // בזיכוי: אם חתימה חלקית — הצג רק פריטים שנחתמו (sig.items)
@@ -3877,6 +3880,88 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                       return <span style={{fontSize:9,background:"var(--color-warning-bg)",color:"var(--color-warning-fg)",borderRadius:8,padding:"1px 6px",fontWeight:700,whiteSpace:"nowrap"}}>מ{fromUnit}</span>;
                     })()}
                   </label>
+                  {view==="profile"&&canEditThisSoldier&&!signoffMode&&(
+                    <button onClick={e=>{e.stopPropagation();
+                      setTransferItem({name:clean,serial:g.serial||null,rowKey,rowKeys});
+                      setTransferSearch(""); setTransferSolId("");
+                    }} style={{...S.btn("blue"),padding:"2px 8px",fontSize:"var(--text-xs)",marginTop:4,display:"block"}}>
+                      🔄 העבר לחייל
+                    </button>
+                  )}
+                  {transferItem?.rowKey===rowKey&&(
+                    <div style={{marginTop:8,padding:"10px 12px",background:"var(--color-accent-subtle)",borderRadius:8,border:"1px solid var(--color-accent-fg)"}}>
+                      <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8,color:"var(--color-accent-fg)"}}>🔄 העבר {clean} לחייל:</div>
+                      <div style={{position:"relative",marginBottom:8}}>
+                        <input value={transferSearch} onChange={e=>{setTransferSearch(e.target.value);setTransferSolId("");}}
+                          placeholder="חפש חייל לפי שם..." style={{...S.input,marginBottom:0}}/>
+                        {transferSearch&&!transferSolId&&(()=>{
+                          const q=transferSearch.toLowerCase();
+                          const matches=getSoldiers(db).filter(s=>s.id!==soldier.id&&(s.name.toLowerCase().includes(q)||s.id.includes(q))).slice(0,6);
+                          return matches.length>0?(
+                            <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-default)",border:"1px solid var(--color-accent-fg)",borderRadius:6,zIndex:50,maxHeight:150,overflowY:"auto"}}>
+                              {matches.map(s=>(
+                                <div key={s.id} onClick={()=>{setTransferSolId(s.id);setTransferSearch(s.name);}}
+                                  style={{padding:"7px 12px",cursor:"pointer",fontSize:"var(--text-sm)",borderBottom:"1px solid var(--color-border-muted)"}}
+                                  onMouseEnter={e=>e.currentTarget.style.background="var(--btn-blue-bg)"}
+                                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                                  <strong>{s.name}</strong> <span style={{color:"var(--color-text-muted)",fontSize:10}}>{s.id} · פלוגה {s.unit}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ):null;
+                        })()}
+                      </div>
+                      {transferSolId&&(()=>{
+                        const toSol=getSoldiers(db).find(s=>s.id===transferSolId);
+                        const crossUnit=toSol&&toSol.unit!==soldier.unit;
+                        function doTransfer(permanent){
+                          if(!toSol) return;
+                          const newFrom={...assigned};
+                          rowKeys.forEach(k=>delete newFrom[k]);
+                          const toAssigned={...(db.assignments?.[transferSolId]||{})};
+                          rowKeys.forEach(k=>{toAssigned[k]=assigned[k];});
+                          const nAssignments={...db.assignments,[soldier.id]:newFrom,[transferSolId]:toAssigned};
+                          // שמור מטא-נתוני העברה
+                          const newMeta={...(db.assignmentMeta||{})};
+                          if(!newMeta[transferSolId]) newMeta[transferSolId]={};
+                          rowKeys.forEach(k=>{
+                            newMeta[transferSolId][k]={
+                              fromUnit:soldier.unit, fromSoldier:soldier.name,
+                              permanent, transferDate:new Date().toLocaleDateString("he-IL")
+                            };
+                          });
+                          const ndb={...db,assignments:nAssignments,assignmentMeta:newMeta};
+                          fbSet("db/assignments/"+soldier.id,sanitizeForFirebase(newFrom)).catch(()=>{});
+                          fbSet("db/assignments/"+transferSolId,sanitizeForFirebase(toAssigned)).catch(()=>{});
+                          fbSet("db/assignmentMeta/"+transferSolId,sanitizeForFirebase(newMeta[transferSolId])).catch(()=>{});
+                          onSave(ndb);
+                          const type=permanent?"לצמיתות":"זמנית";
+                          logAction("העברה",clean+" הועבר ("+type+") מ"+soldier.name+" ("+soldier.unit+") ל"+toSol.name+" ("+toSol.unit+")",auth?.name||"מערכת");
+                          setTransferItem(null); setTransferSearch(""); setTransferSolId("");
+                        }
+                        return (
+                          <div style={{marginTop:8}}>
+                            {crossUnit&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",marginBottom:8,padding:"6px 10px",background:"var(--color-warning-subtle)",borderRadius:6}}>
+                              ⚠️ העברה בין פלוגות: {soldier.unit} → {toSol?.unit}
+                            </div>}
+                            <div style={{display:"flex",gap:6}}>
+                              <button onClick={()=>doTransfer(true)}
+                                style={{...S.btn("green"),flex:1}}>
+                                ✅ {crossUnit?"העבר לצמיתות":"העבר"}
+                              </button>
+                              {crossUnit&&<button onClick={()=>doTransfer(false)}
+                                style={{...S.btn("warning"),flex:1}}>
+                                ⏳ העבר זמנית
+                              </button>}
+                              <button onClick={()=>{setTransferItem(null);setTransferSearch("");setTransferSolId("");}}
+                                style={{...S.btn("gray"),padding:"7px 14px"}}>ביטול</button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {!transferSolId&&<button onClick={()=>{setTransferItem(null);setTransferSearch("");}} style={{...S.btn("gray"),width:"100%",marginTop:4}}>ביטול</button>}
+                    </div>
+                  )}
                   {(allSelected||someSelected)&&!signoffMode&&(()=>{
                     const meta=(db.assignmentMeta||{})[soldier.id]||{};
                     const metaKey=Object.keys(meta).find(k=>cleanItemName(k)===clean);
