@@ -15351,7 +15351,11 @@ async function exportSignedSoldiersExcel(soldiers, db){
   // Data rows — one row per soldier
   signedSols.forEach((sol,idx)=>{
     const sig = sigs[sol.id];
-    const assigned = db.assignments?.[sol.id]||{};
+    const rawAssigned = db.assignments?.[sol.id]||{};
+    // חתימה חלקית: רק הפריטים שנחתמו
+    const assigned = (sig?.partial && sig?.items && sig.items.length>0)
+      ? Object.fromEntries(sig.items.map(k=>[k, rawAssigned[k]||1]))
+      : rawAssigned;
     const weps = Object.keys(assigned).filter(k=>WEAPON_KEYS.includes(cleanItemName(k)));
     const allItems = Object.entries(assigned).map(([k,v])=>cleanItemName(k)+(v&&v!==1&&v!==true?" ("+v+")":"")).join(", ");
     const alt = idx%2===1;
