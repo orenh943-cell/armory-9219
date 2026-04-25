@@ -11507,10 +11507,16 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     const serialVal = addSerial.trim();
     // בדוק כפילות
     if(serialVal){
-      const existing = Object.values(db.unitItems||{}).find(v=>String(v.s||v.serial||"")===serialVal);
-      const inAssignments = Object.values(db.assignments||{}).some(asgn=>Object.values(asgn).some(v=>String(v)===serialVal));
-      if(existing||inAssignments){
-        alert("⚠️ צ "+serialVal+" כבר קיים במערכת!"); return;
+      // בדוק כפילות רק לאותו שם פריט (לא בין פריטים שונים)
+      const itemNameClean = cleanItemName(addName.trim());
+      const existingInUnit = Object.values(db.unitItems||{}).find(v=>
+        String(v.s||v.serial||"")===serialVal && cleanItemName(v.n||v.name||"")===itemNameClean
+      );
+      const existingInAssign = Object.values(db.assignments||{}).some(asgn=>
+        Object.entries(asgn).some(([k,v])=>cleanItemName(k)===itemNameClean && String(v)===serialVal)
+      );
+      if(existingInUnit||existingInAssign){
+        alert("⚠️ צ "+serialVal+" כבר קיים עבור פריט זה ("+addName+")!"); return;
       }
     }
     requirePin("הוספת פריט: "+addName+(serialVal?" צ "+serialVal:""), ()=>{ try {
