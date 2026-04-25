@@ -7699,6 +7699,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
   // חישוב בוחן נשק
   const filtNeedTest = filtWithWep.filter(s=>TEST_REQUIRED_WEAPONS.some(w=>Object.keys(db.assignments?.[s.id]||{}).includes(w)));
   const filtNoTest = filtNeedTest.filter(s=>{const ts=getTestStatus(db,s.id||s.soldierId);return !ts.valid;}).length;
+  const filtWithTest = filtNeedTest.length - filtNoTest;
 
   const cards = [
     {label:"חיילים",val:filtSoldiers.length,color:"var(--color-purple-fg)",k:"all"},
@@ -7707,6 +7708,7 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
     {label:"טרם חתמו",val:filtUnsigned,color:filtUnsigned>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"unsigned"},
     {label:"ערבות",val:filtGuaranty,color:"var(--color-purple-fg)",k:"guaranty"},
     {label:"טופס יציאה",val:filtForms,color:"var(--color-warning-fg)",k:"exitform"},
+    {label:"עשו בוחן",val:filtWithTest,color:filtWithTest===filtNeedTest.length?"var(--color-success-fg)":"var(--color-accent-fg)",k:"testedCount"},
     {label:"ללא בוחן",val:filtNoTest,color:filtNoTest>0?"var(--color-danger-fg)":"var(--color-success-fg)",k:"notest"},
   ];
 
@@ -15725,7 +15727,7 @@ function PermissionsTab({db, setDb, auth}){
   function addUser(){
     setErr("");
     if(!newUser.username.trim()||!newUser.name.trim()||!newUser.pass.trim()){setErr("יש למלא את כל השדות");return;}
-    if(USERS[newUser.username]){setErr("משתמש זה הוא מנהל מובנה — ניתן לערוך הרשאותיו ישירות ברשימה");return;}
+    if(USERS[newUser.username]){setErr("שם המשתמש \""+newUser.username+"\" שמור למנהל מובנה. בחר שם משתמש אחר — לדוגמה: שם מלא, מ.א, או כינוי");return;}
     if(db.dynamicUsers?.[newUser.username]){setErr("שם משתמש כבר קיים");return;}
     const u = {name:newUser.name,pass:newUser.pass,role:newUser.role,soldierId:"",phone:newUser.phone||"",viewUnit:newUser.viewUnit,editUnit:newUser.editUnit||"הכל",roleTitle:newUser.roleTitle||"",rank:newUser.rank||"",dynamic:true};
     const rolePreset = newUser.roleTitle ? ROLE_TITLE_PRESETS[newUser.roleTitle] : null;
