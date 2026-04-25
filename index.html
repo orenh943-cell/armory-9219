@@ -1747,6 +1747,16 @@ function SignaturePad({onSave}){
 }
 
 function Login({onLogin}){
+  // נקה session ישן עם soldierId לא תקין
+  React.useEffect(()=>{
+    try{
+      const sess = JSON.parse(sessionStorage.getItem("armory_session")||"null");
+      if(sess && sess.soldierId==="8278560"){
+        sessionStorage.removeItem("armory_session");
+        console.log("[fix] נמחק session ישן עם soldierId 8278560");
+      }
+    }catch(e){}
+  },[]);
   const [user,setUser]=useState("");
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
@@ -8003,6 +8013,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
           fbSet("db/nameMakatMigratedV1", true).catch(()=>{});
           console.log("[migration] nameMakat uploaded");
         }).catch(()=>{});
+      }
+    }).catch(()=>{});
+
+    // תיקון: עדכן סיסמת יעקב ב-Firebase ל-7152543 (ממספר אישי נכון)
+    fbGet("db/userPasswords").then(passwords=>{
+      if(passwords && (passwords["יעקב"]==="8278560" || !passwords["יעקב"])){
+        fbSet("db/userPasswords/יעקב", "7152543").catch(()=>{});
+        console.log("[fix] עדכנה סיסמת יעקב ל-7152543");
       }
     }).catch(()=>{});
 
@@ -17485,13 +17503,18 @@ function App(){
       }
     }catch(e){}
     // שחזר session שמור — רק מנהלים, לא חיילים
-    const SESSION_VERSION = "v4"; // שנה כדי לאפס את כל הסשנים
+    const SESSION_VERSION = "v5"; // v5 — תיקון soldierId יעקב
     try{
       const saved=sessionStorage.getItem("armory_session");
       if(saved){
         const parsed=JSON.parse(saved);
         // בדוק גרסת סשן — ישנים נמחקים
         if(parsed._sv !== SESSION_VERSION){
+          sessionStorage.removeItem("armory_session");
+          return null;
+        }
+        // בדוק שsoldierId לא ישן (8278560 = ישן)
+        if(parsed.soldierId==="8278560"){
           sessionStorage.removeItem("armory_session");
           return null;
         }
@@ -17512,7 +17535,7 @@ function App(){
     // שמור session לכל משתמש שנכנס דרך הכניסה - חוץ מחיילים דרך לינק
     const isSoldierLink = a.autoSign||a.autoExitForm||a.autoTestCert||a.autoBulkSign;
     if(!isSoldierLink){
-      try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v4"}));}catch(e){}
+      try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v5"}));}catch(e){}
     }
     // Log login to Firebase
     const loginTs = Date.now();
