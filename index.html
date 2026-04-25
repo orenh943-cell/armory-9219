@@ -8289,6 +8289,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [histFilter,setHistFilter]=useState("הכל");
   const [quickModal,setQuickModal]=useState(false);
   const [bulkModal,setBulkModal]=useState(false);
+  const [bulkExitModal,setBulkExitModal]=useState(false);
   const [bulkSendModal,setBulkSendModal]=useState(false);
   const [mobileMenu,setMobileMenu]=useState(false);
   const [showProfile,setShowProfile]=useState(false);
@@ -9021,7 +9022,17 @@ ${exitLink}
           <GreenEyesTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
         {tab==="exitform"&&(
-          <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+          <div>
+            {(perms.canApproveExitForm||perms.canCommanderDecide)&&(
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+                <button onClick={()=>setBulkExitModal(true)}
+                  style={{...S.btn("green"),padding:"8px 16px",fontWeight:700}}>
+                  ✍️ חתימה מרוכזת על יציאות
+                </button>
+              </div>
+            )}
+            <ExitFormTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
+          </div>
         )}
       </main>
 
@@ -9031,7 +9042,8 @@ ${exitLink}
       {selSoldier&&<SoldierDetail soldier={soldiers.find(s=>s.id===selSoldier.id)||selSoldier} db={db} onClose={()=>setSelSoldier(null)} onSave={setDb} onSendWA={sendWhatsApp} onSendExitWA={sendExitFormWA} onSendTestAndExitWA={sendTestAndExitWA} auth={auth} soldiers={soldiers}/>}
       {signInPersonSoldier&&<InPersonSignModal soldier={signInPersonSoldier} db={db} onSave={setDb} auth={auth} onClose={()=>setSignInPersonSoldier(null)}/>}
       {quickModal&&<QuickModal soldiers={soldiers} db={db} onSave={setDb} onClose={()=>setQuickModal(false)}/>}
-      {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>}
+      {bulkModal&&<BulkSignModal db={db} onSave={setDb} onClose={()=>setBulkModal(false)} soldiers={soldiers} auth={auth}/>
+      {bulkExitModal&&<BulkExitSignModal db={db} setDb={setDb} soldiers={soldiers} auth={auth} onClose={()=>setBulkExitModal(false)}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers} onSaveHtml={(key,entry)=>setDb(prev=>({...prev,dailyFormsHtml:{...(prev.dailyFormsHtml||{}),[key]:entry}}))}/>}
       {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
@@ -13662,7 +13674,7 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
   const [selected, setSelected] = React.useState(new Set());
   const [filterUnit, setFilterUnit] = React.useState("הכל");
   const [mpNote, setMpNote] = React.useState("");
-  const [decision, setDecision] = React.useState(""); // מגד בלבד
+  const [decision, setDecision] = React.useState("מאשר"); // מגד בלבד - ברירת מחדל: מאשר
   const [showPad, setShowPad] = React.useState(false);
   const [sig, setSig] = React.useState(()=>db.userSigs?.[auth?.username]||null);
   const [done, setDone] = React.useState(false);
@@ -13696,6 +13708,7 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
           ...f,
           commanderDecisions: f.commanderDecisions||Array(10).fill(""),
           magadName: formatSigner(auth, db),
+          magadId: auth?.soldierId||"",
           magadDecision: decision,
           magadSig: sig,
           magadDate: todayStr()+" "+nowStr(),
@@ -13705,6 +13718,7 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
         newForms[id] = {
           ...f,
           mpName: formatSigner(auth, db),
+          mpId: auth?.soldierId||"",
           mpNote,
           mpSig: sig,
           mpDate: todayStr()+" "+nowStr(),
@@ -13737,7 +13751,7 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
   );
 
   return (
-    <Modal title={`✍️ חתימה מרוכזת — ${isMagad?"החלטת מגד":'אישור מ"פ'}`} onClose={onClose} wide>
+    <Modal title={"✍️ חתימה מרוכזת על אישורי יציאה"} onClose={onClose} wide>
       {eligibleForms.length===0?(
         <div style={{textAlign:"center",padding:32,color:"var(--color-text-muted)"}}>
           <div style={{fontSize:"var(--text-3xl)",marginBottom:8}}>📭</div>
@@ -13804,15 +13818,16 @@ function BulkExitSignModal({db, setDb, soldiers, auth, onClose}){
 
           {/* החלטת מגד */}
           {isMagad&&(
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
+              <span style={{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}}>החלטה:</span>
               {["מאשר","לא מאשר"].map(v=>(
                 <button key={v} onClick={()=>setDecision(v)} style={{
-                  flex:1,padding:"10px",borderRadius:8,border:"2px solid",cursor:"pointer",
-                  fontWeight:700,fontSize:"var(--text-base)",
+                  padding:"6px 14px",borderRadius:8,border:"2px solid",cursor:"pointer",
+                  fontWeight:700,fontSize:"var(--text-sm)",
                   borderColor:decision===v?(v==="מאשר"?"var(--color-success-fg)":"var(--color-danger-fg)"):"var(--color-border-default)",
                   background:decision===v?(v==="מאשר"?"var(--btn-green-bg)":"var(--btn-red-bg)"):"transparent",
-                  color:decision===v?(v==="מאשר"?"var(--color-success-fg)":"var(--color-danger-fg)"):"var(--color-text-secondary)"
-                }}>{v==="מאשר"?"✅ מאשר יציאה":"❌ לא מאשר"}</button>
+                  color:decision===v?(v==="מאשר"?"var(--color-success-fg)":"var(--color-danger-fg)"):"var(--color-text-secondary)",
+                }}>{v==="מאשר"?"✅ מאשר":"❌ לא מאשר"}</button>
               ))}
             </div>
           )}
@@ -15332,11 +15347,11 @@ th{background:#e8edf5;font-weight:bold}
 </div>
 <div class="section">
   <div class="section-title">סעיף 3 — המלצת מ"פ</div>
-  ${form.mpSig?`<p>שם: ${form.mpName} | תאריך: ${form.mpDate}</p>${form.mpNote?`<p>${form.mpNote}</p>`:""}<img src="${form.mpSig}" style="height:40px;border:1px solid #ccc"/>`:"<p style='color:#999'>טרם מולא</p>"}
+  ${form.mpSig?`<p>שם: ${form.mpName}${form.mpId?" | מ.א: "+form.mpId:""} | תאריך: ${form.mpDate}</p>${form.mpNote?`<p>${form.mpNote}</p>`:""}<img src="${form.mpSig}" style="height:40px;border:1px solid #ccc"/>`:"<p style='color:#999'>טרם מולא</p>"}
 </div>
 <div class="section">
   <div class="section-title">סעיף 4 — החלטת מגד</div>
-  ${form.magadSig?`<p>שם: ${form.magadName} | תאריך: ${form.magadDate} | <b style="color:${form.magadDecision==="מאשר"?"#27ae60":"#c0392b"}">${form.magadDecision}</b></p><img src="${form.magadSig}" style="height:40px;border:1px solid #ccc"/>`:"<p style='color:#999'>טרם מולא</p>"}
+  ${form.magadSig?`<p>שם: ${form.magadName}${form.magadId?" | מ.א: "+form.magadId:""} | תאריך: ${form.magadDate} | <b style="color:${form.magadDecision==="מאשר"?"#27ae60":"#c0392b"}">${form.magadDecision}</b></p><img src="${form.magadSig}" style="height:40px;border:1px solid #ccc"/>`:"<p style='color:#999'>טרם מולא</p>"}
 </div>
 </body></html>`;
 }
