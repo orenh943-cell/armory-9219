@@ -3499,8 +3499,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
               </div>
               <div style={{display:"flex",gap:6}}>
                 {weps.length>0&&!sig&&<button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
-                {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
-                {canSignAdmin(auth)&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowPartialSign(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
+                {!!auth&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
+                {!!auth&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowPartialSign(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                 {soldier.phone&&<button onClick={()=>onSendTestAndExitWA(soldier)}
                     style={{...S.btn("teal"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📲 בוחן + יציאה</button>}
                 {soldierNeedsTest(soldier,db)&&(()=>{
@@ -4492,6 +4492,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         })()}
       </div>
     )}
+    {showSignHere&&<InPersonSignModal soldier={soldier} db={db} onSave={onSave} auth={auth} onClose={()=>setShowSignHere(false)}/>}
     </Modal>
   );
 }
@@ -8841,8 +8842,8 @@ ${exitLink}
                           </span>}
                         </>);
                       })()}
-                      {!sig&&canSignAdmin(auth)&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
-                      {!sig&&canSignAdmin(auth)&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
+                      {!sig&&!!auth&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
+                      {!sig&&!!auth&&Object.keys(db.assignments?.[s.id]||{}).length>0&&<button onClick={()=>setSelSoldier(s)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                       {!sig&&perms.canSign&&<button onClick={()=>setSignInPersonSoldier(s)} style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>✍️ חתום ליד</button>}
                       {sig&&perms.canEdit&&<button onClick={()=>{const ndb={...db,signatures:{...(db.signatures||{})}};delete ndb.signatures[s.id];fbDelete("db/signatures/"+s.id).catch(()=>{});setDb(ndb);logAction("ביטול_חתימה","בוטלה חתימה של "+s.name+" ("+s.id+")",auth?.name);}} style={{...S.btn("red"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>זכה</button>}
                       <button onClick={()=>setSelSoldier(s)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>פרופיל</button>
