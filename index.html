@@ -7712,6 +7712,11 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
     const guarantors = db.bulkGuarantors||{};
     return !s.signature && Object.values(guarantors).some(g=>g.remaining&&g.remaining[s.id]);
   }).length;
+  const filtForms = (()=>{
+    const forms = db.exitForms||{};
+    const ids = new Set(Object.values(forms).filter(f=>f.soldierSig&&filtSoldiers.find(s=>s.id===f.soldierId)).map(f=>f.soldierId));
+    return ids.size;
+  })();
   const filtNeedTest = filtWithWep.filter(s=>TEST_REQUIRED_WEAPONS.some(w=>Object.keys(db.assignments?.[s.id]||{}).includes(w)));
   const filtNoTest = filtNeedTest.filter(s=>{const ts=getTestStatus(db,s.id||s.soldierId);return !ts.valid;}).length;
   const filtWithTest = filtNeedTest.length - filtNoTest;
