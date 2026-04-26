@@ -7462,7 +7462,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
       const signedIds=soldierIds.filter(id=>!g.remaining?.[id]);
       const remainingDetails=remainingIds.map(id=>{
         const sol=allSols.find(s=>s.id===id);
-        const asgn=db.assignments?.[id]||g.soldierAssigned?.[id]||sol?.assigned||{};
+        const asgn=db.assignments?.[id]||g.soldierAssigned?.[id]||{};
         const weapons=Object.entries(asgn).filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false).map(([wepName,sr])=>{
           let serial=null;
           if(typeof sr==="string"&&sr.trim()&&sr!=="1")serial=sr.trim();
@@ -7532,6 +7532,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     delete newRemaining[soldierId];
     const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:newRemaining}};
     const ndb = {...db,bulkGuarantors:ng};
+    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
     setDb(ndb);
     logAction("זיכוי_ערב", soldierName+" זוכה מערבות "+g.repName, auth?.name||"מערכת");
   }
@@ -7544,6 +7545,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     if(!window.confirm("לזכות את כל "+remaining.length+" החיילים הנותרים? הם יוסרו מהרשימה."))return;
     const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:{}}};
     const ndb = {...db,bulkGuarantors:ng};
+    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
     setDb(ndb);
     logAction("זיכוי_ערב_מלא", "כל החיילים זוכו מערבות "+g.repName, auth?.name||"מערכת");
   }
