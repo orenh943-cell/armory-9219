@@ -7481,6 +7481,51 @@ function ResetTab({db, setDb, auth}){
             alert("✅ ערבויות נמחקו");
           }
         }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ מחק את כל הערבויות</button>
+        <button onClick={()=>{
+          // כלי אבחון — בדוק כל הפריטים
+          const allSols = getSoldiers(db);
+          const master = db.armoryMaster||{};
+          const results = [];
+          
+          Object.entries(master).forEach(([name, info])=>{
+            const total = info.total||0;
+            if(total===0) return;
+            
+            // ספור assignments - כל חייל פעם אחת
+            let soldierCount = 0;
+            allSols.forEach(s=>{
+              const asgn = db.assignments?.[s.id]||{};
+              const keys = Object.keys(asgn).filter(k=>cleanItemName(k)===name);
+              if(keys.length>0) soldierCount++;
+              if(keys.length>1) results.push({type:"⚠️ כפילות", name, soldier:s.name, keys:keys.join(", ")});
+            });
+            
+            // ספור unitItems
+            const unitCount = Object.values(db.unitItems||{}).filter(v=>{
+              const t=v.t||v.assignedType||"unit";
+              return cleanItemName(v.n||v.name||"")===name && t==="unit";
+            }).length;
+            
+            const liveTotal = soldierCount + unitCount;
+            if(liveTotal > total){
+              results.push({type:"❌ עודף", name, total, liveTotal, diff:liveTotal-total});
+            } else if(liveTotal < total && total-liveTotal > 5){
+              results.push({type:"📦 פנוי", name, total, liveTotal, diff:total-liveTotal});
+            }
+          });
+          
+          if(results.length===0){
+            alert("✅ הכל מאוזן — לא נמצאו שגיאות");
+            return;
+          }
+          
+          const msg = results.map(r=>{
+            if(r.type==="⚠️ כפילות") return r.type+" "+r.name+" אצל "+r.soldier+": "+r.keys;
+            return r.type+" "+r.name+": total="+r.total+" live="+r.liveTotal+" ("+r.diff+(r.diff>0?" יותר מדי":" פחות מדי")+")";
+          }).join("\n");
+          
+          alert("תוצאות אבחון:\n\n"+msg);
+        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔍 אבחון מלאי — בדוק שגיאות</button>
         <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
       </div>
 
