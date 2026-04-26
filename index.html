@@ -2387,10 +2387,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
 
   // ===== חישוב מלאי יומי — לפי מק"ט ישירות =====
   const signedIds = new Set(Object.keys(db.signatures||{}));
-  // הוסף חיילים עם ערבות מרוכזת ל-signedIds
+  // הוסף חיילים שכוסו בערבות — רק אלה שב-soldiers אבל לא ב-remaining
   Object.values(db.bulkGuarantors||{}).forEach(g=>{
-    Object.keys(g.remaining||{}).forEach(id=>signedIds.add(id));
-    Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));
+    const remaining = new Set(Object.keys(g.remaining||{}));
+    Object.keys(g.soldiers||{}).forEach(id=>{
+      if(!remaining.has(id)) signedIds.add(id); // ערב עבורו וסיים
+    });
   });
   const allSolsDaily = getSoldiers(db);
   const masterData2 = db.armoryMaster||{}; // רק Firebase — ללא fallback לנתונים סטטיים
@@ -2423,8 +2425,10 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
       liveByName[n] = (liveByName[n]||0)+1;
     });
   });
-  // מ-unitItems (פלוגות + ארמון)
+  // מ-unitItems (פלוגות + ארמון) — רק unit, לא soldier (כבר נספרו ב-assignments)
   Object.values(db.unitItems||{}).forEach(v=>{
+    const t=v.t||v.assignedType||"unit";
+    if(t==="soldier") return; // כבר נספר ב-assignments
     const n = cleanItemName(v.n||v.name||"");
     if(n) liveByName[n] = (liveByName[n]||0)+1;
   });
@@ -3627,7 +3631,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                     });
                     const ndb={...db,bulkGuarantors:newBG};
                     onSave(ndb);
-                    fbSet("db/bulkGuarantors", sanitizeForFirebase(newBG)).catch(()=>{});
+                    // כתוב רק remaining שהשתנה
+                    Object.entries(newBG).forEach(([k,g])=>{
+                      const orig=db.bulkGuarantors?.[k];
+                      if(JSON.stringify(orig?.remaining)!==JSON.stringify(g?.remaining))
+                        fbSet("db/bulkGuarantors/"+k+"/remaining", sanitizeForFirebase(g.remaining)||{}).catch(()=>{});
+                    });
                     logAction("זיכוי_ערבות_מלא", "זיכוי שובר מלא של "+soldier.name, auth?.name);
                   }} style={{...S.btn("red"),padding:"5px 10px",fontSize:"var(--text-sm)"}}>✅ זיכוי שובר מלא</button>
                 </div>
@@ -3671,7 +3680,11 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                                 const newBG={...db.bulkGuarantors,[gKey2]:newG};
                                 const ndb={...db,bulkGuarantors:newBG};
                                 onSave(ndb);
-                                fbSet("db/bulkGuarantors", sanitizeForFirebase(newBG)).catch(()=>{});
+                                Object.entries(newBG).forEach(([k,g])=>{
+                                  const orig=db.bulkGuarantors?.[k];
+                                  if(JSON.stringify(orig?.remaining)!==JSON.stringify(g?.remaining))
+                                    fbSet("db/bulkGuarantors/"+k+"/remaining", sanitizeForFirebase(g.remaining)||{}).catch(()=>{});
+                                });
                                 logAction("הסר_ערבות", "הוסר "+sName+" מערבות "+soldier.name, auth?.name);
                               }} style={{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)"}}>הסר ערבות</button>
                               </div>
@@ -17027,7 +17040,8 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
                   soldierAssigned:soldierAssignedObj,
                 };
                 const ndb={...db,bulkGuarantors:newGuarantors};
-                fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(()=>{});
+                // כתוב רק את הערבות החדשה
+                if(guarantorKey) fbSet("db/bulkGuarantors/"+guarantorKey, sanitizeForFirebase(newGuarantors[guarantorKey])).catch(()=>{});
                 onSave(ndb);
                 // Send signing link
                 const signLink = link+"?bulksign="+guarantorKey;
@@ -17277,7 +17291,8 @@ function BulkRepSignView({auth, db, setDb}){
     const newG = {...g, sigData, pendingSign:false, signedAt: todayStr()+" "+nowStr()};
     const ng = {...(db.bulkGuarantors||{}), [guarantorKey]: newG};
     const ndb = {...db, bulkGuarantors: ng};
-    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
+    // כתוב רק את הערבות החדשה
+    if(guarantorKey) fbSet("db/bulkGuarantors/"+guarantorKey, sanitizeForFirebase(ng[guarantorKey])).catch(()=>{});
     setDb(ndb);
     setShowPad(false);
     setDone(true);
