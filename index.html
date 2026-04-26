@@ -7472,6 +7472,13 @@ function ResetTab({db, setDb, auth}){
           מאפס: שיוכי נשק, חתימות (→ נשמרות בהיסטוריה), ערבויות, טפסי יציאה, לוג<br/>
           <b>שומר:</b> מלאי, ארונות, רשימת חיילים, בחנים, הרשאות, היסטוריית חתימות
         </div>
+        <button onClick={()=>{
+          if(window.confirm("למחוק את כל הערבויות?")) {
+            fbSet("db/bulkGuarantors", {}).catch(()=>{});
+            setDb(prev=>({...prev, bulkGuarantors:{}}));
+            alert("✅ ערבויות נמחקו");
+          }
+        }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ מחק את כל הערבויות</button>
         <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
       </div>
 
