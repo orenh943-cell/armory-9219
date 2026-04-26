@@ -16699,9 +16699,11 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const [repPhone,setRepPhone]=React.useState("");
   const [selectedUnit,setSelectedUnit]=React.useState("הכל");
   const [repSuggestions,setRepSuggestions]=React.useState([]);
-  const [sigData,setSigData]=React.useState(()=>db.userSigs?.[auth?.username]||null);
+  const [sigData,setSigData]=React.useState(null); // תמיד מתחיל ריק — יש לחתום בכל פעם
   const [showPad,setShowPad]=React.useState(false);
   const [step,setStep]=React.useState("select"); // select, sign, done
+  // חתימה שמורה — להציג אבל לא לדלג על הלוח
+  const savedSig = db.userSigs?.[auth?.username]||null;
   const [manualMode,setManualMode]=React.useState(false);
   const [selectedIds,setSelectedIds]=React.useState({});
   const [soldierSearch,setSoldierSearch]=React.useState("");
@@ -16764,7 +16766,8 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
       soldierAssigned:soldierAssignedObj,
     };
     const ndb={...db,bulkGuarantors:newGuarantors};
-    fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(()=>{});
+    // כתוב רק את הערבות החדשה — לא כל הרשימה
+    fbSet("db/bulkGuarantors/"+guarantorKey, sanitizeForFirebase(newGuarantors[guarantorKey])).catch(()=>{});
     onSave(ndb);
     logAction("ערבות_מרוכזת", `${repSearch} ערב על ${targetSoldiers.length} חיילים`, repSearch);
   }
@@ -16969,14 +16972,24 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
             <div style={{fontWeight:700,marginBottom:4}}>נציג: {repSearch}</div>
             <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>חותם על {targetSoldiers.length} חיילים מ{selectedUnit==="הכל"?"כל הפלוגות":"פלוגה "+selectedUnit}</div>
           </div>
-          {!sigData
-            ?<div>
-              <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:12}}>חתום כאן לאישור קבלת כל האמצעים ברשימה</p>
-              <SignaturePad onSave={doSign}/>
-              <button onClick={()=>setStep("select")} style={{...S.btn(),width:"100%",marginTop:8}}>← חזור</button>
-            </div>
-            :<div style={{textAlign:"center"}}><div style={{fontSize:48}}>✅</div><div style={{color:"var(--color-success-fg)",fontWeight:700}}>נחתם!</div></div>
-          }
+          <div>
+            <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:12,textAlign:"center"}}>
+              הנציג יחתום כאן על המסך
+            </p>
+            {savedSig&&!sigData&&(
+              <div style={{marginBottom:12,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}}>
+                <div style={{fontSize:"var(--text-sm)",marginBottom:6,color:"var(--color-text-secondary)"}}>✅ יש חתימה שמורה — להשתמש בה?</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>doSign(savedSig)} style={{...S.btn("green"),flex:1}}>✅ השתמש בחתימה שמורה</button>
+                  <button onClick={()=>{}} style={{...S.btn("gray"),flex:1}}>✍️ חתום חדש</button>
+                </div>
+                <img src={savedSig} style={{height:50,marginTop:8,border:"1px solid var(--color-border-muted)",borderRadius:4,display:"block"}}/>
+              </div>
+            )}
+            {!sigData&&<SignaturePad onSave={doSign}/>}
+            {sigData&&<div style={{textAlign:"center"}}><div style={{fontSize:48}}>✅</div><div style={{color:"var(--color-success-fg)",fontWeight:700}}>נחתם!</div></div>}
+            <button onClick={()=>setStep("select")} style={{...S.btn(),width:"100%",marginTop:8}}>← חזור</button>
+          </div>
         </div>
       )}
       {step==="done"&&(
