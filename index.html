@@ -8479,8 +8479,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
       if(idx>=0) compactData[idx]=val;
       else compactData[name]=val;
     });
-    // שימוש ב-btoa לקידוד קצר וללא תווים בעייתיים
-    const encoded=btoa(JSON.stringify(compactData));
+    // קידוד בטוח לתווים בעברית
+    const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(compactData))));
     const issuerParam=auth?.username?("&issuer="+encodeURIComponent(auth.username)):"";
     const signLink=link+"?sign="+soldier.id+"&b="+encoded+issuerParam;
     const msg=`שלום ${soldier.name},\nנא לחתום על טופס ההחתמה האישי:\n${signLink}`;
@@ -17555,7 +17555,7 @@ function App(){
       const dParam=params.get("d");
       const rawParam=bParam||dParam;
       if(rawParam){try{
-        const decoded=bParam?atob(bParam):decodeURIComponent(rawParam);
+        const decoded=bParam?decodeURIComponent(escape(atob(bParam))):decodeURIComponent(rawParam);
         const compact=JSON.parse(decoded);
         Object.entries(compact).forEach(([k,v])=>{
           const idx=parseInt(k);
