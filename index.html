@@ -17079,25 +17079,36 @@ function TestCertView({auth, db, setDb}){
   const [declared, setDeclared] = React.useState(false);
   const [done, setDone] = React.useState(false);
   const [lightbox, setLightbox] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saveErr, setSaveErr] = React.useState("");
 
   const existing = getTestStatus(db, auth.soldierId);
 
   function save(){
-    if(!certImg){ alert("יש להעלות תמונת אישור בוחן"); return; }
-    if(!declared){ alert("יש לסמן את תיבת האישור"); return; }
+    if(!certImg){ setSaveErr("יש להעלות תמונת אישור בוחן"); return; }
+    if(!declared){ setSaveErr("יש לסמן את תיבת האישור"); return; }
+    setSaving(true); setSaveErr("");
     const entry = {img: certImg, date: new Date().toISOString()};
-    // ארכב את הבוחן הקודם לפני שמירת החדש
+    // ארכב בוחן קודם
     const prev = db.testCerts?.[auth.soldierId];
     if(prev && prev.img){
       const histKey = "cert_"+Date.now();
       fbSet("db/testCertHistory/"+auth.soldierId+"/"+histKey, {...prev, archivedAt: new Date().toLocaleString("he-IL")}).catch(()=>{});
     }
-    fbSet("db/testCerts/"+auth.soldierId, entry).catch(()=>{});
-    const ndb = {...db, testCerts:{...(db.testCerts||{}),[auth.soldierId]:entry}};
-    // localStorage removed — Firebase only
-    setDb(ndb);
-    setDone(true);
-    logAction("בוחן_נשק", auth.name+" העלה אישור בוחן", auth.name);
+    fbSet("db/testCerts/"+auth.soldierId, entry)
+      .then(()=>{
+        const ndb = {...db, testCerts:{...(db.testCerts||{}),[auth.soldierId]:entry}};
+        setDb(ndb);
+        setSaving(false);
+        setDone(true);
+        logAction("בוחן_נשק", (auth.name||"חייל")+" העלה אישור בוחן", auth.name||"חייל");
+      })
+      .catch(err=>{
+        setSaving(false);
+        const msg = err?.message||String(err)||"שגיאה לא ידועה";
+        setSaveErr("שגיאה בשמירה: "+msg+". נסה שוב או פנה למנהל.");
+        console.error("testcert save error:", err);
+      });
   }
 
   if(done) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-bg-canvas)",padding:20}}>
@@ -17154,10 +17165,17 @@ function TestCertView({auth, db, setDb}){
                   </label>
                 </div>
 
-                <button onClick={save} disabled={!declared}
+                {saveErr&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginBottom:8,padding:"8px",background:"var(--color-danger-subtle)",borderRadius:6}}>{saveErr}</div>}
+                {!declared&&<div style={{color:"var(--color-warning-fg)",fontSize:"var(--text-sm)",marginBottom:6,textAlign:"center"}}>
+                  ⚠️ יש לסמן את תיבת האישור למעלה לפני השמירה
+                </div>}
+                <button onClick={()=>{
+                  if(!declared){setSaveErr("יש לסמן את תיבת האישור תחילה");return;}
+                  save();
+                }}
                   style={{...S.btn("green"),width:"100%",padding:"14px 0",fontSize:16,fontWeight:800,
-                    opacity:declared?1:0.5}}>
-                  ✅ שמור אישור בוחן
+                    opacity:(declared&&!saving)?1:0.7}}>
+                  {saving?"⏳ שומר...":"✅ שמור אישור בוחן"}
                 </button>
               </div>
             : <label style={{display:"block",cursor:"pointer"}}>
