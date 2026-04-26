@@ -2472,12 +2472,12 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const amName = cleanItemName(armEntry?.name || alias);
     const cleanAlias = cleanItemName(alias);
 
-    // total: liveByName (assignments+unitItems) כמו מלאי ארמון — lockedTotals עוקף
-    // השתמש רק בשם מ-armoryMaster כדי לא לספור פעמיים
+    // total: תמיד לפי armoryMaster — לא liveCount (שמשתנה עם פעולות)
     const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
     const masterTotal = armEntry?.total||0;
+    // lockedTotals עוקף > armoryMaster > liveCount כ-fallback בלבד
     const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
-      : liveCount>0 ? liveCount : masterTotal;
+      : masterTotal>0 ? masterTotal : liveCount;
 
     // השאלות: לפי שם נרמל
     const loans = allLoans[amName]||allLoans[cleanAlias]||0;
@@ -3384,10 +3384,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     if(!signoffMode){
       fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(na)).catch(()=>{});
     }
-    // שמור unitItems ל-Firebase
-    if(ndb.unitItems && Object.keys(ndb.unitItems).length){
-      fbSet("db/unitItems", sanitizeForFirebase(ndb.unitItems)).catch(()=>{});
-    }
+    // שמור unitItems ל-Firebase — רק מה שהשתנה (לא כל הרשימה)
+    // newUids נאספים בתוך הלולאה למעלה
     onSave(ndb);
     logAction(signoffMode?"זיכוי_חתימה":"ביטול_שיוך", signoffMode?`זוכתה חתימה של ${soldier.name} (${soldier.id})`:`בוטל שיוך מ${soldier.name} (${soldier.id}): ${retSel.join(", ")}`, auth?.name);
     if(!signoffMode) setReSignNeeded({soldier, newAssigned:na});
