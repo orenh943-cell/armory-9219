@@ -2473,13 +2473,14 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const cleanAlias = cleanItemName(alias);
 
     // total: liveByName (assignments+unitItems) כמו מלאי ארמון — lockedTotals עוקף
-    const liveCount = (liveByName[amName]||0) + (amName!==cleanAlias?(liveByName[cleanAlias]||0):0);
+    // השתמש רק בשם מ-armoryMaster כדי לא לספור פעמיים
+    const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
     const masterTotal = armEntry?.total||0;
     const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
       : liveCount>0 ? liveCount : masterTotal;
 
     // השאלות: לפי שם נרמל
-    const loans = (allLoans[amName]||0) + (amName!==cleanAlias ? (allLoans[cleanAlias]||0) : 0);
+    const loans = allLoans[amName]||allLoans[cleanAlias]||0;
     const stock = total - loans;
     const ok = total>0 ? (stock>=0) : null;
     return {...item, alias, total, loans, stock, ok};
@@ -8402,6 +8403,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [sigSortDir,setSigSortDir]=useState("desc"); // desc=מוכן ביותר קודם
   const [soldierSortDir,setSoldierSortDir]=useState("none"); // none=ללא מיון, desc=מוכן קודם
   const [filterSquad,setFilterSquad]=useState("הכל");
+  const [itemSearch,setItemSearch]=useState("");
   const [selSoldier,setSelSoldier]=useState(null);
   const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
   const [dailyType,setDailyType]=useState(null);
@@ -8807,7 +8809,8 @@ ${exitLink}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חיפוש..." style={{...S.input,flex:1,minWidth:160,marginBottom:0}}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חיפוש חייל..." style={{...S.input,flex:1,minWidth:160,marginBottom:0}}/>
+              <input value={itemSearch} onChange={e=>setItemSearch(e.target.value)} placeholder="🔍 פריט (M4...)" style={{...S.input,flex:1,minWidth:120,marginBottom:0}}/>
               <select value={filterUnit} onChange={e=>setFilterUnit(e.target.value)} style={{...S.input,width:"auto",marginBottom:0}}>
                 {units.map(u=><option key={u} value={u}>{u==="הכל"?"כל הפלוגות":"פלוגה "+u}</option>)}
               </select>
@@ -9065,7 +9068,9 @@ ${exitLink}
                     {["#","מ. אישי","שם","פלוגה","נשק","חתם ב-","חתימה",""].map(h=><th key={h} style={S.th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {filtered.filter(s=>db.signatures?.[s.id]).map((s,_idx)=>{
+                    {filtered.filter(s=>db.signatures?.[s.id]).filter(s=>
+                      !itemSearch.trim()||Object.keys(db.assignments?.[s.id]||{}).some(k=>cleanItemName(k).toLowerCase().includes(itemSearch.trim().toLowerCase()))
+                    ).map((s,_idx)=>{
                       const weps=Object.entries(db.assignments?.[s.id]||{}).filter(([k])=>WEAPON_KEYS.includes(k));
                       const sig=db.signatures?.[s.id];
                       return (
