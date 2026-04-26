@@ -2013,8 +2013,16 @@ function SoldierSignView({auth,onLogout,db,setDb}){
       fbSet("db/signatures/"+auth.soldierId, sigEntry).catch(e=>console.warn("sig err:",e));
       // נקה סימון נשלח — החייל חתם
       fbSet("db/waSent/"+auth.soldierId, null).catch(()=>{});
-      // שמור עדכון remaining ל-Firebase
-      fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(e=>console.warn("guarantors err:",e));
+      // שמור עדכון remaining ל-Firebase — רק הרשומות שהשתנו (לא כל הרשימה)
+      Object.keys(newGuarantors).forEach(k=>{
+        const orig = db.bulkGuarantors?.[k];
+        const updated = newGuarantors[k];
+        if(JSON.stringify(orig?.remaining) !== JSON.stringify(updated?.remaining)){
+          fbSet("db/bulkGuarantors/"+k+"/remaining", sanitizeForFirebase(updated.remaining)||{}).catch(()=>{});
+        }
+      });
+      // keep local sync
+      const _dummy = true; // (was: fbSet("db/bulkGuarantors"...));
       // נקה sessionStorage
       try{
         sessionStorage.removeItem("link_sign");
@@ -7499,7 +7507,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     if(!window.confirm("למחוק?"))return;
     const ng={...(db.bulkGuarantors||{})};delete ng[key];
     const ndb={...db,bulkGuarantors:ng};setDb(ndb);
-    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
+    fbSet("db/bulkGuarantors/"+key, null).catch(()=>{});
   }
 
   function sendRemainingWA(rep){
@@ -7532,7 +7540,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     delete newRemaining[soldierId];
     const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:newRemaining}};
     const ndb = {...db,bulkGuarantors:ng};
-    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
+    fbSet("db/bulkGuarantors/"+repKey+"/remaining", sanitizeForFirebase(newRemaining)||{}).catch(()=>{});
     setDb(ndb);
     logAction("זיכוי_ערב", soldierName+" זוכה מערבות "+g.repName, auth?.name||"מערכת");
   }
@@ -7545,7 +7553,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     if(!window.confirm("לזכות את כל "+remaining.length+" החיילים הנותרים? הם יוסרו מהרשימה."))return;
     const ng = {...(db.bulkGuarantors||{}),[repKey]:{...g,remaining:{}}};
     const ndb = {...db,bulkGuarantors:ng};
-    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
+    fbSet("db/bulkGuarantors/"+repKey+"/remaining", {}).catch(()=>{});
     setDb(ndb);
     logAction("זיכוי_ערב_מלא", "כל החיילים זוכו מערבות "+g.repName, auth?.name||"מערכת");
   }
