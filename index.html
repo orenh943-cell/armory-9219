@@ -2000,10 +2000,18 @@ function SoldierSignView({auth,onLogout,db,setDb}){
         if(rawKey) sigAssigned[rawKey]=assigned[rawKey];
         else sigAssigned[name]=g.serial||1;
       });
+      // אחד עם חתימה חלקית קיימת
+      const prevSig = db.signatures?.[auth.soldierId];
+      const prevItems = (prevSig?.partial && prevSig?.assignedItems) ? prevSig.assignedItems : {};
+      const mergedAssigned = {...prevItems, ...sigAssigned}; // כל הפריטים — ישנים + חדשים
+      const allSoldierAssigned = db.assignments?.[auth.soldierId]||{};
+      const allItemCount = Object.keys(allSoldierAssigned).length;
+      const mergedCount = Object.keys(mergedAssigned).length;
+      const isNowComplete = mergedCount >= allItemCount; // חתם על הכל?
       const sigEntry = {sigData, signedAt, issuerName: issuerDisplay,
-        assignedItems: sigAssigned,
-        items: Object.keys(sigAssigned),
-        ...(hasLinkItems?{partial:true}:{}),
+        assignedItems: mergedAssigned,
+        items: Object.keys(mergedAssigned),
+        ...(!isNowComplete?{partial:true}:{}), // הסר partial אם הושלם
         ...(issuerSig?{issuerSig}:{}), ...(testImg?{testImg}:{})};
       const newDb={...db,
         signatures:{...db.signatures,[auth.soldierId]:sigEntry},
@@ -3495,11 +3503,20 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:4}}>סטטוס חתימה</div>
-                {sig?<Badge color="green">✅ חתום — {sig.signedAt}</Badge>:weps.length>0?<Badge color="orange">⏳ ממתין</Badge>:<Badge color="gray">אין נשק</Badge>}
+                {sig&&!sig.partial?<Badge color="green">✅ חתום — {sig.signedAt}</Badge>:sig?.partial?<Badge color="yellow">⚠️ חתימה חלקית — {sig.signedAt}</Badge>:weps.length>0?<Badge color="orange">⏳ ממתין</Badge>:<Badge color="gray">אין נשק</Badge>}
               </div>
               <div style={{display:"flex",gap:6}}>
-                {weps.length>0&&!sig&&<button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>💬 שלח לחתימה</button>}
-                {!!auth&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ חתום לידי</button>}
+                {weps.length>0&&(!sig||sig.partial)&&(()=>{
+                  const signedItems=sig?.items||[];
+                  const unsignedWeps=weps.filter(w=>!signedItems.some(k=>cleanItemName(k)===w));
+                  if(!sig||unsignedWeps.length>0) return (
+                    <button onClick={()=>onSendWA(soldier)} style={{...S.btn("wa"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>
+                      💬 {sig?.partial?"השלם חתימה":"שלח לחתימה"}
+                    </button>
+                  );
+                  return null;
+                })()}
+                {!!auth&&Object.keys(assigned).length>0&&(!sig||sig.partial)&&<button onClick={()=>setShowSignHere(true)} style={{...S.btn("blue"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>✍️ {sig?.partial?"השלם ליד":"חתום לידי"}</button>}
                 {!!auth&&Object.keys(assigned).length>0&&!sig&&<button onClick={()=>setShowPartialSign(true)} style={{...S.btn("purple"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📝 חתימה חלקית</button>}
                 {soldier.phone&&<button onClick={()=>onSendTestAndExitWA(soldier)}
                     style={{...S.btn("teal"),padding:"6px 10px",fontSize:"var(--text-sm)"}}>📲 בוחן + יציאה</button>}
@@ -8473,7 +8490,13 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
     if(!phone){alert("אין מספר טלפון לחייל זה");return;}
     const link="https://orenh943-cell.github.io/armory-9219";
     // השתמש ב-db.assignments (Firebase) שמכיל את האביזרים המעודכנים
-    const assigned=db.assignments?.[soldier.id]||soldier.assigned||{};
+    const allAssigned=db.assignments?.[soldier.id]||{};
+    // אם יש חתימה חלקית — שלח רק פריטים שטרם נחתמו
+    const existingSig=db.signatures?.[soldier.id];
+    const signedItems=new Set((existingSig?.partial&&existingSig?.items)||[]);
+    const assigned=signedItems.size>0
+      ? Object.fromEntries(Object.entries(allAssigned).filter(([k])=>!signedItems.has(k)&&!signedItems.has(cleanItemName(k))))
+      : allAssigned;
     const compactData={};
     Object.entries(assigned).forEach(([name,val])=>{
       const idx=EQ_COLS.indexOf(cleanItemName(name));
