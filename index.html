@@ -7499,6 +7499,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
     if(!window.confirm("למחוק?"))return;
     const ng={...(db.bulkGuarantors||{})};delete ng[key];
     const ndb={...db,bulkGuarantors:ng};setDb(ndb);
+    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
   }
 
   function sendRemainingWA(rep){
@@ -7703,19 +7704,14 @@ function DashboardView({soldiers, db, auth, withWeapons, signedCount, unsigned,
   // Filtered soldiers for active unit
   const filtSoldiers = activeUnit==="הכל" ? soldiers : soldiers.filter(s=>s.unit===activeUnit);
   const filtWithWep = filtSoldiers.filter(s=>Object.keys(db.assignments?.[s.id]||{}).some(k=>WEAPON_KEYS.includes(k)));
-  const filtSigned = filtWithWep.filter(s=>s.signature).length;
-  const filtUnsigned = filtWithWep.length - filtSigned;
-  const filtGuaranty = filtWithWep.filter(s=>{
+  // כל חיילים עם שיוך (לא רק נשק) — לצורך חתמו/לא חתמו
+  const filtWithAny = filtSoldiers.filter(s=>Object.keys(db.assignments?.[s.id]||{}).length>0);
+  const filtSigned = filtWithAny.filter(s=>s.signature).length;
+  const filtUnsigned = filtWithAny.length - filtSigned;
+  const filtGuaranty = filtWithAny.filter(s=>{
     const guarantors = db.bulkGuarantors||{};
     return !s.signature && Object.values(guarantors).some(g=>g.remaining&&g.remaining[s.id]);
   }).length;
-  const filtForms = (() => {
-    const forms = db.exitForms||{};
-    const ids = new Set(Object.values(forms).filter(f=>f.soldierSig&&filtSoldiers.find(s=>s.id===f.soldierId)).map(f=>f.soldierId));
-    return ids.size;
-  })();
-
-  // חישוב בוחן נשק
   const filtNeedTest = filtWithWep.filter(s=>TEST_REQUIRED_WEAPONS.some(w=>Object.keys(db.assignments?.[s.id]||{}).includes(w)));
   const filtNoTest = filtNeedTest.filter(s=>{const ts=getTestStatus(db,s.id||s.soldierId);return !ts.valid;}).length;
   const filtWithTest = filtNeedTest.length - filtNoTest;
@@ -16753,6 +16749,7 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
       soldierAssigned:soldierAssignedObj,
     };
     const ndb={...db,bulkGuarantors:newGuarantors};
+    fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(()=>{});
     onSave(ndb);
     logAction("ערבות_מרוכזת", `${repSearch} ערב על ${targetSoldiers.length} חיילים`, repSearch);
   }
@@ -16929,6 +16926,7 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
                   soldierAssigned:soldierAssignedObj,
                 };
                 const ndb={...db,bulkGuarantors:newGuarantors};
+                fbSet("db/bulkGuarantors", sanitizeForFirebase(newGuarantors)).catch(()=>{});
                 onSave(ndb);
                 // Send signing link
                 const signLink = link+"?bulksign="+guarantorKey;
@@ -17149,6 +17147,7 @@ function BulkRepSignView({auth, db, setDb}){
     const newG = {...g, sigData, pendingSign:false, signedAt: todayStr()+" "+nowStr()};
     const ng = {...(db.bulkGuarantors||{}), [guarantorKey]: newG};
     const ndb = {...db, bulkGuarantors: ng};
+    fbSet("db/bulkGuarantors", sanitizeForFirebase(ng)).catch(()=>{});
     setDb(ndb);
     setShowPad(false);
     setDone(true);
