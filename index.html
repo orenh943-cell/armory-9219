@@ -2444,9 +2444,10 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const itemsToCount = (sig2?.partial && sig2?.items)
       ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
       : asgn;
+    const seenLoan = new Set();
     Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
-      allLoans[n] = (allLoans[n]||0)+1;
+      if(!seenLoan.has(n)){ seenLoan.add(n); allLoans[n] = (allLoans[n]||0)+1; }
     });
   });
   // orphan signed
@@ -2457,9 +2458,10 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const itemsToCount = (sig2?.partial && sig2?.items)
       ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
       : asgn;
+    const seenLoan = new Set();
     Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
-      allLoans[n] = (allLoans[n]||0)+1;
+      if(!seenLoan.has(n)){ seenLoan.add(n); allLoans[n] = (allLoans[n]||0)+1; }
     });
   });
 
@@ -10881,9 +10883,9 @@ function VisutTab({db, setDb, soldiers, auth}){
       });
       allSols.forEach(s=>{
         const asgn=db.assignments?.[s.id]||{};
-        Object.keys(asgn||{}).forEach(k=>{
-          if(cleanItemName(k)===name) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
-        });
+        // ספור חייל פעם אחת בלבד לכל פריט (מונע כפילויות מ-keys כמו M4 + M4__1)
+        const hasItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
+        if(hasItem) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
       });
       const liveTotal=Object.values(liveByUnit).reduce((a,b)=>a+b,0);
       // חיילים vs פלוגה
@@ -10891,7 +10893,8 @@ function VisutTab({db, setDb, soldiers, auth}){
       UNITS.forEach(u=>{ toSoldiers[u]=0; toUnits[u]=0; });
       allSols.forEach(s=>{
         const asgn=db.assignments?.[s.id]||{};
-        Object.keys(asgn||{}).forEach(k=>{ if(cleanItemName(k)===name) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1; });
+        const hasSoldierItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
+        if(hasSoldierItem) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1;
       });
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
