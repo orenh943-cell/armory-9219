@@ -3712,8 +3712,67 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                         🗑️ כפילויות
                       </button>
                     )}
+                    {canEditThisSoldier&&<button onClick={e=>{e.stopPropagation();
+                      const rk=Object.keys(assigned).find(k=>cleanItemName(k)===name);
+                      const rks=Object.keys(assigned).filter(k=>cleanItemName(k)===name);
+                      setTransferItem({name,serial:g.serial||null,rowKey:rk,rowKeys:rks});
+                      setTransferSearch(""); setTransferSolId("");
+                    }} style={{...S.btn("blue"),padding:"2px 8px",fontSize:9}}>🔄 העבר</button>}
                   </div>
                 ))}
+                {transferItem&&(
+                  <div style={{marginTop:8,padding:"10px 12px",background:"var(--color-accent-subtle)",borderRadius:8,border:"1px solid var(--color-accent-fg)"}}>
+                    <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8}}>🔄 העבר {transferItem.name} לחייל:</div>
+                    <div style={{position:"relative",marginBottom:8}}>
+                      <input value={transferSearch} onChange={e=>{setTransferSearch(e.target.value);setTransferSolId("");}}
+                        placeholder="חפש חייל לפי שם..." style={{...S.input,marginBottom:0}}/>
+                      {transferSearch&&!transferSolId&&(()=>{
+                        const q=transferSearch.toLowerCase();
+                        const matches=getSoldiers(db).filter(s=>s.id!==soldier.id&&(s.name.toLowerCase().includes(q)||s.id.includes(q))).slice(0,6);
+                        return matches.length>0?(
+                          <div style={{position:"absolute",top:"100%",right:0,left:0,background:"var(--color-bg-default)",border:"1px solid var(--color-accent-fg)",borderRadius:6,zIndex:50,maxHeight:150,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.2)"}}>
+                            {matches.map(s=>(
+                              <div key={s.id} onClick={()=>{setTransferSolId(s.id);setTransferSearch(s.name);}}
+                                style={{padding:"7px 12px",cursor:"pointer",fontSize:"var(--text-sm)",borderBottom:"1px solid var(--color-border-muted)"}}
+                                onMouseEnter={e=>e.currentTarget.style.background="var(--color-accent-subtle)"}
+                                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                                <strong>{s.name}</strong><span style={{color:"var(--color-text-muted)",fontSize:10,marginRight:6}}>{s.id} · פלוגה {s.unit}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ):null;
+                      })()}
+                    </div>
+                    {transferSolId&&(()=>{
+                      const toSol=getSoldiers(db).find(s=>s.id===transferSolId);
+                      const crossUnit=toSol&&toSol.unit!==soldier.unit;
+                      function doTransferNow(permanent){
+                        if(!toSol) return;
+                        const newFrom={...assigned};
+                        (transferItem.rowKeys||[transferItem.rowKey]).filter(Boolean).forEach(k=>delete newFrom[k]);
+                        const toAsgn={...(db.assignments?.[transferSolId]||{})};
+                        (transferItem.rowKeys||[transferItem.rowKey]).filter(Boolean).forEach(k=>{if(assigned[k]!==undefined) toAsgn[k]=assigned[k];});
+                        const ndb={...db,assignments:{...db.assignments,[soldier.id]:newFrom,[transferSolId]:toAsgn}};
+                        fbSet("db/assignments/"+soldier.id,sanitizeForFirebase(newFrom)).catch(()=>{});
+                        fbSet("db/assignments/"+transferSolId,sanitizeForFirebase(toAsgn)).catch(()=>{});
+                        onSave(ndb);
+                        logAction("העברה",transferItem.name+" הועבר מ"+soldier.name+" ל"+toSol.name+(crossUnit?(permanent?" לצמיתות":" זמנית"):""),auth?.name||"מערכת");
+                        setTransferItem(null); setTransferSearch(""); setTransferSolId("");
+                      }
+                      return (
+                        <div>
+                          {crossUnit&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",marginBottom:8,padding:"6px 10px",background:"var(--color-warning-subtle)",borderRadius:6}}>⚠️ {soldier.unit} → {toSol.unit}</div>}
+                          <div style={{display:"flex",gap:6}}>
+                            <button onClick={()=>doTransferNow(true)} style={{...S.btn("green"),flex:1}}>✅ {crossUnit?"לצמיתות":"העבר"}</button>
+                            {crossUnit&&<button onClick={()=>doTransferNow(false)} style={{...S.btn("warning"),flex:1}}>⏳ זמנית</button>}
+                            <button onClick={()=>{setTransferItem(null);setTransferSearch("");setTransferSolId("");}} style={{...S.btn("gray"),padding:"6px 12px"}}>ביטול</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {!transferSolId&&<button onClick={()=>{setTransferItem(null);setTransferSearch("");}} style={{...S.btn("gray"),width:"100%",marginTop:4,padding:"6px 0"}}>ביטול</button>}
+                  </div>
+                )}
             </div>
             :<p style={{color:"var(--color-text-secondary)",textAlign:"center",padding:16}}>אין אמצעים</p>
           }
@@ -16973,20 +17032,21 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
             <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)"}}>חותם על {targetSoldiers.length} חיילים מ{selectedUnit==="הכל"?"כל הפלוגות":"פלוגה "+selectedUnit}</div>
           </div>
           <div>
-            <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:12,textAlign:"center"}}>
+            <p style={{color:"var(--color-text-secondary)",fontSize:"var(--text-base)",marginBottom:8,textAlign:"center"}}>
               הנציג יחתום כאן על המסך
             </p>
-            {savedSig&&!sigData&&(
-              <div style={{marginBottom:12,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}}>
-                <div style={{fontSize:"var(--text-sm)",marginBottom:6,color:"var(--color-text-secondary)"}}>✅ יש חתימה שמורה — להשתמש בה?</div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>doSign(savedSig)} style={{...S.btn("green"),flex:1}}>✅ השתמש בחתימה שמורה</button>
-                  <button onClick={()=>{}} style={{...S.btn("gray"),flex:1}}>✍️ חתום חדש</button>
-                </div>
-                <img src={savedSig} style={{height:50,marginTop:8,border:"1px solid var(--color-border-muted)",borderRadius:4,display:"block"}}/>
-              </div>
+            {!sigData&&(
+              <>
+                {savedSig&&(
+                  <div style={{marginBottom:10,display:"flex",gap:8,alignItems:"center",padding:"6px 10px",background:"var(--color-bg-canvas)",borderRadius:6,border:"1px solid var(--color-border-muted)"}}>
+                    <img src={savedSig} style={{height:36,borderRadius:4,border:"1px solid var(--color-border-muted)"}}/>
+                    <span style={{flex:1,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}}>יש חתימה שמורה</span>
+                    <button onClick={()=>doSign(savedSig)} style={{...S.btn("green"),padding:"4px 10px",fontSize:"var(--text-xs)"}}>השתמש בה</button>
+                  </div>
+                )}
+                <SignaturePad onSave={doSign}/>
+              </>
             )}
-            {!sigData&&<SignaturePad onSave={doSign}/>}
             {sigData&&<div style={{textAlign:"center"}}><div style={{fontSize:48}}>✅</div><div style={{color:"var(--color-success-fg)",fontWeight:700}}>נחתם!</div></div>}
             <button onClick={()=>setStep("select")} style={{...S.btn(),width:"100%",marginTop:8}}>← חזור</button>
           </div>
