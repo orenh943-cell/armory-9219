@@ -7462,7 +7462,7 @@ function GuarantorsTab({db,setDb,soldiers,auth}){
       const signedIds=soldierIds.filter(id=>!g.remaining?.[id]);
       const remainingDetails=remainingIds.map(id=>{
         const sol=allSols.find(s=>s.id===id);
-        const asgn=g.soldierAssigned?.[id]??db.assignments?.[id]??sol?.assigned??{};
+        const asgn=db.assignments?.[id]||g.soldierAssigned?.[id]||sol?.assigned||{};
         const weapons=Object.entries(asgn).filter(([k,v])=>k&&v!==undefined&&v!==null&&v!==0&&v!==false).map(([wepName,sr])=>{
           let serial=null;
           if(typeof sr==="string"&&sr.trim()&&sr!=="1")serial=sr.trim();
@@ -16714,8 +16714,8 @@ function BulkSignModal({db, onSave, onClose, soldiers, auth}){
   const units=["הכל",...[...new Set(soldiers.map(s=>s.unit))].sort()];
   const autoSoldiers=React.useMemo(()=>{
     let l=soldiers.filter(s=>{
-      const weps=Object.entries(db.assignments?.[s.id]||{}).filter(([k])=>WEAPON_KEYS.includes(k));
-      return weps.length>0 && !db.signatures?.[s.id];
+      const asgn=db.assignments?.[s.id]||{};
+      return Object.keys(asgn).length>0 && !db.signatures?.[s.id];
     });
     if(selectedUnit!=="הכל") l=l.filter(s=>s.unit===selectedUnit);
     return l;
