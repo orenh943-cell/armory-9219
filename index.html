@@ -14147,35 +14147,38 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
 
     Object.entries(master).forEach(([name, info])=>{
       const makat = info.makat||"";
-      // פריטים עם צ/סידורי — מ-assignments
+      // רק פריטים שלא יצאו (אין עליהם חתימה) — יושבים פיזית בארמון
       const withSerial = [];
       const seenSerials = new Set();
+      // מ-assignments של חיילים ללא חתימה
       allSols.forEach(sol=>{
+        if(db.signatures?.[sol.id]) return; // יצא — לא בארמון
         const asgn = db.assignments?.[sol.id]||{};
         Object.entries(asgn).forEach(([k,v])=>{
           if(cleanItemName(k)===name && v && v!==1 && v!==true){
             const serial = String(v);
             if(!seenSerials.has(serial)){
               seenSerials.add(serial);
-              withSerial.push({serial, soldierName:sol.name, soldierId:sol.id, source:"soldier"});
+              withSerial.push({serial, soldierName:sol.name+" (לא חתם)", soldierId:sol.id, source:"soldier"});
             }
           }
         });
       });
-      // מ-unitItems
+      // מ-unitItems (תמיד בארמון)
       Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
         if(cleanItemName(v.n||v.name||"")===name){
           const serial = String(v.s||v.serial||"");
           if(serial && !seenSerials.has(serial)){
             seenSerials.add(serial);
-            withSerial.push({serial, soldierName:null, soldierId:null, source:"unit", uid});
+            withSerial.push({serial, soldierName:"יחידה: "+(v.u||v.unit||"גדודי"), soldierId:null, source:"unit", uid});
           }
         }
       });
 
-      // פריטים ללא צ — ספור כמות
+      // פריטים ללא צ — רק לא חתומים + unitItems
       let noSerialCount = 0;
       allSols.forEach(sol=>{
+        if(db.signatures?.[sol.id]) return; // יצא
         const asgn = db.assignments?.[sol.id]||{};
         Object.entries(asgn).forEach(([k,v])=>{
           if(cleanItemName(k)===name && (!v||v===1||v===true)) noSerialCount++;
@@ -14283,8 +14286,10 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
                 return item.withSerial.map((r,ri)=>{
                   const key = item.name+"_"+r.serial;
                   const val = counts[key];
+                  const isSearchMatch = search.trim() && r.serial.includes(search.trim());
                   return (
-                    <tr key={key} style={{background:val==="❌"?"var(--color-danger-subtle)":val==="✅"?"var(--color-success-subtle)":rowBg}}>
+                    <tr key={key} style={{background:val==="❌"?"var(--color-danger-subtle)":val==="✅"?"var(--color-success-subtle)":isSearchMatch?"var(--color-accent-subtle)":rowBg,
+                      outline:isSearchMatch?"2px solid var(--color-accent-fg)":"none"}}>
                       {ri===0&&<td style={{padding:"5px 8px",fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)",verticalAlign:"top"}}
                         rowSpan={item.withSerial.length}>{item.makat||"—"}</td>}
                       {ri===0&&<td style={{padding:"5px 8px",fontWeight:isWep?700:500,verticalAlign:"top"}}
