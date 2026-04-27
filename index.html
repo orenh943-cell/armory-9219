@@ -2444,10 +2444,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const itemsToCount = (sig2?.partial && sig2?.items)
       ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
       : asgn;
-    const seenLoan = new Set();
     Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
-      if(!seenLoan.has(n)){ seenLoan.add(n); allLoans[n] = (allLoans[n]||0)+1; }
+      allLoans[n] = (allLoans[n]||0)+1;
     });
   });
   // orphan signed
@@ -2458,10 +2457,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     const itemsToCount = (sig2?.partial && sig2?.items)
       ? Object.fromEntries(sig2.items.map(k=>[k, asgn[k]||1]))
       : asgn;
-    const seenLoan = new Set();
     Object.keys(itemsToCount||{}).forEach(raw=>{
       const n = cleanItemName(raw);
-      if(!seenLoan.has(n)){ seenLoan.add(n); allLoans[n] = (allLoans[n]||0)+1; }
+      allLoans[n] = (allLoans[n]||0)+1;
     });
   });
 
@@ -3868,21 +3866,19 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 );
               })()}
               {item.name&&item.fromUnit&&(()=>{
+                const hasSerial=getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name));
+                if(!hasSerial) return null;
                 const avSerials=getAvailableSerials(db,soldiers,item.name,item.fromUnit);
                 return (
-                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {avSerials.length>0&&(
-                      <select value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
-                        style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",flex:2,minWidth:120,
-                          borderColor:!item.serial?"var(--color-warning-fg)":"var(--color-border-default)"}}>
-                        <option value="">— בחר צ/סידורי —</option>
-                        {avSerials.map(({serial})=>(<option key={serial} value={serial}>{serial}</option>))}
-                      </select>
-                    )}
-                    <input value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
-                      placeholder={avSerials.length>0?"או הכנס ידנית":"צ / סידורי"}
-                      style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",flex:1,minWidth:100}}/>
-                  </div>
+                  <select value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
+                    style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",
+                      borderColor:!item.serial?"var(--color-warning-fg)":"var(--color-border-default)"}}>
+                    <option value="">— בחר צ/סידורי —</option>
+                    {avSerials.map(({serial})=>(
+                      <option key={serial} value={serial}>{serial}</option>
+                    ))}
+                    {avSerials.length===0&&<option disabled value="">אין צ זמינים בפלוגה זו</option>}
+                  </select>
                 );
               })()}
               {item.name&&item.fromUnit&&!getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name))&&(()=>{
@@ -7370,7 +7366,8 @@ function ExternalSignTab({db, setDb, auth}){
 const RESET_PASSWORD = "7680832";
 
 function ResetTab({db, setDb, auth}){
-  const [phase, setPhase] = React.useState("menu"); // menu | confirm | backup | restore
+  const [phase, setPhase] = React.useState("menu");
+  const [showDupModal, setShowDupModal] = React.useState(null); // menu | confirm | backup | restore
   const [pass, setPass] = React.useState("");
   const [passErr, setPassErr] = React.useState("");
   const [backupData, setBackupData] = React.useState(null);
@@ -7439,7 +7436,7 @@ function ResetTab({db, setDb, auth}){
     }
   }
 
-  return <div style={{maxWidth:600, margin:"0 auto", padding:24}}>
+  return <React.Fragment><div style={{maxWidth:600, margin:"0 auto", padding:24}}>
     <h2 style={{fontSize:"var(--text-xl)",fontWeight:800,marginBottom:6,color:"var(--color-danger-fg)"}}>⚠️ איפוס מלאי</h2>
     <div style={{color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",marginBottom:20}}>
       כלי ניהול — גישה למנהל מערכת בלבד
@@ -7476,141 +7473,6 @@ function ResetTab({db, setDb, auth}){
           מאפס: שיוכי נשק, חתימות (→ נשמרות בהיסטוריה), ערבויות, טפסי יציאה, לוג<br/>
           <b>שומר:</b> מלאי, ארונות, רשימת חיילים, בחנים, הרשאות, היסטוריית חתימות
         </div>
-        <button onClick={()=>{
-          if(window.confirm("למחוק את כל הערבויות?")) {
-            fbSet("db/bulkGuarantors", {}).catch(()=>{});
-            setDb(prev=>({...prev, bulkGuarantors:{}}));
-            alert("✅ ערבויות נמחקו");
-          }
-        }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ מחק את כל הערבויות</button>
-        <button onClick={async ()=>{
-          if(!window.confirm("לנקות כפילויות בשיוכים? (M4 + M4__1 → רק M4)")) return;
-          const allSols = getSoldiers(db);
-          let fixedCount = 0;
-          for(const s of allSols){
-            const asgn = db.assignments?.[s.id];
-            if(!asgn) continue;
-            const cleaned = {};
-            const seenNames = new Set();
-            Object.entries(asgn).forEach(([k,v])=>{
-              const name = cleanItemName(k);
-              if(!seenNames.has(name)){
-                seenNames.add(name);
-                cleaned[name] = v; // שמור תמיד עם שם נקי
-              }
-            });
-            const origKeys = Object.keys(asgn).join(",");
-            const newKeys = Object.keys(cleaned).join(",");
-            if(origKeys !== newKeys){
-              fixedCount++;
-              await fbSet("db/assignments/"+s.id, sanitizeForFirebase(cleaned)).catch(()=>{});
-              setDb(prev=>({...prev, assignments:{...prev.assignments,[s.id]:cleaned}}));
-            }
-          }
-          alert(fixedCount>0 ? "✅ תוקנו "+fixedCount+" חיילים עם כפילויות" : "✅ לא נמצאו כפילויות");
-        }} style={{...S.btn("teal"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות בשיוכים</button>
-        <button onClick={()=>{
-          const serial = window.prompt("הכנס מספר סידורי לחיפוש:");
-          if(!serial||!serial.trim()) return;
-          const q = serial.trim();
-          const results = [];
-          
-          // חפש ב-assignments
-          const allSols = getSoldiers(db);
-          allSols.forEach(sol=>{
-            const asgn = db.assignments?.[sol.id]||{};
-            Object.entries(asgn).forEach(([k,v])=>{
-              if(String(v)===q){
-                results.push("👤 חייל: "+sol.name+" ("+sol.id+") | פריט: "+cleanItemName(k)+" | פלוגה: "+sol.unit);
-              }
-            });
-          });
-          
-          // חפש ב-unitItems
-          Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
-            const serial2 = v.s||v.serial;
-            if(String(serial2||"")===q){
-              results.push("🏢 unitItem: "+(v.n||v.name||"?")+" | יחידה: "+(v.u||v.unit||"?")+" | key: "+uid);
-            }
-          });
-          
-          if(!results.length){
-            alert("לא נמצא סידורי "+q);
-          } else {
-            const msg = "נמצא סידורי "+q+" ב-"+results.length+" מקומות:\n\n"+results.join("\n");
-            if(window.confirm(msg+"\n\n--- האם למחוק כפילויות? (ישאיר רק את הראשון) ---")){
-              // מחק כפילויות - השאר רק הראשון
-              let kept = false;
-              allSols.forEach(sol=>{
-                const asgn = {...(db.assignments?.[sol.id]||{})};
-                let changed = false;
-                Object.entries(asgn).forEach(([k,v])=>{
-                  if(String(v)===q){
-                    if(!kept){ kept=true; } // שמור ראשון
-                    else { delete asgn[k]; changed=true; } // מחק שאר
-                  }
-                });
-                if(changed){
-                  fbSet("db/assignments/"+sol.id, sanitizeForFirebase(asgn)).catch(()=>{});
-                  setDb(prev=>({...prev,assignments:{...prev.assignments,[sol.id]:asgn}}));
-                }
-              });
-              // מחק מ-unitItems
-              Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
-                if(String(v.s||v.serial||"")===q){
-                  if(!kept){ kept=true; }
-                  else { fbSet("db/unitItems/"+uid,null).catch(()=>{}); }
-                }
-              });
-              alert("✅ כפילויות נמחקו — נשאר רק מקום אחד לסידורי "+q);
-            }
-          }
-        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔎 חיפוש וניקוי סידורי כפול</button>
-        <button onClick={()=>{
-          // כלי אבחון — בדוק כל הפריטים
-          const allSols = getSoldiers(db);
-          const master = db.armoryMaster||{};
-          const results = [];
-          
-          Object.entries(master).forEach(([name, info])=>{
-            const total = info.total||0;
-            if(total===0) return;
-            
-            // ספור assignments - כל חייל פעם אחת
-            let soldierCount = 0;
-            allSols.forEach(s=>{
-              const asgn = db.assignments?.[s.id]||{};
-              const keys = Object.keys(asgn).filter(k=>cleanItemName(k)===name);
-              if(keys.length>0) soldierCount++;
-              if(keys.length>1) results.push({type:"⚠️ כפילות", name, soldier:s.name, keys:keys.join(", ")});
-            });
-            
-            // ספור unitItems
-            const unitCount = Object.values(db.unitItems||{}).filter(v=>{
-              const t=v.t||v.assignedType||"unit";
-              return cleanItemName(v.n||v.name||"")===name && t==="unit";
-            }).length;
-            
-            const liveTotal = soldierCount + unitCount;
-            if(liveTotal > total){
-              results.push({type:"❌ עודף", name, total, liveTotal, diff:liveTotal-total});
-            } else if(liveTotal < total && total-liveTotal > 5){
-              results.push({type:"📦 פנוי", name, total, liveTotal, diff:total-liveTotal});
-            }
-          });
-          
-          if(results.length===0){
-            alert("✅ הכל מאוזן — לא נמצאו שגיאות");
-            return;
-          }
-          
-          const msg = results.map(r=>{
-            if(r.type==="⚠️ כפילות") return r.type+" "+r.name+" אצל "+r.soldier+": "+r.keys;
-            return r.type+" "+r.name+": total="+r.total+" live="+r.liveTotal+" ("+r.diff+(r.diff>0?" יותר מדי":" פחות מדי")+")";
-          }).join("\n");
-          
-          alert("תוצאות אבחון:\n\n"+msg);
-        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔍 אבחון מלאי — בדוק שגיאות</button>
         <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
       </div>
 
@@ -7681,7 +7543,42 @@ function ResetTab({db, setDb, auth}){
         <button onClick={()=>{setPhase("menu");setPass("");setPassErr("");setRestoreInput("");setRestoreErr("");}} style={{...S.btn("gray"),flex:1}}>ביטול</button>
       </div>
     </div>}
-  </div>;
+  </div>
+    {showDupModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,overflowY:"auto"}}
+      onClick={e=>e.target===e.currentTarget&&setShowDupModal(null)}>
+      <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",borderRadius:12,width:"100%",maxWidth:680,padding:20,marginTop:40}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <h3 style={{margin:0,fontSize:16,fontWeight:800}}>🔍 כפילויות — {showDupModal.length} סידוריים</h3>
+          <button onClick={()=>setShowDupModal(null)} style={{...S.btn("gray"),padding:"4px 12px"}}>✕</button>
+        </div>
+        <div style={{fontSize:11,color:"var(--color-text-secondary)",marginBottom:12}}>לחץ 🗑️ על השורה שרוצה למחוק — תיעלם מהרשימה</div>
+        {showDupModal.map(([serial,list])=>(
+          <div key={serial} style={{marginBottom:8,padding:10,background:"var(--color-danger-subtle)",borderRadius:8,border:"1px solid var(--color-danger-fg)"}}>
+            <div style={{fontWeight:700,fontSize:12,marginBottom:6,fontFamily:"monospace",color:"var(--color-danger-fg)"}}>🔁 {list[0]?.name} | צ: {serial}</div>
+            {list.map((entry,ei)=>(
+              <div key={ei} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",marginBottom:2,background:"var(--color-bg-default)",borderRadius:4,border:"1px solid var(--color-border-muted)"}}>
+                <span style={{fontSize:12}}>{entry.type==="soldier"?"👤":"🏢"} <strong>{entry.display}</strong></span>
+                <button onClick={()=>{
+                  if(!window.confirm("למחוק "+serial+" מ-"+entry.display+"?")) return;
+                  if(entry.type==="soldier"){
+                    const asgn={...(db.assignments?.[entry.solId]||{})};
+                    delete asgn[entry.key];
+                    fbSet("db/assignments/"+entry.solId,sanitizeForFirebase(asgn)).catch(()=>{});
+                    setDb(prev=>({...prev,assignments:{...prev.assignments,[entry.solId]:asgn}}));
+                  } else {
+                    fbSet("db/unitItems/"+entry.uid,null).catch(()=>{});
+                    setDb(prev=>{const ui={...prev.unitItems};delete ui[entry.uid];return {...prev,unitItems:ui};});
+                  }
+                  setShowDupModal(prev=>prev.map(([s,l])=>[s,s===serial?l.filter((_,i2)=>i2!==ei):l]).filter(([,l])=>l.length>1));
+                }} style={{...S.btn("danger"),padding:"2px 8px",fontSize:11}}>🗑️ מחק</button>
+              </div>
+            ))}
+          </div>
+        ))}
+        {showDupModal.length===0&&<div style={{textAlign:"center",color:"var(--color-success-fg)",padding:16}}>✅ הכל נקי!</div>}
+      </div>
+    </div>}
+  </React.Fragment>;
 }
 
 // =================== GUARANTORS TAB ===================
@@ -11013,9 +10910,9 @@ function VisutTab({db, setDb, soldiers, auth}){
       });
       allSols.forEach(s=>{
         const asgn=db.assignments?.[s.id]||{};
-        // ספור חייל פעם אחת בלבד לכל פריט (מונע כפילויות מ-keys כמו M4 + M4__1)
-        const hasItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(hasItem) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
+        Object.keys(asgn||{}).forEach(k=>{
+          if(cleanItemName(k)===name) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
+        });
       });
       const liveTotal=Object.values(liveByUnit).reduce((a,b)=>a+b,0);
       // חיילים vs פלוגה
@@ -11023,8 +10920,7 @@ function VisutTab({db, setDb, soldiers, auth}){
       UNITS.forEach(u=>{ toSoldiers[u]=0; toUnits[u]=0; });
       allSols.forEach(s=>{
         const asgn=db.assignments?.[s.id]||{};
-        const hasSoldierItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(hasSoldierItem) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1;
+        Object.keys(asgn||{}).forEach(k=>{ if(cleanItemName(k)===name) toSoldiers[s.unit]=(toSoldiers[s.unit]||0)+1; });
       });
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
@@ -12551,21 +12447,21 @@ function MyStockTab({db, setDb, soldiers, auth}){
       const soldiersByUnit = {}; // unit -> count of items (not soldiers)
       allSols.forEach(s=>{
         const asgn = db.assignments?.[s.id]||{};
-        // ספור חייל פעם אחת בלבד (לא לפי מספר מפתחות)
-        const hasItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(hasItem){
-          soldierCount += 1;
-          soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+1;
+        // ספור כמה יחידות של הפריט הזה יש לחייל (בד"כ 1, לפעמים 2+)
+        const itemCount = Object.keys(asgn||{}).filter(k=>cleanItemName(k)===name).length;
+        if(itemCount>0){
+          soldierCount += itemCount;
+          soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+itemCount;
         }
       });
       // גם assignments של חיילים שלא ב-allSols
       Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
         if(allSols.find(s=>s.id===solId)) return; // כבר נספר
-        const hasItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
-        if(hasItem){
-          soldierCount += 1;
+        const itemCount = Object.keys(asgn||{}).filter(k=>cleanItemName(k)===name).length;
+        if(itemCount>0){
+          soldierCount += itemCount;
           const unit = db.customSoldiers?.[solId]?.unit||db.soldiers?.[solId]?.unit||"א";
-          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+1;
+          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+itemCount;
         }
       });
 
@@ -12760,7 +12656,6 @@ function MyStockTab({db, setDb, soldiers, auth}){
         <div style={{display:"flex",gap:8}}>
 
 
-          <button onClick={()=>exportFullInventoryExcel(liveData, db, allSols, filterUnit)} style={{...S.btn("teal"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 Excel מלא</button>
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
           <button onClick={exportCSV} style={{...S.btn("success"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📥 Excel</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
@@ -15661,133 +15556,6 @@ async function exportSignedSoldiersExcel(soldiers, db){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href=url; a.download="חיילים_חתומים_"+TODAY.replace(/\//g,"-")+".xlsx";
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-
-// ════════════════════════════════════════════════════════
-// ייצוא מלאי מלא עם סידוריים לאקסל
-// ════════════════════════════════════════════════════════
-async function exportFullInventoryExcel(liveData, db, allSols, filterUnit){
-  if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה, נסה שוב"); return; }
-  const TODAY = new Date().toLocaleDateString("he-IL");
-  const unitLabel = filterUnit==="הכל"?"כל הפלוגות":"פלוגה "+filterUnit;
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "ארמון 9219"; wb.created = new Date();
-
-  const C = {
-    NAVY:{argb:"FF1A3A6B"}, WHITE:{argb:"FFFFFFFF"},
-    GRAY:{argb:"FFE8EEF7"}, ALT:{argb:"FFF4F7FB"},
-    WEAPON:{argb:"FFFFF8F0"}, GREEN:{argb:"FFD6F5E3"},
-  };
-  const thin=(a)=>({style:"thin",color:{argb:a}});
-  const border=(a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
-  const fill=(c)=>({type:"pattern",pattern:"solid",fgColor:c});
-  const AL_C={horizontal:"center",vertical:"middle",readingOrder:2};
-  const AL_R={horizontal:"right",vertical:"middle",readingOrder:2};
-
-  // ===== גיליון 1: סיכום מלאי =====
-  const ws1 = wb.addWorksheet("סיכום מלאי", {views:[{rightToLeft:true}]});
-  ws1.mergeCells("A1:G1");
-  const t1=ws1.getCell("A1");
-  t1.value="מלאי ארמון 9219 | "+unitLabel+" | "+TODAY;
-  t1.font={bold:true,size:16,color:C.WHITE,name:"Arial"};
-  t1.fill=fill(C.NAVY); t1.alignment=AL_C;
-  ws1.getRow(1).height=36;
-
-  const HDRS1=["#","אמצעי","מקט","סהכ","👤 חיילים","🏢 פלוגה","🏛️ ארמון","פנוי"];
-  const WIDS1=[5,30,16,10,12,12,12,10];
-  const hRow=ws1.getRow(2); hRow.height=22;
-  HDRS1.forEach((h,i)=>{
-    const cell=hRow.getCell(i+1);
-    cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
-    cell.fill=fill(C.NAVY); cell.alignment=AL_C; cell.border=border("FFC5CEE0");
-    ws1.getColumn(i+1).width=WIDS1[i];
-  });
-
-  liveData.forEach((item,idx)=>{
-    const row=ws1.getRow(idx+3); row.height=20;
-    const isWep=WEAPON_KEYS.includes(item.name);
-    const bg=isWep?C.WEAPON:(idx%2===1?C.ALT:{argb:"FFFFFFFF"});
-    const free=Math.max(0,item.total-item.liveTotal);
-    [idx+1,item.name,item.makat||"—",item.total,item.toSoldiers,item.toUnits,item.gadudi,free].forEach((v,i)=>{
-      const cell=row.getCell(i+1);
-      cell.value=v; cell.font={size:10,name:"Arial",bold:isWep&&i===1};
-      cell.fill=fill(i===0?C.GRAY:bg); cell.alignment=i===0?AL_C:AL_R;
-      cell.border=border("FFC5CEE0");
-      if(i===7&&free===0) cell.font={...cell.font,color:{argb:"FF999999"}};
-    });
-  });
-  ws1.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
-
-  // ===== גיליון 2: פירוט סידוריים לחיילים =====
-  const ws2 = wb.addWorksheet("סידוריים לחיילים", {views:[{rightToLeft:true}]});
-  ws2.mergeCells("A1:F1");
-  const t2=ws2.getCell("A1");
-  t2.value="פירוט סידוריים — "+unitLabel+" | "+TODAY;
-  t2.font={bold:true,size:15,color:C.WHITE,name:"Arial"};
-  t2.fill=fill(C.NAVY); t2.alignment=AL_C; ws2.getRow(1).height=32;
-
-  const HDRS2=["#","אמצעי","מקט","מספר סידורי","שם חייל","מ.א","פלוגה"];
-  const WIDS2=[5,28,16,20,22,12,12];
-  const hRow2=ws2.getRow(2); hRow2.height=22;
-  HDRS2.forEach((h,i)=>{
-    const cell=hRow2.getCell(i+1);
-    cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
-    cell.fill=fill(C.NAVY); cell.alignment=AL_C; cell.border=border("FFC5CEE0");
-    ws2.getColumn(i+1).width=WIDS2[i];
-  });
-
-  let rowIdx=3;
-  // unitItems עם סידורי
-  Object.values(db.unitItems||{}).forEach(v=>{
-    const serial=v.s||v.serial;
-    const unit=v.u||v.unit||"";
-    const name=cleanItemName(v.n||v.name||"");
-    if(!serial||!name) return;
-    if(filterUnit!=="הכל"&&unit!==filterUnit) return;
-    const master=db.armoryMaster?.[name]||{};
-    const makat=master.makat||getMakat(name)||"";
-    const row=ws2.getRow(rowIdx++); row.height=20;
-    const alt=rowIdx%2===0;
-    [rowIdx-3,name,makat,String(serial),"— (פנוי ביחידה)","",unit].forEach((val,i)=>{
-      const cell=row.getCell(i+1);
-      cell.value=val; cell.font={size:10,name:"Arial"};
-      cell.fill=fill(i===0?C.GRAY:alt?C.ALT:{argb:"FFFFFFFF"});
-      cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
-    });
-  });
-
-  // assignments עם סידורי
-  const solsToCheck = filterUnit==="הכל" ? allSols : allSols.filter(s=>s.unit===filterUnit);
-  solsToCheck.forEach(sol=>{
-    const asgn=db.assignments?.[sol.id]||{};
-    const seen=new Set();
-    Object.entries(asgn).forEach(([k,v])=>{
-      const name=cleanItemName(k);
-      if(seen.has(name)) return; seen.add(name);
-      const serial=(v&&v!==1&&v!==true)?String(v):null;
-      if(!serial) return;
-      const master=db.armoryMaster?.[name]||{};
-      const makat=master.makat||getMakat(name)||"";
-      const row=ws2.getRow(rowIdx++); row.height=20;
-      const alt=rowIdx%2===0;
-      [rowIdx-3,name,makat,serial,sol.name,sol.id,sol.unit].forEach((val,i)=>{
-        const cell=row.getCell(i+1);
-        cell.value=val; cell.font={size:10,name:"Arial"};
-        cell.fill=fill(i===0?C.GRAY:alt?C.ALT:{argb:"FFFFFFFF"});
-        cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
-      });
-    });
-  });
-  ws2.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
-
-  const buf=await wb.xlsx.writeBuffer();
-  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url; a.download="מלאי_מלא_"+unitLabel+"_"+TODAY.replace(/\//g,"-")+".xlsx";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
