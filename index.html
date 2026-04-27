@@ -7473,6 +7473,59 @@ function ResetTab({db, setDb, auth}){
           מאפס: שיוכי נשק, חתימות (→ נשמרות בהיסטוריה), ערבויות, טפסי יציאה, לוג<br/>
           <b>שומר:</b> מלאי, ארונות, רשימת חיילים, בחנים, הרשאות, היסטוריית חתימות
         </div>
+        <button onClick={()=>{
+          if(window.confirm("למחוק את כל הערבויות?")) {
+            fbSet("db/bulkGuarantors", {}).catch(()=>{});
+            setDb(prev=>({...prev, bulkGuarantors:{}}));
+            alert("✅ ערבויות נמחקו");
+          }
+        }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ מחק את כל הערבויות</button>
+
+        <button onClick={()=>{
+          const allSols2 = getSoldiers(db);
+          const serialMap = {};
+          allSols2.forEach(sol=>{
+            const asgn = db.assignments?.[sol.id]||{};
+            Object.entries(asgn).forEach(([k,v])=>{
+              if(!v||v===1||v===true) return;
+              const serial = String(v);
+              if(!serialMap[serial]) serialMap[serial]=[];
+              serialMap[serial].push({type:"soldier",name:cleanItemName(k),display:sol.name+" ("+sol.unit+")",solId:sol.id,key:k});
+            });
+          });
+          Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+            const serial = String(v.s||v.serial||"");
+            if(!serial) return;
+            if(!serialMap[serial]) serialMap[serial]=[];
+            serialMap[serial].push({type:"unit",name:cleanItemName(v.n||v.name||""),display:"יחידה: "+(v.u||v.unit||"גדודי"),uid});
+          });
+          const dups = Object.entries(serialMap).filter(([,list])=>list.length>1);
+          if(!dups.length){alert("✅ לא נמצאו כפילויות סידוריים!");return;}
+          setShowDupModal(dups);
+        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔍 טבלת כפילויות סידוריים</button>
+
+        <button onClick={async ()=>{
+          if(!window.confirm("לנקות כפילויות בשיוכים? (M4 + M4__1 → רק M4)")) return;
+          const allSols = getSoldiers(db);
+          let fixedCount = 0;
+          for(const s of allSols){
+            const asgn = db.assignments?.[s.id];
+            if(!asgn) continue;
+            const cleaned = {};
+            const seenNames = new Set();
+            Object.entries(asgn).forEach(([k,v])=>{
+              const name = cleanItemName(k);
+              if(!seenNames.has(name)){ seenNames.add(name); cleaned[name] = v; }
+            });
+            if(Object.keys(asgn).join(",") !== Object.keys(cleaned).join(",")){
+              fixedCount++;
+              await fbSet("db/assignments/"+s.id, sanitizeForFirebase(cleaned)).catch(()=>{});
+              setDb(prev=>({...prev, assignments:{...prev.assignments,[s.id]:cleaned}}));
+            }
+          }
+          alert(fixedCount>0 ? "✅ תוקנו "+fixedCount+" חיילים" : "✅ לא נמצאו כפילויות");
+        }} style={{...S.btn("teal"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות בשיוכים</button>
+
         <button onClick={()=>setPhase("confirm")} style={{...S.btn("red"),width:"100%"}}>⚠️ התחל איפוס</button>
       </div>
 
@@ -9173,9 +9226,27 @@ ${exitLink}
         {tab==="guarantors"&&perms.canViewSignatures!==false&&(
           <GuarantorsTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
-        {tab==="reset"&&auth.role==="admin"&&(
-          <ResetTab db={db} setDb={setDb} auth={auth}/>
-        )}
+        {tab==="reset"&&auth.role==="admin"&&(()=>{
+          const [resetPass,setResetPass]=React.useState("");
+          const [resetUnlocked,setResetUnlocked]=React.useState(false);
+          if(!resetUnlocked) return (
+            <div style={{maxWidth:360,margin:"60px auto",padding:24,textAlign:"center"}}>
+              <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+              <h3 style={{marginBottom:16}}>טאב איפוס — נדרשת סיסמה</h3>
+              <input type="password" value={resetPass} onChange={e=>setResetPass(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&resetPass===RESET_PASSWORD) setResetUnlocked(true);}}
+                placeholder="הכנס סיסמה..." style={{...S.input,textAlign:"center",fontSize:18,letterSpacing:4}}
+                autoFocus/>
+              <button onClick={()=>{
+                if(resetPass===RESET_PASSWORD) setResetUnlocked(true);
+                else alert("סיסמה שגויה");
+              }} style={{...S.btn("blue"),width:"100%",marginTop:12,padding:"10px 0",fontSize:15}}>
+                🔓 כניסה
+              </button>
+            </div>
+          );
+          return <ResetTab db={db} setDb={setDb} auth={auth}/>;
+        })()}
         {tab==="external"&&auth.role==="admin"&&(
           <ExternalSignTab db={db} setDb={setDb} auth={auth}/>
         )}
