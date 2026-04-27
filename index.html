@@ -7372,7 +7372,8 @@ const RESET_PASSWORD = "7680832";
 
 function ResetTab({db, setDb, auth}){
   const [phase, setPhase] = React.useState("menu");
-  const [showDupModal, setShowDupModal] = React.useState(null); // menu | confirm | backup | restore
+  const [showDupModal, setShowDupModal] = React.useState(null);
+  const [showInvEdit, setShowInvEdit] = React.useState(false); // menu | confirm | backup | restore
   const [pass, setPass] = React.useState("");
   const [passErr, setPassErr] = React.useState("");
   const [backupData, setBackupData] = React.useState(null);
@@ -7508,6 +7509,9 @@ function ResetTab({db, setDb, auth}){
           if(!dups.length){alert("✅ לא נמצאו כפילויות סידוריים!");return;}
           setShowDupModal(dups);
         }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔍 טבלת כפילויות סידוריים</button>
+
+        <button onClick={()=>setShowInvEdit(true)}
+          style={{...S.btn("blue"),width:"100%",marginBottom:8}}>📋 עריכת מלאי — טבלה מלאה</button>
 
         <button onClick={async ()=>{
           if(!window.confirm("לסנכרן את ה-total של כל הפריטים ב-armoryMaster עם ה-live בפועל?\nפריטים עם live=0 לא ישתנו.")) return;
@@ -7691,6 +7695,91 @@ function ResetTab({db, setDb, auth}){
       </div>
     </div>}
   </div>
+    {showInvEdit&&(()=>{
+      // בנה רשימת פריטים מלאה עם live
+      const allSols2 = getSoldiers(db);
+      const master = db.armoryMaster||{};
+      const invRows = Object.entries(master).map(([name,info])=>{
+        let soldierCount=0;
+        allSols2.forEach(s=>{
+          const asgn=db.assignments?.[s.id]||{};
+          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+        });
+        Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
+          if(allSols2.find(s=>s.id===solId)) return;
+          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+        });
+        const unitCount=Object.values(db.unitItems||{}).filter(v=>
+          cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
+        ).length;
+        const live=soldierCount+unitCount;
+        return {name, makat:info.makat||"", total:info.total||0, live, loaned:soldierCount, free:unitCount};
+      }).sort((a,b)=>a.name.localeCompare(b.name,"he"));
+
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:2000,display:"flex",flexDirection:"column",alignItems:"center",padding:16,overflowY:"auto"}}
+          onClick={e=>e.target===e.currentTarget&&setShowInvEdit(false)}>
+          <div style={{background:"var(--color-bg-default)",borderRadius:12,width:"100%",maxWidth:900,padding:20,marginTop:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <h3 style={{margin:0,fontSize:17,fontWeight:800}}>📋 עריכת מלאי — {invRows.length} פריטים</h3>
+              <button onClick={()=>setShowInvEdit(false)} style={{...S.btn("gray"),padding:"4px 12px"}}>✕ סגור</button>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:"var(--color-bg-canvas)",position:"sticky",top:0}}>
+                    {["שם פריט","מקט","סהכ","מושאל","פנוי","הוסף יחידה"].map(h=>(
+                      <th key={h} style={{padding:"8px 6px",textAlign:"right",fontWeight:700,borderBottom:"2px solid var(--color-border-default)",whiteSpace:"nowrap"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {invRows.map((row,idx)=>{
+                    const diff=row.live-row.total;
+                    const bg=idx%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)";
+                    return (
+                      <tr key={row.name} style={{background:bg}}>
+                        <td style={{padding:"6px 6px",fontWeight:600}}>{row.name}</td>
+                        <td style={{padding:"6px 6px",fontFamily:"monospace",fontSize:11,color:"var(--color-text-muted)"}}>{row.makat||"—"}</td>
+                        <td style={{padding:"6px 6px",textAlign:"center",fontWeight:700,color:diff<0?"var(--color-danger-fg)":diff>0?"var(--color-success-fg)":"inherit"}}>
+                          <input type="number" min="0" defaultValue={row.total}
+                            onBlur={e=>{
+                              const val=parseInt(e.target.value)||0;
+                              if(val===row.total) return;
+                              fbSet("db/armoryMaster/"+row.name+"/total",val).catch(()=>{});
+                              setDb(prev=>({...prev,armoryMaster:{...prev.armoryMaster,[row.name]:{...(prev.armoryMaster?.[row.name]||{}),total:val}}}));
+                            }}
+                            style={{width:55,textAlign:"center",border:"1px solid var(--color-border-default)",borderRadius:4,padding:"2px 4px",background:"var(--color-bg-default)"}}/>
+                        </td>
+                        <td style={{padding:"6px 6px",textAlign:"center",color:"var(--color-accent-fg)",fontWeight:600}}>{row.loaned}</td>
+                        <td style={{padding:"6px 6px",textAlign:"center",color:row.free>0?"var(--color-success-fg)":"var(--color-text-muted)"}}>{row.free}</td>
+                        <td style={{padding:"6px 4px"}}>
+                          <div style={{display:"flex",gap:3}}>
+                            <input placeholder="צ/סידורי (אופציונלי)" id={"serial_"+idx}
+                              style={{width:110,border:"1px solid var(--color-border-muted)",borderRadius:4,padding:"2px 4px",fontSize:11,background:"var(--color-bg-default)"}}/>
+                            <input placeholder="פלוגה" id={"unit_"+idx} defaultValue="גדודי"
+                              style={{width:60,border:"1px solid var(--color-border-muted)",borderRadius:4,padding:"2px 4px",fontSize:11,background:"var(--color-bg-default)"}}/>
+                            <button onClick={()=>{
+                              const serial=document.getElementById("serial_"+idx)?.value?.trim()||null;
+                              const unit=document.getElementById("unit_"+idx)?.value?.trim()||"גדודי";
+                              const uid="inv_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+                              const newItem={n:row.name,s:serial,u:unit,t:"unit",addedAt:new Date().toLocaleDateString("he-IL")};
+                              fbSet("db/unitItems/"+uid,sanitizeForFirebase(newItem)).catch(()=>{});
+                              setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:newItem}}));
+                              if(document.getElementById("serial_"+idx)) document.getElementById("serial_"+idx).value="";
+                            }} style={{...S.btn("green"),padding:"2px 8px",fontSize:11,whiteSpace:"nowrap"}}>➕ הוסף</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
     {showDupModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,overflowY:"auto"}}
       onClick={e=>e.target===e.currentTarget&&setShowDupModal(null)}>
       <div style={{background:"var(--color-bg-default)",border:"1px solid var(--color-border-default)",borderRadius:12,width:"100%",maxWidth:680,padding:20,marginTop:40}}>
