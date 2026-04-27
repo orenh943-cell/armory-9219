@@ -14219,7 +14219,7 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
   });
 
   const filtered = items.filter(item=>{
-    if(search.trim() && !item.name.includes(search) && !item.makat.includes(search)) return false;
+    if(search.trim()){const q=search.trim();const matchSerial=item.withSerial.some(r=>r.serial.includes(q));if(!item.name.includes(q)&&!String(item.makat||'').includes(q)&&!matchSerial) return false;}
     if(filterStatus==="הכל") return true;
     if(item.withSerial.length>0){
       const hasX = item.withSerial.some(r=>counts[item.name+"_"+r.serial]==="❌");
