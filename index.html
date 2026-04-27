@@ -12524,14 +12524,14 @@ function MyStockTab({db, setDb, soldiers, auth}){
           soldiersByUnit[s.unit] = (soldiersByUnit[s.unit]||0)+itemCount;
         }
       });
-      // גם assignments של חיילים שלא ב-allSols
+      // גם assignments של חיילים שלא ב-allSols — ספור פעם אחת
       Object.entries(db.assignments||{}).forEach(([solId, asgn])=>{
         if(allSols.find(s=>s.id===solId)) return; // כבר נספר
-        const itemCount = Object.keys(asgn||{}).filter(k=>cleanItemName(k)===name).length;
-        if(itemCount>0){
-          soldierCount += itemCount;
+        const hasItem = Object.keys(asgn||{}).some(k=>cleanItemName(k)===name);
+        if(hasItem){
+          soldierCount += 1;
           const unit = db.customSoldiers?.[solId]?.unit||db.soldiers?.[solId]?.unit||"א";
-          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+itemCount;
+          soldiersByUnit[unit] = (soldiersByUnit[unit]||0)+1;
         }
       });
 
@@ -12554,9 +12554,8 @@ function MyStockTab({db, setDb, soldiers, auth}){
 
       const liveTotal = soldierCount + toUnits + gadudi;
 
-      // total = armoryMaster הוא המקור הסמכותי
-      const dailyTotal = (window.DAILY_ITEMS||[]).find(d=>d.name===name)?.total||0;
-      const total = info.total>0 ? info.total : (dailyTotal>0 ? dailyTotal : liveTotal);
+      // total = liveTotal (מה שקיים בפועל) — זהה לביומי
+      const total = liveTotal;
 
       // פנוי = גדודי (בארמון) + כל מה שמעל ה-total
       // gadudi = פריטים שיושבים בארמון גדודי (זמינים להוצאה)
