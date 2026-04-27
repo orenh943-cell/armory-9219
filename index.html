@@ -14128,16 +14128,22 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
   const SESSION_KEY = "invcount_session_"+new Date().toLocaleDateString("he-IL").replace(/\//g,"-");
 
   // טעינת ספירה שמורה מ-Firebase
-  const savedCounts = db.invCountSessions?.[SESSION_KEY]||{};
-  const [counts, setCounts] = React.useState(savedCounts);
+  // השתמש ב-db ישירות כדי לא לאבד נתונים בעבור טאב
+  const liveCounts = db.invCountSessions?.[SESSION_KEY]||{};
+  const [localCounts, setLocalCounts] = React.useState({});
+  // מיזוג — Firebase מנצח
+  const counts = {...localCounts, ...liveCounts};
   const [filterStatus, setFilterStatus] = React.useState("הכל"); // הכל | חסר | קיים
   const [search, setSearch] = React.useState("");
 
   // שמור ב-Firebase בכל שינוי
   function mark(key, val){
-    const newCounts = {...counts, [key]: val};
-    setCounts(newCounts);
-    fbSet("db/invCountSessions/"+SESSION_KEY+"/"+key, val).catch(()=>{});
+    setLocalCounts(prev=>({...prev, [key]: val}));
+    if(val===null){
+      fbSet("db/invCountSessions/"+SESSION_KEY+"/"+key, null).catch(()=>{});
+    } else {
+      fbSet("db/invCountSessions/"+SESSION_KEY+"/"+key, val).catch(()=>{});
+    }
   }
 
   // בנה רשימת פריטים עם צ/סידוריים
@@ -14244,7 +14250,81 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
             נבדקו: {checkedV+checkedX}/{totalItems} · ✅ {checkedV} · ❌ {checkedX} · ⏳ {totalItems-checkedV-checkedX} נותרו
           </div>
         </div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <button onClick={async ()=>{
+            if(!window.confirm("לסיים את ספירת המלאי ולהפיק דוח חסרים?")) return;
+            // ייצא Excel של חסרים
+            if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה"); return; }
+            const TODAY = new Date().toLocaleDateString("he-IL");
+            const wb = new ExcelJS.Workbook();
+            wb.creator = "ארמון 9219"; wb.created = new Date();
+            const ws = wb.addWorksheet("חסרים", {views:[{rightToLeft:true}]});
+            const C = {NAVY:{argb:"FF1A3A6B"},WHITE:{argb:"FFFFFFFF"},RED:{argb:"FFFFE0E0"},GRAY:{argb:"FFE8EEF7"}};
+            const fill=(c)=>({type:"pattern",pattern:"solid",fgColor:c});
+            const thin=(a)=>({style:"thin",color:{argb:a}});
+            const border=(a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
+            ws.mergeCells("A1:E1");
+            const t=ws.getCell("A1");
+            t.value="דוח חסרים — ספירת מלאי "+TODAY;
+            t.font={bold:true,size:15,color:C.WHITE,name:"Arial"};
+            t.fill=fill(C.NAVY); t.alignment={horizontal:"center",vertical:"middle",readingOrder:2};
+            ws.getRow(1).height=30;
+            ["מקט","שם פריט","צ/סידורי","מיוחס ל","סטטוס"].forEach((h,i)=>{
+              const cell=ws.getRow(2).getCell(i+1);
+              cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
+              cell.fill=fill(C.NAVY); cell.alignment={horizontal:"center",readingOrder:2};
+              cell.border=border("FFC5CEE0");
+              ws.getColumn(i+1).width=[12,28,16,20,12][i];
+            });
+            ws.getRow(2).height=22;
+            let rowIdx=3;
+            items.forEach(item=>{
+              if(item.withSerial.length>0){
+                item.withSerial.forEach(r=>{
+                  const key=item.name+"_"+r.serial;
+                  const val=counts[key];
+                  if(val==="❌"||!val){
+                    const row=ws.getRow(rowIdx++);
+                    [item.makat||"—",item.name,r.serial,r.soldierName||"—",val==="❌"?"❌ חסר":"⏳ לא נבדק"].forEach((v,i)=>{
+                      const cell=row.getCell(i+1);
+                      cell.value=v; cell.font={size:10,name:"Arial"};
+                      cell.fill=fill(val==="❌"?C.RED:C.GRAY);
+                      cell.alignment={horizontal:"right",readingOrder:2};
+                      cell.border=border("FFC5CEE0");
+                    });
+                    row.height=20;
+                  }
+                });
+              } else {
+                const key=item.name+"_qty";
+                const val=counts[key];
+                if(val==="❌"||!val){
+                  const row=ws.getRow(rowIdx++);
+                  [item.makat||"—",item.name,item.noSerialCount+" יחידות","—",val==="❌"?"❌ חסר":"⏳ לא נבדק"].forEach((v,i)=>{
+                    const cell=row.getCell(i+1);
+                    cell.value=v; cell.font={size:10,name:"Arial"};
+                    cell.fill=fill(val==="❌"?C.RED:C.GRAY);
+                    cell.alignment={horizontal:"right",readingOrder:2};
+                    cell.border=border("FFC5CEE0");
+                  });
+                  row.height=20;
+                }
+              }
+            });
+            ws.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
+            const buf=await wb.xlsx.writeBuffer();
+            const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement("a");
+            a.href=url; a.download="חסרים_ספירת_מלאי_"+TODAY.replace(/\//g,"-")+".xlsx";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            // נקה ספירה
+            fbSet("db/invCountSessions/"+SESSION_KEY, null).catch(()=>{});
+            setLocalCounts({});
+          }} style={{...S.btn("green"),padding:"6px 14px",fontSize:"var(--text-sm)",fontWeight:700}}>
+            ✅ סיים ספירה + Excel
+          </button>
           {["הכל","חסר","קיים"].map(s=>(
             <button key={s} onClick={()=>setFilterStatus(s)}
               style={{...S.btn(filterStatus===s?"blue":"neutral"),padding:"5px 12px",fontSize:"var(--text-sm)"}}>
