@@ -2475,9 +2475,10 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     // total: תמיד לפי armoryMaster — לא liveCount (שמשתנה עם פעולות)
     const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
     const masterTotal = armEntry?.total||0;
-    // total = liveCount (מה שקיים בפועל) — זהה לדשבורד ארמון
+    // total = armoryMaster.total — המקור האמין (מסונכרן עם דוח Excel)
     // lockedTotals עוקף הכל (שמירה ידנית)
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : liveCount;
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
+      : masterTotal>0 ? masterTotal : liveCount;
 
     // השאלות: לפי שם נרמל
     const loans = allLoans[amName]||allLoans[cleanAlias]||0;
@@ -9481,7 +9482,7 @@ function VisutTab({db, setDb, soldiers, auth}){
         const t=v.t||v.assignedType||"unit";
         if(t==="unit") toUnits[u]=(toUnits[u]||0)+1;
       });
-      return {name,makat,total:liveTotal,liveByUnit,liveTotal,toSoldiers,toUnits};
+      return {name,makat,total:info.total||liveTotal,liveByUnit,liveTotal,toSoldiers,toUnits};
     }).filter(i=>i.liveTotal>0).sort((a,b)=>a.name.localeCompare(b.name,"he"));
   },[db,soldiers]);
 
