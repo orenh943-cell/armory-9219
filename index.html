@@ -8493,6 +8493,8 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
   const [itemSearch,setItemSearch]=useState("");
   const [selSoldier,setSelSoldier]=useState(null);
   const [signInPersonSoldier,setSignInPersonSoldier]=useState(null);
+  const [resetPass,setResetPass]=useState("");
+  const [resetUnlocked,setResetUnlocked]=useState(false);
   const [dailyType,setDailyType]=useState(null);
   const [histFilter,setHistFilter]=useState("הכל");
   const [quickModal,setQuickModal]=useState(false);
@@ -9226,27 +9228,24 @@ ${exitLink}
         {tab==="guarantors"&&perms.canViewSignatures!==false&&(
           <GuarantorsTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
-        {tab==="reset"&&auth.role==="admin"&&(()=>{
-          const [resetPass,setResetPass]=React.useState("");
-          const [resetUnlocked,setResetUnlocked]=React.useState(false);
-          if(!resetUnlocked) return (
-            <div style={{maxWidth:360,margin:"60px auto",padding:24,textAlign:"center"}}>
-              <div style={{fontSize:48,marginBottom:16}}>🔒</div>
-              <h3 style={{marginBottom:16}}>טאב איפוס — נדרשת סיסמה</h3>
-              <input type="password" value={resetPass} onChange={e=>setResetPass(e.target.value)}
-                onKeyDown={e=>{if(e.key==="Enter"&&resetPass===RESET_PASSWORD) setResetUnlocked(true);}}
-                placeholder="הכנס סיסמה..." style={{...S.input,textAlign:"center",fontSize:18,letterSpacing:4}}
-                autoFocus/>
-              <button onClick={()=>{
-                if(resetPass===RESET_PASSWORD) setResetUnlocked(true);
-                else alert("סיסמה שגויה");
-              }} style={{...S.btn("blue"),width:"100%",marginTop:12,padding:"10px 0",fontSize:15}}>
-                🔓 כניסה
-              </button>
-            </div>
-          );
-          return <ResetTab db={db} setDb={setDb} auth={auth}/>;
-        })()}
+        {tab==="reset"&&auth.role==="admin"&&(
+          resetUnlocked
+            ? <ResetTab db={db} setDb={setDb} auth={auth}/>
+            : <div style={{maxWidth:360,margin:"60px auto",padding:24,textAlign:"center"}}>
+                <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+                <h3 style={{marginBottom:16}}>טאב איפוס — נדרשת סיסמה</h3>
+                <input type="password" value={resetPass} onChange={e=>setResetPass(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter"&&resetPass===RESET_PASSWORD) setResetUnlocked(true);}}
+                  placeholder="הכנס סיסמה..." style={{...S.input,textAlign:"center",fontSize:18,letterSpacing:4}}
+                  autoFocus/>
+                <button onClick={()=>{
+                  if(resetPass===RESET_PASSWORD) setResetUnlocked(true);
+                  else alert("סיסמה שגויה");
+                }} style={{...S.btn("blue"),width:"100%",marginTop:12,padding:"10px 0",fontSize:15}}>
+                  🔓 כניסה
+                </button>
+              </div>
+        )}
         {tab==="external"&&auth.role==="admin"&&(
           <ExternalSignTab db={db} setDb={setDb} auth={auth}/>
         )}
