@@ -7595,6 +7595,77 @@ function ResetTab({db, setDb, auth}){
           win.document.close();
         }} style={{...S.btn("purple"),width:"100%",marginBottom:8}}>🔍 אבחון מלאי (עם העתקה)</button>
 
+        <button onClick={()=>{
+          const serial = window.prompt("הכנס מספר צ או סידורי לחיפוש:");
+          if(!serial||!serial.trim()) return;
+          const q = serial.trim();
+          const results = [];
+          const allSols2 = getSoldiers(db);
+
+          // חפש ב-assignments
+          allSols2.forEach(sol=>{
+            const asgn = db.assignments?.[sol.id]||{};
+            Object.entries(asgn).forEach(([k,v])=>{
+              if(String(v)===q){
+                const sig = db.signatures?.[sol.id];
+                const signed = sig ? "✅ חתום (" + (sig.signedAt||"") + ")" : "❌ לא חתום";
+                results.push({
+                  type:"👤 חייל",
+                  name: sol.name,
+                  id: sol.id,
+                  unit: sol.unit||"—",
+                  item: cleanItemName(k),
+                  signed,
+                  source: "assignments"
+                });
+              }
+            });
+          });
+
+          // חפש ב-unitItems
+          Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+            if(String(v.s||v.serial||"")===q){
+              results.push({
+                type:"🏢 יחידה",
+                name: v.sn||v.assignedSoldierName||"—",
+                id: uid,
+                unit: v.u||v.unit||"גדודי",
+                item: cleanItemName(v.n||v.name||""),
+                signed: (v.t||"unit")==="soldier"?"👤 משויך לחייל":"🏢 פנוי ביחידה",
+                source: "unitItems"
+              });
+            }
+          });
+
+          if(!results.length){
+            alert("לא נמצא צ/סידורי: " + q);
+            return;
+          }
+
+          // הצג תוצאות בחלון
+          const win = window.open("","_blank","width=600,height=400");
+          const rows = results.map(r=>`
+            <tr>
+              <td>${r.type}</td>
+              <td><strong>${r.item}</strong></td>
+              <td>${r.name}</td>
+              <td>${r.id}</td>
+              <td>${r.unit}</td>
+              <td>${r.signed}</td>
+            </tr>`).join("");
+          win.document.write(`<html><head><meta charset='UTF-8'><title>חיפוש צ ${q}</title>
+            <style>body{font-family:Arial;direction:rtl;padding:20px}
+            table{width:100%;border-collapse:collapse}
+            th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}
+            th{background:#1a3a6b;color:#fff}</style></head><body>
+            <h3>תוצאות לצ/סידורי: ${q} — ${results.length} מקומות</h3>
+            <table>
+              <thead><tr><th>מקור</th><th>פריט</th><th>שם</th><th>מ.א/מזהה</th><th>פלוגה</th><th>סטטוס</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></body></html>`);
+          win.document.close();
+        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔎 חיפוש צ/סידורי + סטטוס חתימה</button>
+
         <button onClick={async ()=>{
           if(!window.confirm("לנקות כפילויות בשיוכים? (M4 + M4__1 → רק M4)")) return;
           const allSols = getSoldiers(db);
@@ -12007,8 +12078,14 @@ function SearchModal({onClose, soldiers, db}){
                       <span style={{fontWeight:700,fontSize:"var(--text-base)",color:WEAPON_KEYS.includes(r.itemName)?"#e6edf3":"var(--color-accent-fg)"}}>{r.itemName}</span>
                       <span style={{color:"var(--color-text-secondary)",fontFamily:"monospace",fontSize:"var(--text-sm)",marginRight:8}}>· {r.serial}</span>
                     </div>
-                    <div style={{display:"flex",gap:4}}>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                       {r.source==="soldier"&&<Badge color="blue" small>👤 {r.soldier?.name}</Badge>}
+                      {r.source==="soldier"&&(()=>{
+                        const sig=db.signatures?.[r.soldier?.id];
+                        return sig
+                          ? <Badge color="green" small>✅ חתום {sig.signedAt||""}</Badge>
+                          : <Badge color="orange" small>⏳ לא חתום</Badge>;
+                      })()}
                       {r.source==="inventory"&&<Badge color="green" small>📦 מלאי</Badge>}
                       {r.source==="registry"&&<Badge color={r.assignedToSoldier?"blue":"orange"} small>{r.assignedToSoldier?"✅ מוקצה לחייל":"📋 רישום גדודי"}</Badge>}
                     </div>
