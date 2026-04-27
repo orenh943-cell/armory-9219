@@ -7719,7 +7719,7 @@ function ResetTab({db, setDb, auth}){
         if(!a.makat&&!b.makat) return a.name.localeCompare(b.name,"he");
         if(!a.makat) return 1;
         if(!b.makat) return -1;
-        return a.makat.localeCompare(b.makat,"he",{numeric:true});
+        return String(a.makat).localeCompare(String(b.makat),"he",{numeric:true});
       });
 
       return (
