@@ -3868,19 +3868,21 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 );
               })()}
               {item.name&&item.fromUnit&&(()=>{
-                const hasSerial=getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name));
-                if(!hasSerial) return null;
                 const avSerials=getAvailableSerials(db,soldiers,item.name,item.fromUnit);
                 return (
-                  <select value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
-                    style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",
-                      borderColor:!item.serial?"var(--color-warning-fg)":"var(--color-border-default)"}}>
-                    <option value="">— בחר צ/סידורי —</option>
-                    {avSerials.map(({serial})=>(
-                      <option key={serial} value={serial}>{serial}</option>
-                    ))}
-                    {avSerials.length===0&&<option disabled value="">אין צ זמינים בפלוגה זו</option>}
-                  </select>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {avSerials.length>0&&(
+                      <select value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
+                        style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",flex:2,minWidth:120,
+                          borderColor:!item.serial?"var(--color-warning-fg)":"var(--color-border-default)"}}>
+                        <option value="">— בחר צ/סידורי —</option>
+                        {avSerials.map(({serial})=>(<option key={serial} value={serial}>{serial}</option>))}
+                      </select>
+                    )}
+                    <input value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
+                      placeholder={avSerials.length>0?"או הכנס ידנית":"צ / סידורי"}
+                      style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",flex:1,minWidth:100}}/>
+                  </div>
                 );
               })()}
               {item.name&&item.fromUnit&&!getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name))&&(()=>{
@@ -7507,6 +7509,63 @@ function ResetTab({db, setDb, auth}){
           }
           alert(fixedCount>0 ? "✅ תוקנו "+fixedCount+" חיילים עם כפילויות" : "✅ לא נמצאו כפילויות");
         }} style={{...S.btn("teal"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות בשיוכים</button>
+        <button onClick={()=>{
+          const serial = window.prompt("הכנס מספר סידורי לחיפוש:");
+          if(!serial||!serial.trim()) return;
+          const q = serial.trim();
+          const results = [];
+          
+          // חפש ב-assignments
+          const allSols = getSoldiers(db);
+          allSols.forEach(sol=>{
+            const asgn = db.assignments?.[sol.id]||{};
+            Object.entries(asgn).forEach(([k,v])=>{
+              if(String(v)===q){
+                results.push("👤 חייל: "+sol.name+" ("+sol.id+") | פריט: "+cleanItemName(k)+" | פלוגה: "+sol.unit);
+              }
+            });
+          });
+          
+          // חפש ב-unitItems
+          Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+            const serial2 = v.s||v.serial;
+            if(String(serial2||"")===q){
+              results.push("🏢 unitItem: "+(v.n||v.name||"?")+" | יחידה: "+(v.u||v.unit||"?")+" | key: "+uid);
+            }
+          });
+          
+          if(!results.length){
+            alert("לא נמצא סידורי "+q);
+          } else {
+            const msg = "נמצא סידורי "+q+" ב-"+results.length+" מקומות:\n\n"+results.join("\n");
+            if(window.confirm(msg+"\n\n--- האם למחוק כפילויות? (ישאיר רק את הראשון) ---")){
+              // מחק כפילויות - השאר רק הראשון
+              let kept = false;
+              allSols.forEach(sol=>{
+                const asgn = {...(db.assignments?.[sol.id]||{})};
+                let changed = false;
+                Object.entries(asgn).forEach(([k,v])=>{
+                  if(String(v)===q){
+                    if(!kept){ kept=true; } // שמור ראשון
+                    else { delete asgn[k]; changed=true; } // מחק שאר
+                  }
+                });
+                if(changed){
+                  fbSet("db/assignments/"+sol.id, sanitizeForFirebase(asgn)).catch(()=>{});
+                  setDb(prev=>({...prev,assignments:{...prev.assignments,[sol.id]:asgn}}));
+                }
+              });
+              // מחק מ-unitItems
+              Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+                if(String(v.s||v.serial||"")===q){
+                  if(!kept){ kept=true; }
+                  else { fbSet("db/unitItems/"+uid,null).catch(()=>{}); }
+                }
+              });
+              alert("✅ כפילויות נמחקו — נשאר רק מקום אחד לסידורי "+q);
+            }
+          }
+        }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔎 חיפוש וניקוי סידורי כפול</button>
         <button onClick={()=>{
           // כלי אבחון — בדוק כל הפריטים
           const allSols = getSoldiers(db);
