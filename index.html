@@ -11211,6 +11211,103 @@ function MyStockTab({db, setDb, soldiers, auth}){
         <div style={{display:"flex",gap:8}}>
 
 
+          <button onClick={async ()=>{
+            if(typeof ExcelJS==="undefined"){alert("ספריית Excel לא נטענה");return;}
+            const TODAY=new Date().toLocaleDateString("he-IL");
+            const wb=new ExcelJS.Workbook(); wb.creator="ארמון 9219"; wb.created=new Date();
+            const C={NAVY:{argb:"FF1A3A6B"},WHITE:{argb:"FFFFFFFF"},GRAY:{argb:"FFE8EEF7"},ALT:{argb:"FFF4F7FB"}};
+            const fill=(c)=>({type:"pattern",pattern:"solid",fgColor:c});
+            const thin=(a)=>({style:"thin",color:{argb:a}});
+            const border=(a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
+            const AL_C={horizontal:"center",vertical:"middle",readingOrder:2};
+            const AL_R={horizontal:"right",vertical:"middle",readingOrder:2};
+
+            // גיליון 1 — סיכום
+            const ws1=wb.addWorksheet("סיכום מלאי",{views:[{rightToLeft:true}]});
+            ws1.mergeCells("A1:G1");
+            const t1=ws1.getCell("A1");
+            t1.value="מלאי ארמון 9219 | "+TODAY; t1.font={bold:true,size:15,color:C.WHITE,name:"Arial"};
+            t1.fill=fill(C.NAVY); t1.alignment=AL_C; ws1.getRow(1).height=32;
+            ["#","שם פריט","מקט","סהכ","👤 חיילים","🏢 פלוגה","🏛️ ארמון"].forEach((h,i)=>{
+              const cell=ws1.getRow(2).getCell(i+1);
+              cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
+              cell.fill=fill(C.NAVY); cell.alignment=AL_C; cell.border=border("FFC5CEE0");
+              ws1.getColumn(i+1).width=[5,30,14,10,12,12,12][i];
+            });
+            ws1.getRow(2).height=22;
+            liveData.forEach((item,idx)=>{
+              const row=ws1.getRow(idx+3); row.height=20;
+              const alt=idx%2===1;
+              const bg=alt?C.ALT:{argb:"FFFFFFFF"};
+              [idx+1,item.name,item.makat||"—",item.liveTotal,item.toSoldiers,item.toUnits,item.gadudi||0].forEach((v,i)=>{
+                const cell=row.getCell(i+1);
+                cell.value=v; cell.font={size:10,name:"Arial"};
+                cell.fill=fill(i===0?C.GRAY:bg); cell.alignment=i===0?AL_C:AL_R;
+                cell.border=border("FFC5CEE0");
+              });
+            });
+            ws1.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
+
+            // גיליון 2 — סידוריים
+            const ws2=wb.addWorksheet("צ וסידוריים",{views:[{rightToLeft:true}]});
+            ws2.mergeCells("A1:F1");
+            const t2=ws2.getCell("A1");
+            t2.value="פירוט צ וסידוריים | "+TODAY; t2.font={bold:true,size:15,color:C.WHITE,name:"Arial"};
+            t2.fill=fill(C.NAVY); t2.alignment=AL_C; ws2.getRow(1).height=32;
+            ["#","שם פריט","מקט","צ/סידורי","שם חייל / יחידה","פלוגה"].forEach((h,i)=>{
+              const cell=ws2.getRow(2).getCell(i+1);
+              cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
+              cell.fill=fill(C.NAVY); cell.alignment=AL_C; cell.border=border("FFC5CEE0");
+              ws2.getColumn(i+1).width=[5,28,12,18,22,12][i];
+            });
+            ws2.getRow(2).height=22;
+            let rowIdx2=3;
+            // מ-assignments
+            const solsArr=getSoldiers(db);
+            solsArr.forEach(sol=>{
+              const asgn=db.assignments?.[sol.id]||{};
+              const seen=new Set();
+              Object.entries(asgn).forEach(([k,v])=>{
+                const nm=cleanItemName(k);
+                if(seen.has(nm)) return; seen.add(nm);
+                const serial=(v&&v!==1&&v!==true)?String(v):null;
+                if(!serial) return;
+                const master=db.armoryMaster?.[nm]||{};
+                const row=ws2.getRow(rowIdx2++); row.height=20;
+                const alt=rowIdx2%2===0;
+                [rowIdx2-3,nm,master.makat||"—",serial,sol.name,sol.unit||"—"].forEach((val,i)=>{
+                  const cell=row.getCell(i+1);
+                  cell.value=val; cell.font={size:10,name:"Arial"};
+                  cell.fill=fill(i===0?C.GRAY:alt?C.ALT:{argb:"FFFFFFFF"});
+                  cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
+                });
+              });
+            });
+            // מ-unitItems
+            Object.values(db.unitItems||{}).forEach(v=>{
+              const serial=String(v.s||v.serial||"");
+              if(!serial) return;
+              const nm=cleanItemName(v.n||v.name||"");
+              const master=db.armoryMaster?.[nm]||{};
+              const row=ws2.getRow(rowIdx2++); row.height=20;
+              const alt=rowIdx2%2===0;
+              [rowIdx2-3,nm,master.makat||"—",serial,"יחידה: "+(v.u||v.unit||"גדודי"),v.u||v.unit||"גדודי"].forEach((val,i)=>{
+                const cell=row.getCell(i+1);
+                cell.value=val; cell.font={size:10,name:"Arial"};
+                cell.fill=fill(i===0?C.GRAY:alt?C.ALT:{argb:"FFFFFFFF"});
+                cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
+              });
+            });
+            ws2.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
+
+            const buf=await wb.xlsx.writeBuffer();
+            const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement("a");
+            a.href=url; a.download="מלאי_כולל_צ_"+TODAY.replace(/\//g,"-")+".xlsx";
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }} style={{...S.btn("teal"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 Excel + צ</button>
           <button onClick={printReport} style={{...S.btn("green"),padding:"7px 14px",fontSize:"var(--text-base)"}}>🖨️ הדפס דוח</button>
           <button onClick={exportCSV} style={{...S.btn("success"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📥 Excel</button>
           <button onClick={()=>setShowSummary(true)} style={{...S.btn("purple"),padding:"7px 14px",fontSize:"var(--text-base)"}}>📊 טבלאות סיכום</button>
