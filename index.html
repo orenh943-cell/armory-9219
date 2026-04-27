@@ -7374,7 +7374,9 @@ const RESET_PASSWORD = "7680832";
 function ResetTab({db, setDb, auth}){
   const [phase, setPhase] = React.useState("menu");
   const [showDupModal, setShowDupModal] = React.useState(null);
-  const [showInvEdit, setShowInvEdit] = React.useState(false); // menu | confirm | backup | restore
+  const [showInvEdit, setShowInvEdit] = React.useState(false);
+  const [expandedInvItem, setExpandedInvItem] = React.useState(null);
+  const [invSerialSearch, setInvSerialSearch] = React.useState(""); // menu | confirm | backup | restore
   const [pass, setPass] = React.useState("");
   const [passErr, setPassErr] = React.useState("");
   const [backupData, setBackupData] = React.useState(null);
@@ -7835,21 +7837,90 @@ function ResetTab({db, setDb, auth}){
                     return (
                       <tr key={row.name} style={{background:bg}}>
                         <td style={{padding:"4px 4px"}}>
-                          <input defaultValue={row.name}
-                            onBlur={e=>{
-                              const newName=e.target.value.trim();
-                              if(!newName||newName===row.name) return;
-                              if(!window.confirm("לשנות שם מ-"+row.name+" ל-"+newName+"?")) return;
-                              const master={...db.armoryMaster};
-                              const entry={...(master[row.name]||{})};
-                              delete master[row.name];
-                              master[newName]=entry;
-                              fbSet("db/armoryMaster/"+newName, sanitizeForFirebase(entry)).catch(()=>{});
-                              fbSet("db/armoryMaster/"+row.name, null).catch(()=>{});
-                              setDb(prev=>({...prev,armoryMaster:master,_armoryMasterLoaded:true}));
-                              logAction("עריכת_שם_פריט",row.name+" → "+newName,auth?.name);
-                            }}
-                            style={{width:"100%",minWidth:120,border:"1px solid var(--color-border-muted)",borderRadius:4,padding:"2px 4px",fontSize:11,fontWeight:600,background:"var(--color-bg-default)"}}/>
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <input defaultValue={row.name}
+                              onBlur={e=>{
+                                const newName=e.target.value.trim();
+                                if(!newName||newName===row.name) return;
+                                if(!window.confirm("לשנות שם מ-"+row.name+" ל-"+newName+"?")) return;
+                                const master={...db.armoryMaster};
+                                const entry={...(master[row.name]||{})};
+                                delete master[row.name];
+                                master[newName]=entry;
+                                fbSet("db/armoryMaster/"+newName, sanitizeForFirebase(entry)).catch(()=>{});
+                                fbSet("db/armoryMaster/"+row.name, null).catch(()=>{});
+                                setDb(prev=>({...prev,armoryMaster:master,_armoryMasterLoaded:true}));
+                                logAction("עריכת_שם_פריט",row.name+" → "+newName,auth?.name);
+                              }}
+                              style={{flex:1,minWidth:100,border:"1px solid var(--color-border-muted)",borderRadius:4,padding:"2px 4px",fontSize:11,fontWeight:600,background:"var(--color-bg-default)"}}/>
+                            {(()=>{
+                              // בדוק אם יש צ/סידוריים לפריט זה
+                              const allSols3=getSoldiers(db);
+                              const serials=[];
+                              const seen=new Set();
+                              allSols3.forEach(sol=>{
+                                const asgn=db.assignments?.[sol.id]||{};
+                                Object.entries(asgn).forEach(([k,v])=>{
+                                  if(cleanItemName(k)===row.name&&v&&v!==1&&v!==true&&!seen.has(String(v))){
+                                    seen.add(String(v));
+                                    serials.push({serial:String(v),holder:sol.name,unit:sol.unit});
+                                  }
+                                });
+                              });
+                              Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+                                if(cleanItemName(v.n||v.name||"")===row.name&&(v.s||v.serial)&&!seen.has(String(v.s||v.serial))){
+                                  seen.add(String(v.s||v.serial));
+                                  serials.push({serial:String(v.s||v.serial),holder:"יחידה: "+(v.u||v.unit||"גדודי"),unit:v.u||v.unit||"גדודי"});
+                                }
+                              });
+                              if(!serials.length) return null;
+                              const isExp = expandedInvItem===row.name;
+                              return (
+                                <button onClick={()=>{setExpandedInvItem(isExp?null:row.name);setInvSerialSearch("");}}
+                                  style={{...S.btn(isExp?"blue":"gray"),padding:"2px 8px",fontSize:10,whiteSpace:"nowrap"}}>
+                                  {isExp?"▲":"🔢"} {serials.length}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                          {expandedInvItem===row.name&&(()=>{
+                            const allSols3=getSoldiers(db);
+                            const serials=[];
+                            const seen=new Set();
+                            allSols3.forEach(sol=>{
+                              const asgn=db.assignments?.[sol.id]||{};
+                              Object.entries(asgn).forEach(([k,v])=>{
+                                if(cleanItemName(k)===row.name&&v&&v!==1&&v!==true&&!seen.has(String(v))){
+                                  seen.add(String(v));
+                                  serials.push({serial:String(v),holder:sol.name,unit:sol.unit});
+                                }
+                              });
+                            });
+                            Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+                              if(cleanItemName(v.n||v.name||"")===row.name&&(v.s||v.serial)&&!seen.has(String(v.s||v.serial))){
+                                seen.add(String(v.s||v.serial));
+                                serials.push({serial:String(v.s||v.serial),holder:"יחידה: "+(v.u||v.unit||"גדודי"),unit:v.u||v.unit||"גדודי"});
+                              }
+                            });
+                            const filtered=invSerialSearch.trim()
+                              ?serials.filter(r=>r.serial.includes(invSerialSearch.trim())||r.holder.includes(invSerialSearch.trim()))
+                              :serials;
+                            return (
+                              <div style={{marginTop:6,padding:8,background:"var(--color-bg-canvas)",borderRadius:6,border:"1px solid var(--color-accent-fg)"}}>
+                                <input value={invSerialSearch} onChange={e=>setInvSerialSearch(e.target.value)}
+                                  placeholder="🔍 חפש צ..." style={{...S.input,marginBottom:6,fontSize:11,padding:"3px 6px"}}/>
+                                <div style={{maxHeight:180,overflowY:"auto"}}>
+                                  {filtered.map(r=>(
+                                    <div key={r.serial} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:11,borderBottom:"1px solid var(--color-border-muted)"}}>
+                                      <span style={{fontFamily:"monospace",fontWeight:600}}>{r.serial}</span>
+                                      <span style={{color:"var(--color-text-secondary)"}}>{r.holder}</span>
+                                    </div>
+                                  ))}
+                                  {filtered.length===0&&<div style={{color:"var(--color-text-muted)",fontSize:11}}>לא נמצא</div>}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{padding:"4px 4px"}}>
                           <input defaultValue={row.makat||""}
