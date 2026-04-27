@@ -14640,6 +14640,95 @@ function InventoryCountTab({db, setDb, soldiers, auth}){
 }
 
 
+async function exportUnitSoldiersExcel(unit, soldiers, db){
+  if(typeof ExcelJS==="undefined"){ alert("ספריית Excel לא נטענה"); return; }
+  const TODAY = new Date().toLocaleDateString("he-IL");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "ארמון 9219"; wb.created = new Date();
+  const ws = wb.addWorksheet("פלוגה "+unit, {views:[{rightToLeft:true}]});
+
+  const C={NAVY:{argb:"FF1A3A6B"},WHITE:{argb:"FFFFFFFF"},GRAY:{argb:"FFE8EEF7"},ALT:{argb:"FFF4F7FB"},GREEN:{argb:"FFD6F5E3"},ORANGE:{argb:"FFFFF0D6"}};
+  const fill=(c)=>({type:"pattern",pattern:"solid",fgColor:c});
+  const thin=(a)=>({style:"thin",color:{argb:a}});
+  const border=(a)=>({top:thin(a),left:thin(a),bottom:thin(a),right:thin(a)});
+  const AL_C={horizontal:"center",vertical:"middle",readingOrder:2};
+  const AL_R={horizontal:"right",vertical:"middle",readingOrder:2};
+
+  // כותרת
+  ws.mergeCells("A1:F1");
+  const t1=ws.getCell("A1");
+  t1.value="פלוגה "+unit+" | גדוד 9219 | "+TODAY;
+  t1.font={bold:true,size:15,color:C.WHITE,name:"Arial"};
+  t1.fill=fill(C.NAVY); t1.alignment=AL_C; ws.getRow(1).height=32;
+
+  // עמודות
+  const HDRS=["מ.א","שם חייל","מחלקה","פריט","צ / סידורי","חתום"];
+  const WIDS=[12,22,14,28,18,12];
+  HDRS.forEach((h,i)=>{
+    const cell=ws.getRow(2).getCell(i+1);
+    cell.value=h; cell.font={bold:true,size:11,color:C.WHITE,name:"Arial"};
+    cell.fill=fill(C.NAVY); cell.alignment=AL_C; cell.border=border("FFC5CEE0");
+    ws.getColumn(i+1).width=WIDS[i];
+  });
+  ws.getRow(2).height=22;
+
+  const unitSols = soldiers.filter(s=>s.unit===unit);
+  let rowIdx=3;
+
+  unitSols.forEach(sol=>{
+    const asgn=db.assignments?.[sol.id]||{};
+    const sig=db.signatures?.[sol.id];
+    const signed=sig?"✅ חתום":"⏳ לא חתום";
+    const items=Object.entries(asgn);
+
+    if(items.length===0){
+      const row=ws.getRow(rowIdx++); row.height=20;
+      [sol.id,sol.name,sol.squad||"—","—","—",signed].forEach((v,i)=>{
+        const cell=row.getCell(i+1);
+        cell.value=v; cell.font={size:10,name:"Arial"};
+        cell.fill=fill(i===0?C.GRAY:rowIdx%2===0?C.ALT:{argb:"FFFFFFFF"});
+        cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
+      });
+      return;
+    }
+
+    const seen=new Set();
+    items.forEach(([k,v],ki)=>{
+      const nm=cleanItemName(k);
+      if(seen.has(nm)) return; seen.add(nm);
+      const serial=(v&&v!==1&&v!==true)?String(v):"—";
+      const row=ws.getRow(rowIdx++); row.height=20;
+      const alt=rowIdx%2===0;
+      const bg=sig?C.GREEN:C.ORANGE;
+      if(ki===0){
+        [sol.id,sol.name,sol.squad||"—",nm,serial,signed].forEach((v2,i)=>{
+          const cell=row.getCell(i+1);
+          cell.value=v2; cell.font={size:10,name:"Arial",bold:i<3};
+          cell.fill=fill(i===0?C.GRAY:i===5?bg:alt?C.ALT:{argb:"FFFFFFFF"});
+          cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
+        });
+      } else {
+        ["","","",nm,serial,""].forEach((v2,i)=>{
+          const cell=row.getCell(i+1);
+          cell.value=v2; cell.font={size:10,name:"Arial"};
+          cell.fill=fill(i===0?C.GRAY:alt?C.ALT:{argb:"FFFFFFFF"});
+          cell.alignment=i===0?AL_C:AL_R; cell.border=border("FFC5CEE0");
+        });
+      }
+    });
+  });
+
+  ws.views=[{state:"frozen",ySplit:2,rightToLeft:true}];
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="פלוגה_"+unit+"_"+TODAY.replace(/\//g,"-")+".xlsx";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
 function downloadAllFormsZip(db, soldiers){
   if(typeof fflate==="undefined"){ alert("ספריית ZIP לא נטענה, נסה שוב"); return; }
 
@@ -18223,6 +18312,10 @@ ${exitLink}
                 style={{...S.btn("teal"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>
                 📊 Excel חתומים
               </button>
+              {filterUnit!=="הכל"&&<button onClick={()=>exportUnitSoldiersExcel(filterUnit,soldiers,db)}
+                style={{...S.btn("blue"),padding:"6px 12px",fontSize:"var(--text-sm)"}}>
+                📋 Excel פלוגה {filterUnit}
+              </button>}
             </div>
             <div style={{...S.card,padding:0,overflow:"hidden"}}>
               <div style={{overflowX:"auto"}}>
