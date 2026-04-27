@@ -2475,9 +2475,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
     // total: תמיד לפי armoryMaster — לא liveCount (שמשתנה עם פעולות)
     const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
     const masterTotal = armEntry?.total||0;
-    // lockedTotals עוקף > armoryMaster > liveCount כ-fallback בלבד
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
-      : masterTotal>0 ? masterTotal : liveCount;
+    // total = liveCount (מה שקיים בפועל) — זהה לדשבורד ארמון
+    // lockedTotals עוקף הכל (שמירה ידנית)
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : liveCount;
 
     // השאלות: לפי שם נרמל
     const loans = allLoans[amName]||allLoans[cleanAlias]||0;
