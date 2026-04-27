@@ -7559,13 +7559,20 @@ function ResetTab({db, setDb, auth}){
           for(const s of allSols){
             const asgn = db.assignments?.[s.id];
             if(!asgn) continue;
-            const cleaned = {};
-            const seenNames = new Set();
-            Object.entries(asgn).forEach(([k,v])=>{
-              const name = cleanItemName(k);
-              if(!seenNames.has(name)){ seenNames.add(name); cleaned[name] = v; }
+            // מחק רק מפתחות עם suffix (__1, __2) שיש להם גם מפתח בסיס
+            const cleaned = {...asgn};
+            let changed = false;
+            Object.keys(asgn).forEach(k=>{
+              // אם יש suffix __N ויש כבר את המפתח הבסיסי — מחק
+              if(k.includes("__")){
+                const baseName = k.replace(/__\d+$/, "");
+                if(asgn[baseName]!==undefined){
+                  delete cleaned[k];
+                  changed = true;
+                }
+              }
             });
-            if(Object.keys(asgn).join(",") !== Object.keys(cleaned).join(",")){
+            if(changed){
               fixedCount++;
               await fbSet("db/assignments/"+s.id, sanitizeForFirebase(cleaned)).catch(()=>{});
               setDb(prev=>({...prev, assignments:{...prev.assignments,[s.id]:cleaned}}));
