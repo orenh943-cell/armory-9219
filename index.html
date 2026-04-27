@@ -7481,6 +7481,32 @@ function ResetTab({db, setDb, auth}){
             alert("✅ ערבויות נמחקו");
           }
         }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ מחק את כל הערבויות</button>
+        <button onClick={async ()=>{
+          if(!window.confirm("לנקות כפילויות בשיוכים? (M4 + M4__1 → רק M4)")) return;
+          const allSols = getSoldiers(db);
+          let fixedCount = 0;
+          for(const s of allSols){
+            const asgn = db.assignments?.[s.id];
+            if(!asgn) continue;
+            const cleaned = {};
+            const seenNames = new Set();
+            Object.entries(asgn).forEach(([k,v])=>{
+              const name = cleanItemName(k);
+              if(!seenNames.has(name)){
+                seenNames.add(name);
+                cleaned[name] = v; // שמור תמיד עם שם נקי
+              }
+            });
+            const origKeys = Object.keys(asgn).join(",");
+            const newKeys = Object.keys(cleaned).join(",");
+            if(origKeys !== newKeys){
+              fixedCount++;
+              await fbSet("db/assignments/"+s.id, sanitizeForFirebase(cleaned)).catch(()=>{});
+              setDb(prev=>({...prev, assignments:{...prev.assignments,[s.id]:cleaned}}));
+            }
+          }
+          alert(fixedCount>0 ? "✅ תוקנו "+fixedCount+" חיילים עם כפילויות" : "✅ לא נמצאו כפילויות");
+        }} style={{...S.btn("teal"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות בשיוכים</button>
         <button onClick={()=>{
           // כלי אבחון — בדוק כל הפריטים
           const allSols = getSoldiers(db);
