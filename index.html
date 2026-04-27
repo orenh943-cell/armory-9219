@@ -7771,20 +7771,27 @@ function ResetTab({db, setDb, auth}){
       const allSols2 = getSoldiers(db);
       const master = db.armoryMaster||{};
       const invRows = Object.entries(master).map(([name,info])=>{
-        let soldierCount=0;
+        let signedCount=0, unsignedCount=0;
         allSols2.forEach(s=>{
           const asgn=db.assignments?.[s.id]||{};
-          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)){
+            if(db.signatures?.[s.id]) signedCount++;
+            else unsignedCount++;
+          }
         });
         Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
           if(allSols2.find(s=>s.id===solId)) return;
-          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)){
+            if(db.signatures?.[solId]) signedCount++;
+            else unsignedCount++;
+          }
         });
         const unitCount=Object.values(db.unitItems||{}).filter(v=>
           cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
         ).length;
-        const live=soldierCount+unitCount;
-        return {name, makat:info.makat||"", total:info.total||0, live, loaned:soldierCount, free:unitCount};
+        const live=signedCount+unsignedCount+unitCount;
+        // מצאי = לא חתומים (אצל חיילים בלי חתימה) + פנוי ביחידה (unitItems)
+        return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:unsignedCount+unitCount};
       }).sort((a,b)=>{
         // מיון לפי מקט עולה, אם אין מקט — בסוף
         if(!a.makat&&!b.makat) return a.name.localeCompare(b.name,"he");
@@ -7805,7 +7812,7 @@ function ResetTab({db, setDb, auth}){
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead>
                   <tr style={{background:"var(--color-bg-canvas)",position:"sticky",top:0}}>
-                    {["שם פריט","מקט","סהכ","מושאל","פנוי","הוסף יחידה"].map(h=>(
+                    {["שם פריט","מקט","סהכ","מושאל (חתומים)","מצאי (לא חתומים)","הוסף יחידה"].map(h=>(
                       <th key={h} style={{padding:"8px 6px",textAlign:"right",fontWeight:700,borderBottom:"2px solid var(--color-border-default)",whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
@@ -9816,8 +9823,20 @@ function VisutTab({db, setDb, soldiers, auth}){
                     return (
                       <div key={u} style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:"8px 10px",border:"1px solid var(--color-border-muted)"}}>
                         <div style={{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4}}>{u==="גדודי"?"🏛️ ארמון":"פלוגה "+u}</div>
-                        {sol>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-accent-fg)"}}>👤 {sol} משוייכים</div>}
-                        {uni>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)"}}>🏢 {uni} מוקצים</div>}
+                        {sol>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-accent-fg)",marginBottom:2}}>👤 {sol} משוייכים</div>}
+                        {uni>0&&<div style={{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",marginBottom:2}}>🏢 {uni} מוקצים</div>}
+                        {sol>0&&(()=>{
+                          const solList=allSols.filter(s=>s.unit===u&&Object.keys(db.assignments?.[s.id]||{}).some(k=>cleanItemName(k)===expandedItem));
+                          return <div style={{marginTop:4,borderTop:"1px solid var(--color-border-muted)",paddingTop:4}}>
+                            {solList.map(s=>{
+                              const sig=db.signatures?.[s.id];
+                              return <div key={s.id} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"1px 0"}}>
+                                <span style={{color:"var(--color-text-primary)"}}>{s.name}</span>
+                                <span style={{color:sig?"var(--color-success-fg)":"var(--color-warning-fg)",fontWeight:600}}>{sig?"✅":"⏳"}</span>
+                              </div>;
+                            })}
+                          </div>;
+                        })()}
                       </div>
                     );
                   })}
