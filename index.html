@@ -3241,7 +3241,12 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
       }
     });
     ndb={...ndb, unitItems:newUnitItems2};
-    fbSet("db/unitItems", newUnitItems2).catch(()=>{});
+    // שמור רק unitItems שהשתנו
+    Object.entries(newUnitItems2).forEach(([k,v])=>{
+      if(JSON.stringify(ndb.unitItems?.[k])!==JSON.stringify(v)){
+        fbSet("db/unitItems/"+k, sanitizeForFirebase(v)).catch(()=>{});
+      }
+    });
     // שמור את ה-assignments המעודכן ל-Firebase (כולל האביזרים האוטומטיים)
     fbSet("db/assignments/"+soldier.id, sanitizeForFirebase(na)).catch(()=>{});
     onSave(ndb);
@@ -7503,6 +7508,40 @@ function ResetTab({db, setDb, auth}){
           if(!dups.length){alert("✅ לא נמצאו כפילויות סידוריים!");return;}
           setShowDupModal(dups);
         }} style={{...S.btn("blue"),width:"100%",marginBottom:8}}>🔍 טבלת כפילויות סידוריים</button>
+
+        <button onClick={async ()=>{
+          if(!window.confirm("לסנכרן את ה-total של כל הפריטים ב-armoryMaster עם ה-live בפועל?\nפריטים עם live=0 לא ישתנו.")) return;
+          const allSols2 = getSoldiers(db);
+          const master = {...(db.armoryMaster||{})};
+          let updCount = 0;
+          
+          for(const [name, info] of Object.entries(master)){
+            // חשב live
+            let soldierCount = 0;
+            allSols2.forEach(s=>{
+              const asgn = db.assignments?.[s.id]||{};
+              if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+            });
+            Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
+              if(allSols2.find(s=>s.id===solId)) return;
+              if(Object.keys(asgn).some(k=>cleanItemName(k)===name)) soldierCount++;
+            });
+            const unitCount = Object.values(db.unitItems||{}).filter(v=>
+              cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
+            ).length;
+            const live = soldierCount + unitCount;
+            
+            // עדכן רק אם live>0 וה-total שונה
+            if(live>0 && live !== (info.total||0)){
+              master[name] = {...info, total:live};
+              await fbSet("db/armoryMaster/"+name+"/total", live).catch(()=>{});
+              updCount++;
+            }
+          }
+          
+          setDb(prev=>({...prev, armoryMaster:master, _armoryMasterLoaded:true}));
+          alert("✅ עודכנו "+updCount+" פריטים");
+        }} style={{...S.btn("green"),width:"100%",marginBottom:8}}>🔄 סנכרן total לפי live בפועל</button>
 
         <button onClick={()=>{
           const allSols2 = getSoldiers(db);
