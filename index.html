@@ -7772,25 +7772,27 @@ function ResetTab({db, setDb, auth}){
       const master = db.armoryMaster||{};
       const invRows = Object.entries(master).map(([name,info])=>{
         let signedCount=0, unsignedCount=0;
+        // ספור כמות פריטים (לא חיילים) — כמו דשבורד ארמון
         allSols2.forEach(s=>{
           const asgn=db.assignments?.[s.id]||{};
-          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)){
-            if(db.signatures?.[s.id]) signedCount++;
-            else unsignedCount++;
+          const keys=Object.keys(asgn).filter(k=>cleanItemName(k)===name);
+          if(keys.length>0){
+            if(db.signatures?.[s.id]) signedCount+=keys.length;
+            else unsignedCount+=keys.length;
           }
         });
         Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
           if(allSols2.find(s=>s.id===solId)) return;
-          if(Object.keys(asgn).some(k=>cleanItemName(k)===name)){
-            if(db.signatures?.[solId]) signedCount++;
-            else unsignedCount++;
+          const keys=Object.keys(asgn).filter(k=>cleanItemName(k)===name);
+          if(keys.length>0){
+            if(db.signatures?.[solId]) signedCount+=keys.length;
+            else unsignedCount+=keys.length;
           }
         });
         const unitCount=Object.values(db.unitItems||{}).filter(v=>
           cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
         ).length;
         const live=signedCount+unsignedCount+unitCount;
-        // מצאי = לא חתומים (אצל חיילים בלי חתימה) + פנוי ביחידה (unitItems)
         return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:unsignedCount+unitCount};
       }).sort((a,b)=>{
         // מיון לפי מקט עולה, אם אין מקט — בסוף
