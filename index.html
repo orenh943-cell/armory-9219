@@ -9473,7 +9473,7 @@ function VisutTab({db, setDb, soldiers, auth}){
         const t=v.t||v.assignedType||"unit";
         if(t==="unit") toUnits[u]=(toUnits[u]||0)+1;
       });
-      return {name,makat,total,liveByUnit,liveTotal,toSoldiers,toUnits};
+      return {name,makat,total:liveTotal,liveByUnit,liveTotal,toSoldiers,toUnits};
     }).filter(i=>i.liveTotal>0).sort((a,b)=>a.name.localeCompare(b.name,"he"));
   },[db,soldiers]);
 
