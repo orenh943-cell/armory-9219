@@ -1114,7 +1114,7 @@ function formatSigner(auth, db){
 const ALL_SERIALS = window.ALL_SERIALS_DATA;
 
 const NAME_TO_MAKAT = window.NAME_TO_MAKAT_DATA;
-function getMakat(name,db){const fromDB=db?.armoryMaster?.[name]?.makat;if(fromDB) return String(fromDB);return db?.nameMakat?.[name]||NAME_TO_MAKAT[name]||(window._makatCache&&window._makatCache[name])||null;}
+function getMakat(name,db){if(!name) return null;const fromDB=db?.armoryMaster?.[name]?.makat;if(fromDB) return String(fromDB);if(db?.armoryMaster){const cleanN=cleanItemName(name);const entry=Object.entries(db.armoryMaster).find(([k])=>cleanItemName(k)===cleanN);if(entry?.[1]?.makat) return String(entry[1].makat);}return db?.nameMakat?.[name]||NAME_TO_MAKAT[name]||null;}
 
 // שמור חתימה ישנה בהיסטוריה ואפס
 function archiveAndClearSig(db, soldierId){
