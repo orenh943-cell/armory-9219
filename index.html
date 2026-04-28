@@ -4763,11 +4763,29 @@ function QuickModal({soldiers,db,onSave,onClose}){
                   ):null;
                 })()}
               </div>
-              <SerialPicker itemName={item.name} value={item.serial} onChange={v=>{const n=[...items];n[i]={...n[i],serial:v};setItems(n);}} db={db}/>
+              <div style={{display:"flex",flexDirection:"column",gap:4,flex:1}}>
+              <select value={item.fromUnit||"גדודי"} onChange={e=>{const n=[...items];n[i]={...n[i],fromUnit:e.target.value,serial:""};setItems(n);}}
+                style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)"}}>
+                <option value="">— מאיזה מקום? —</option>
+                {["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"].map(u=>(
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+              {item.fromUnit&&item.name&&(()=>{
+                const avSerials=getAvailableSerials(db,getSoldiers(db),item.name,item.fromUnit);
+                if(!avSerials.length) return <div style={{fontSize:11,color:"var(--color-warning-fg)",padding:"4px 0"}}>אין צ פנויים מ{item.fromUnit}</div>;
+                return <select value={item.serial||""} onChange={e=>{const n=[...items];n[i]={...n[i],serial:e.target.value};setItems(n);}}
+                    style={{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",
+                      borderColor:!item.serial?"var(--color-warning-fg)":"var(--color-border-default)"}}>
+                    <option value="">— בחר צ/סידורי —</option>
+                    {avSerials.map(({serial})=><option key={serial} value={serial}>{serial}</option>)}
+                  </select>;
+              })()}
+            </div>
               {items.length>1&&<button onClick={()=>setItems(p=>p.filter((_,x)=>x!==i))} style={{...S.btn("red"),padding:"8px"}}>✕</button>}
             </div>
           ))}
-          <button onClick={()=>setItems(p=>[...p,{name:"",serial:""}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:10}}>+ הוסף שורה</button>
+          <button onClick={()=>setItems(p=>[...p,{name:"",serial:"",fromUnit:"גדודי"}])} style={{...S.btn(),fontSize:"var(--text-sm)",marginBottom:10}}>+ הוסף שורה</button>
           <button onClick={doCheckout} disabled={!items.some(i=>i.name)} style={{...S.btn("green"),width:"100%",padding:"11px 0",opacity:items.some(i=>i.name)?1:0.5}}>✅ שייך</button>
         </div>
       )}
@@ -12454,6 +12472,7 @@ function SearchModal({onClose, soldiers, db}){
                         </select>
                         <select value={curCab} onChange={e=>{
                           const nc=e.target.value;
+                          if(!nc) return;
                           const updated={...effectiveVal,cabName:nc};
                           fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
                           setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
@@ -12463,9 +12482,21 @@ function SearchModal({onClose, soldiers, db}){
                             const asgn=db.assignments?.[solId]||{};
                             const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(r.itemName));
                             if(itemKey){
-                              const meta={...(db.assignmentMeta?.[solId]||{}),[itemKey]:{...(db.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}};
                               fbSet("db/assignmentMeta/"+solId+"/"+itemKey+"/cabName",nc).catch(()=>{});
-                              setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:meta}}));
+                              setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[itemKey]:{...(prev.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}}}}));
+                            }
+                          }
+                          // אם ארון רגיל (לא כנה) — הוסף גם ל-db.cabinets
+                          if(!nc.startsWith("כנה ")){
+                            const serial=String(r.serial||"");
+                            const nm=cleanItemName(r.itemName||"");
+                            const makat=db.armoryMaster?.[nm]?.makat||getMakat(nm)||"";
+                            const existingItems=db.cabinets?.[nc]||[];
+                            const alreadyIn=existingItems.some(it=>String(it.serial||"")===serial&&cleanItemName(it.alias||"")===nm);
+                            if(!alreadyIn){
+                              const newItems=[...existingItems,{alias:nm,fullname:nm,qty:1,serial:serial||null,makat,soldierName:"בארמון",signed:false}];
+                              fbSet("db/cabinets/"+encodeURIComponent(nc),newItems).catch(()=>{});
+                              setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[nc]:newItems}}));
                             }
                           }
                         }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
