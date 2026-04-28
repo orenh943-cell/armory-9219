@@ -8633,6 +8633,21 @@ function AddUnitItemForm({db, setDb, onDone}){
       ndb = {...ndb, assignments:{...(ndb.assignments||{}),[soldierId]:asgnWithKit}};
       fbSet("db/assignments/"+soldierId, sanitizeForFirebase(asgnWithKit)).catch(()=>{});
     }
+    // שמור ל-Firebase
+    Object.entries(newItems).forEach(([id,v])=>{
+      if(!(db.unitItems||{})[id]){
+        fbSet("db/unitItems/"+id, sanitizeForFirebase(v)).catch(()=>{});
+      }
+    });
+    // עדכן armoryMaster
+    const master2={...(ndb.armoryMaster||{})};
+    const nm=cleanItemName(name.trim());
+    const existing2=master2[name.trim()]||{};
+    const countInUnits=Object.values(newItems).filter(v=>cleanItemName(v.n||v.name||"")===nm).length;
+    master2[name.trim()]={...existing2,makat:existing2.makat||getMakat(name.trim(),db)||null,
+      total:Math.max(existing2.total||0,countInUnits)};
+    ndb={...ndb,armoryMaster:master2};
+    fbSet("db/armoryMaster/"+name.trim(),sanitizeForFirebase(master2[name.trim()])).catch(()=>{});
     setDb(ndb);
     logAction("הוספת_פריט", name.trim()+" הוסף למלאי פלוגה "+unit, "מערכת");
     onDone();
