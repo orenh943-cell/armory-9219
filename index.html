@@ -4002,7 +4002,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                     <input type="checkbox" checked={allSelected} onChange={e=>{
                       const sel=e.target.checked;
                       // בדוק אם לפריט הזה יש אביזרי חבילה
-                      const bundle=WEAPON_BUNDLES[clean]||[];
+                      const bundle=Array.isArray(WEAPON_BUNDLES[clean])?WEAPON_BUNDLES[clean]:[];
                       const bundleKeys=bundle.flatMap(acc=>
                         Object.keys(assigned).filter(k=>cleanItemName(k)===acc)
                       );
