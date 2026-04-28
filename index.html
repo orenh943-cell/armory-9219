@@ -12408,10 +12408,20 @@ function SearchModal({onClose, soldiers, db}){
                     const serial=String(r.serial||"");
                     const uiEntry=Object.entries(db.unitItems||{}).find(([,v])=>String(v.s||v.serial||"")===serial);
                     const uid=uiEntry?.[0]; const uiVal=uiEntry?.[1];
-                    if(!uid) return null;
                     const UNITS_LIST=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-                    const curUnit=uiVal?.u||uiVal?.unit||"גדודי";
-                    const curCab=uiVal?.cabName||"";
+                    // אם אין unitItem — בדוק אם יש חייל לא חתום עם הצ הזה
+                    let effectiveUid=uid, effectiveVal=uiVal;
+                    if(!uid && r.source==="soldier" && r.soldier){
+                      const sig=db.signatures?.[r.soldier.id];
+                      if(!sig){
+                        // צור/עדכן unitItem עם ה-soldier assignment
+                        effectiveUid="loc_"+serial;
+                        effectiveVal={n:r.itemName, s:serial, u:r.soldier.unit||"גדודי", t:"unit", cabName:""};
+                      }
+                    }
+                    if(!effectiveUid) return null;
+                    const curUnit=effectiveVal?.u||effectiveVal?.unit||"גדודי";
+                    const curCab=effectiveVal?.cabName||"";
                     const cabList=db.cabinetNames?.[curUnit]||["כנה "+curUnit,"ארון "+curUnit+" 1","ארון "+curUnit+" 2"];
                     return (
                       <div style={{marginTop:6,padding:"6px 8px",background:"var(--color-bg-default)",borderRadius:6,
@@ -12419,17 +12429,17 @@ function SearchModal({onClose, soldiers, db}){
                         <span style={{fontSize:10,fontWeight:700}}>📍 מיקום:</span>
                         <select value={curUnit} onChange={e=>{
                           const nu=e.target.value;
-                          const updated={...uiVal,u:nu,cabName:""};
-                          fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
-                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                          const updated={...effectiveVal,u:nu,cabName:""};
+                          fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
+                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
                         }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
                           {UNITS_LIST.map(u=><option key={u} value={u}>{u==="גדודי"?"גדודי":u}</option>)}
                         </select>
                         <select value={curCab} onChange={e=>{
                           const nc=e.target.value;
-                          const updated={...uiVal,cabName:nc};
-                          fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
-                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                          const updated={...effectiveVal,cabName:nc};
+                          fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
+                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
                         }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
                           <option value="">— ללא ארון —</option>
                           {cabList.map(cn=><option key={cn} value={cn}>{cn}</option>)}
