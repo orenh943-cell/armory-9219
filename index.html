@@ -9320,7 +9320,11 @@ function CabinetsTab({db, setDb, auth}){
     "פלסמ":["כנה פלסמ","ארון פלסמ 1 מוקצים","ארון פלסמ 2 לא מוקצים","ארון רחפנים פלסמ"],
     "גדודי":["כנה גדודי","ארון גדודי","ארמון 2","ארמון 3","ארמון 4"],
   };
-  function getCabNames(unit){ return db.cabinetNames?.[unit] || DEFAULT_CABS[unit] || []; }
+  function getCabNames(unit){
+    const saved = db.cabinetNames?.[unit];
+    if(saved && Array.isArray(saved) && saved.length>0) return saved;
+    return DEFAULT_CABS[unit] || [];
+  }
   function saveCabNames(unit, names){
     fbSet("db/cabinetNames/"+unit, names).catch(()=>{});
     setDb(prev=>({...prev, cabinetNames:{...(prev.cabinetNames||{}), [unit]:names}}));
@@ -9387,8 +9391,8 @@ function CabinetsTab({db, setDb, auth}){
   function assignItem(item, cabName){
     const destUnit = cabName.startsWith("כנה ")?cabName.replace("כנה ",""):selUnit;
     if(item.source==="unit" && item.uid){
-      const v = db.unitItems[item.uid];
-      const updated = {...v, cabName, u:destUnit};
+      const v = db.unitItems[item.uid]||{};
+      const updated = {...v, n:item.name, s:item.serial||null, u:destUnit, t:"unit", cabName};
       fbSet("db/unitItems/"+item.uid, sanitizeForFirebase(updated)).catch(()=>{});
       setDb(prev=>({...prev, unitItems:{...prev.unitItems,[item.uid]:updated}}));
     }
