@@ -7754,6 +7754,7 @@ function ResetTab({db, setDb, auth}){
         {(()=>{
           const [migShow, setMigShow] = React.useState(false);
           const [migSel, setMigSel] = React.useState(new Set());
+          const [migQ, setMigQ] = React.useState("");
           const serials = db.serials||[];
           // סנן רק פריטים שלא קיימים כבר ב-unitItems
           const newOnly = serials.filter(s=>{
@@ -7769,19 +7770,22 @@ function ResetTab({db, setDb, auth}){
               🔄 רישום גדודי ישן ({newOnly.length} פריטים חדשים) — {migShow?"סגור":"בחר להעברה"}
             </button>
             {migShow&&(<div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:12,marginBottom:8,border:"1px solid var(--color-border-muted)"}}>
-              <div style={{display:"flex",gap:6,marginBottom:8}}>
-                <button onClick={()=>setMigSel(new Set(newOnly.map((_,i)=>i)))} style={{...S.btn("green"),fontSize:10,padding:"3px 8px"}}>בחר הכל</button>
+              <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                <input value={migQ||""} onChange={e=>setMigQ&&setMigQ(e.target.value)}
+                  placeholder="🔍 חפש שם או צ..." style={{...S.input,marginBottom:0,flex:1,minWidth:140,fontSize:"var(--text-sm)"}}/>
+                <button onClick={()=>setMigSel(new Set((migQ?(newOnly.filter((s,i)=>{const nm=cleanItemName(s.name||s.n||"");const sr=String(s.serial||s.s||"");return nm.includes(migQ)||sr.includes(migQ);})):newOnly).map((_,i)=>i)))} style={{...S.btn("green"),fontSize:10,padding:"3px 8px"}}>בחר הכל</button>
                 <button onClick={()=>setMigSel(new Set())} style={{...S.btn("gray"),fontSize:10,padding:"3px 8px"}}>נקה</button>
               </div>
               <div style={{maxHeight:300,overflowY:"auto",marginBottom:8}}>
-                {newOnly.map((s,i)=>{
+                {(migQ?newOnly.filter(s=>{const nm=cleanItemName(s.name||s.n||"");const sr=String(s.serial||s.s||"");return nm.includes(migQ)||sr.includes(migQ);}):newOnly).map((s,i)=>{
+                  const origIdx=newOnly.indexOf(s);
                   const serial=String(s.serial||s.s||"");
                   const name=cleanItemName(s.name||s.n||"");
                   const unit=s.unit||s.u||"גדודי";
-                  return (<label key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 6px",borderRadius:4,background:migSel.has(i)?"var(--color-accent-subtle)":"transparent",cursor:"pointer",marginBottom:2}}>
-                    <input type="checkbox" checked={migSel.has(i)} onChange={e=>{
+                  return (<label key={origIdx} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 6px",borderRadius:4,background:migSel.has(origIdx)?"var(--color-accent-subtle)":"transparent",cursor:"pointer",marginBottom:2}}>
+                    <input type="checkbox" checked={migSel.has(origIdx)} onChange={e=>{
                       const ns=new Set(migSel);
-                      e.target.checked?ns.add(i):ns.delete(i);
+                      e.target.checked?ns.add(origIdx):ns.delete(origIdx);
                       setMigSel(ns);
                     }}/>
                     <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{name}</span>
