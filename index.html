@@ -1228,7 +1228,7 @@ function applyWeaponBundles(assigned){
   const out = {...assigned};
   Object.keys(assigned).forEach(itemKey=>{
     const cleanName = cleanItemName(itemKey);
-    const bundle = WEAPON_BUNDLES[cleanName];
+    const bundle = Array.isArray(WEAPON_BUNDLES[cleanName])?WEAPON_BUNDLES[cleanName]:[];
     if(!bundle) return;
     // סוג 1: מערך פשוט — kit רגיל, לא דורס
     if(Array.isArray(bundle)){
@@ -3256,7 +3256,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     const finalRetCabinet={...retCabinet};
     retSel.forEach(name=>{
       const clean=cleanItemName(name);
-      const bundle=WEAPON_BUNDLES[clean];
+      const bundle = Array.isArray(WEAPON_BUNDLES[clean])?WEAPON_BUNDLES[clean]:[];
       if(bundle){
         // העתק ארון לאביזרים
         bundle.forEach(acc=>{
@@ -3273,7 +3273,17 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
       ndb = archiveAndClearSig({...db}, soldier.id);
     } else {
       // ביטול שיוך: remove items from assignments
-      retSel.forEach(n=>delete na[n]);
+      retSel.forEach(n=>{
+        delete na[n];
+        // מחק גם אביזרי חבילה דינמיים (קנה למאג/נגב)
+        const rawBundle=WEAPON_BUNDLES[cleanItemName(n)];
+        if(rawBundle && !Array.isArray(rawBundle) && rawBundle.dynamic){
+          rawBundle.dynamic.forEach(({name:accName})=>{
+            const accKey=Object.keys(na).find(k=>cleanItemName(k)===accName);
+            if(accKey) delete na[accKey];
+          });
+        }
+      });
       ndb = archiveAndClearSig({...db,assignments:{...(db.assignments||{}),[soldier.id]:na}}, soldier.id);
     }
     // Handle items going to cabinet
@@ -4003,7 +4013,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                       const sel=e.target.checked;
                       // בדוק אם לפריט הזה יש אביזרי חבילה
                       const bundle=Array.isArray(WEAPON_BUNDLES[clean])?WEAPON_BUNDLES[clean]:[];
-                      const bundleKeys=bundle.flatMap(acc=>
+                      const rawBundleObj=WEAPON_BUNDLES[clean];
+                      const dynamicAccNames=(rawBundleObj&&!Array.isArray(rawBundleObj)&&rawBundleObj.dynamic)?rawBundleObj.dynamic.map(d=>d.name):[];
+                      const allAccNames=[...bundle,...dynamicAccNames];
+                      const bundleKeys=allAccNames.flatMap(acc=>
                         Object.keys(assigned).filter(k=>cleanItemName(k)===acc)
                       );
                       // בחר/בטל גם את האביזרים
@@ -4150,7 +4163,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                           rowKeys.forEach(k=>{u[k]=cab;});
                           u[rowKey]=cab;
                           // אם זה נשק עם חבילה — העתק ארון לכל האביזרים
-                          const bundle=WEAPON_BUNDLES[clean];
+                          const bundle = Array.isArray(WEAPON_BUNDLES[clean])?WEAPON_BUNDLES[clean]:[];
                           if(bundle && e.target.value){
                             bundle.forEach(acc=>{
                               // מצא את כל מפתחות ה-assignments של האביזר
@@ -4290,7 +4303,7 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
             <label style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:isSelected?"var(--color-accent-bg)":"var(--color-bg-canvas)",borderRadius:7,cursor:"pointer",border:"1px solid var(--color-border-muted)"}}>
               <input type="checkbox" checked={partialSel.includes(name+(g.serial||""))} onChange={e=>{
                 const k=name+(g.serial||"");
-                const bundle=WEAPON_BUNDLES[name]||[];
+                const bundle=(Array.isArray(WEAPON_BUNDLES[name])?WEAPON_BUNDLES[name]:[]);
                 // מצא מפתחות של אביזרי החבילה
                 const bundleKeys=bundle.flatMap(acc=>
                   groupAssigned(assigned,db).filter(([n])=>n===acc).map(([n,bg])=>n+(bg.serial||""))
@@ -17843,14 +17856,14 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             const newAsgn = {...asgn};
             let changed = false;
             if(hasM16){
-              WEAPON_BUNDLES["M16"].forEach(acc=>{
+              (Array.isArray(WEAPON_BUNDLES["M16"])?WEAPON_BUNDLES["M16"]:[]).forEach(acc=>{
                 if(!Object.keys(newAsgn).some(k=>cleanItemName(k)===acc)){
                   newAsgn[acc]=1; changed=true;
                 }
               });
             }
             if(hasSaar){
-              WEAPON_BUNDLES["קלע סער"].forEach(acc=>{
+              (Array.isArray(WEAPON_BUNDLES["קלע סאר"])?WEAPON_BUNDLES["קלע סאר"]:[]).forEach(acc=>{
                 if(!Object.keys(newAsgn).some(k=>cleanItemName(k)===acc)){
                   newAsgn[acc]=1; changed=true;
                 }
@@ -17880,7 +17893,7 @@ function ManagerApp({auth,onLogout,theme,toggleTheme}){
             if(!hasM4) return;
             const newAsgn = {...asgn};
             let changed = false;
-            WEAPON_BUNDLES["M4"].forEach(acc=>{
+            (Array.isArray(WEAPON_BUNDLES["M4"])?WEAPON_BUNDLES["M4"]:[]).forEach(acc=>{
               if(!Object.keys(newAsgn).some(k=>cleanItemName(k)===acc)){
                 newAsgn[acc]=1;
                 changed=true;
