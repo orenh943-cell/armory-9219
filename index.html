@@ -7880,7 +7880,10 @@ function ResetTab({db, setDb, auth}){
           <div style={{background:"var(--color-bg-default)",borderRadius:12,width:"100%",maxWidth:900,padding:20,marginTop:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <h3 style={{margin:0,fontSize:17,fontWeight:800}}>📋 עריכת מלאי — {invRows.length} פריטים</h3>
-              <button onClick={()=>setShowInvEdit(false)} style={{...S.btn("gray"),padding:"4px 12px"}}>✕ סגור</button>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>{setShowInvEdit(false);setTimeout(()=>setShowInvEdit(true),10);}} style={{...S.btn("blue"),padding:"4px 12px"}}>🔄 רענן</button>
+                <button onClick={()=>setShowInvEdit(false)} style={{...S.btn("gray"),padding:"4px 12px"}}>✕ סגור</button>
+              </div>
             </div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -7995,7 +7998,7 @@ function ResetTab({db, setDb, auth}){
                             style={{width:90,border:"1px solid var(--color-border-muted)",borderRadius:4,padding:"2px 4px",fontSize:11,fontFamily:"monospace",background:"var(--color-bg-default)"}}/>
                         </td>
                         <td style={{padding:"6px 6px",textAlign:"center",fontWeight:700,color:diff<0?"var(--color-danger-fg)":diff>0?"var(--color-success-fg)":"inherit"}}>
-                          <input type="number" min="0" defaultValue={row.total}
+                          <input type="number" min="0" key={"total_"+row.name+"_"+row.live} defaultValue={row.total}
                             onBlur={e=>{
                               const val=parseInt(e.target.value)||0;
                               if(val===row.total) return;
