@@ -3511,8 +3511,24 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                   <div><label style={S.label}>שם מלא</label><input value={editName} onChange={e=>setEditName(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
                   <div><label style={S.label}>טלפון</label><input value={editPhone} onChange={e=>setEditPhone(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
-                  <div><label style={S.label}>פלוגה</label><input value={editUnit} onChange={e=>setEditUnit(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
-                  <div><label style={S.label}>מחלקה</label><input value={editSquad} onChange={e=>setEditSquad(e.target.value)} style={{...S.input,marginBottom:0}}/></div>
+                  <div><label style={S.label}>פלוגה</label>
+                    <select value={editUnit} onChange={e=>setEditUnit(e.target.value)} style={{...S.input,marginBottom:0}}>
+                      {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={S.label}>מחלקה</label>
+                    {(()=>{
+                      const squadsForUnit=[...new Set(getSoldiers(db).filter(s=>s.unit===editUnit&&s.squad).map(s=>s.squad))].sort();
+                      return squadsForUnit.length>0
+                        ? <select value={editSquad} onChange={e=>setEditSquad(e.target.value)} style={{...S.input,marginBottom:0}}>
+                            <option value="">-- בחר --</option>
+                            {squadsForUnit.map(sq=><option key={sq} value={sq}>{sq}</option>)}
+                            <option value="__new__">הקלד חדשה...</option>
+                          </select>
+                        : <input value={editSquad} onChange={e=>setEditSquad(e.target.value)} placeholder="מחלקה / תפקיד" style={{...S.input,marginBottom:0}}/>;
+                    })()}
+                    {editSquad==="__new__"&&<input autoFocus value={""} onChange={e=>setEditSquad(e.target.value)} placeholder="הקלד מחלקה..." style={{...S.input,marginBottom:0,marginTop:4}}/>}
+                  </div>
                   <div style={{gridColumn:"1/-1"}}><label style={S.label}>📋 פקל</label><input value={editFakal} onChange={e=>setEditFakal(e.target.value)} placeholder="מספר פקל..." style={{...S.input,fontFamily:"monospace"}}/></div>
                   <div style={{gridColumn:"1/-1"}}><label style={S.label}>💬 הערות</label><textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="הערות על החייל..." rows={2} style={{...S.input,resize:"vertical",fontFamily:"inherit"}}/></div>
                 </div>
@@ -4776,6 +4792,7 @@ function QuickModal({soldiers,db,onSave,onClose}){
 
 function AddSoldierModal({db, onSave, onClose}){
   const [form, setForm] = useState({firstName:"",lastName:"",id:"",unit:"א",squad:"",phone:""});
+  const [customSquadInput, setCustomSquadInput] = useState("");
   const [items, setItems] = useState([{name:"",serial:""}]);
   const [err, setErr] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -4914,7 +4931,7 @@ function AddSoldierModal({db, onSave, onClose}){
                 </select>
               : <input value={form.squad} onChange={e=>set("squad",e.target.value)} placeholder="מחלקה / תפקיד" style={S.input}/>;
           })()}
-          {form.squad==="__custom__"&&<input autoFocus value={""} onChange={e=>set("squad",e.target.value)} placeholder="שם המחלקה החדשה" style={{...S.input,marginTop:4}}/>}
+          {form.squad==="__custom__"&&<input autoFocus value={customSquadInput} onChange={e=>{setCustomSquadInput(e.target.value);set("squad",e.target.value);}} placeholder="שם המחלקה החדשה" style={{...S.input,marginTop:4}}/>}
         </div>
         <div style={{gridColumn:"1/-1"}}>
           <label style={S.label}>טלפון *</label>
@@ -12440,6 +12457,17 @@ function SearchModal({onClose, soldiers, db}){
                           const updated={...effectiveVal,cabName:nc};
                           fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
                           setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
+                          // אם זה חייל (לא unitItem) — עדכן גם assignmentMeta
+                          if(r.source==="soldier"&&r.soldier){
+                            const solId=r.soldier.id;
+                            const asgn=db.assignments?.[solId]||{};
+                            const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(r.itemName));
+                            if(itemKey){
+                              const meta={...(db.assignmentMeta?.[solId]||{}),[itemKey]:{...(db.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}};
+                              fbSet("db/assignmentMeta/"+solId+"/"+itemKey+"/cabName",nc).catch(()=>{});
+                              setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:meta}}));
+                            }
+                          }
                         }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
                           <option value="">— ללא ארון —</option>
                           {cabList.map(cn=><option key={cn} value={cn}>{cn}</option>)}
