@@ -12429,7 +12429,7 @@ function DashDetailModal({type, soldiers, db, onClose}){
 }
 
 // =================== SEARCH MODAL (חיפוש צ / סידורי) ===================
-function SearchModal({onClose, soldiers, db}){
+function SearchModal({onClose, soldiers, db, auth}){
   const [q, setQ] = React.useState("");
   const [searchItem, setSearchItem] = React.useState("");
   const allSols = React.useMemo(()=>getSoldiers(db),[db,soldiers]);
@@ -18785,7 +18785,7 @@ ${exitLink}
       {bulkExitModal&&<BulkExitSignModal db={db} setDb={setDb} soldiers={soldiers} auth={auth} onClose={()=>setBulkExitModal(false)}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers} onSaveHtml={(key,entry)=>setDb(prev=>({...prev,dailyFormsHtml:{...(prev.dailyFormsHtml||{}),[key]:entry}}))}/>}
-      {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db} setDb={setDb}/>}
+      {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db} setDb={setDb} auth={auth}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
       {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
