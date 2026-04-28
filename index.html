@@ -12520,9 +12520,10 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
         });
       });
       // חיפוש סידורי במלאי גדודי
-      Object.values(db.unitItems||{}).forEach(item=>{
-        if(item.serial && String(item.serial).includes(t)){
-          bySerial.push({itemName:item.name, serial:item.serial, unit:item.unit, source:"inventory"});
+      Object.entries(db.unitItems||{}).forEach(([uid,item])=>{
+        const s=item.s||item.serial;
+        if(s && String(s).includes(t)){
+          bySerial.push({itemName:cleanItemName(item.n||item.name||""), serial:s, unit:item.u||item.unit||"גדודי", source:"inventory", unitItemKey:uid, unitItemVal:item});
         }
       });
       // חיפוש בכל ALL_SERIALS (כולל מה שלא מוקצה)
@@ -12623,14 +12624,16 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                   {(()=>{
                     const serial=String(r.serial||"");
                     const uiEntry=Object.entries(db.unitItems||{}).find(([,v])=>String(v.s||v.serial||"")===serial);
-                    const uid=uiEntry?.[0]; const uiVal=uiEntry?.[1];
+                    const uid=uiEntry?.[0]||r.unitItemKey; const uiVal=uiEntry?.[1]||r.unitItemVal;
                     const UNITS_LIST=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
-                    // אם אין unitItem — בדוק אם יש חייל לא חתום עם הצ הזה
                     let effectiveUid=uid, effectiveVal=uiVal;
                     if(!uid && r.source==="soldier" && r.soldier){
-                      // גם חתום וגם לא חתום — אפשר להגדיר מיקום
                       effectiveUid="loc_"+serial;
                       effectiveVal={n:r.itemName, s:serial, u:r.soldier.unit||"גדודי", t:"unit", cabName:""};
+                    }
+                    if(!uid && r.source==="inventory" && r.unitItemKey){
+                      effectiveUid=r.unitItemKey;
+                      effectiveVal=r.unitItemVal||{n:r.itemName, s:serial, u:r.unit||"גדודי", t:"unit", cabName:""};
                     }
                     if(!effectiveUid) return null;
                     const curUnit=effectiveVal?.u||effectiveVal?.unit||"גדודי";
