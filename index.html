@@ -7751,6 +7751,69 @@ function ResetTab({db, setDb, auth}){
           alert("✅ נמחקו "+toDelete.length+" פריטים ריקים מ-armoryMaster");
         }} style={{...S.btn("danger"),width:"100%",marginBottom:8}}>🗑️ מחק פריטים ריקים מ-armoryMaster (total=0, live=0)</button>
 
+        {(()=>{
+          const [migShow, setMigShow] = React.useState(false);
+          const [migSel, setMigSel] = React.useState(new Set());
+          const serials = db.serials||[];
+          // סנן רק פריטים שלא קיימים כבר ב-unitItems
+          const newOnly = serials.filter(s=>{
+            const serial=String(s.serial||s.s||"");
+            const name=cleanItemName(s.name||s.n||"");
+            if(!name||!serial) return false;
+            return !Object.values(db.unitItems||{}).some(v=>String(v.s||v.serial||"")===serial&&cleanItemName(v.n||v.name||"")===name);
+          });
+          if(!serials.length) return null;
+          return (<>
+            <button onClick={()=>setMigShow(p=>!p)}
+              style={{...S.btn("blue"),width:"100%",marginBottom:8}}>
+              🔄 רישום גדודי ישן ({newOnly.length} פריטים חדשים) — {migShow?"סגור":"בחר להעברה"}
+            </button>
+            {migShow&&(<div style={{background:"var(--color-bg-canvas)",borderRadius:8,padding:12,marginBottom:8,border:"1px solid var(--color-border-muted)"}}>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <button onClick={()=>setMigSel(new Set(newOnly.map((_,i)=>i)))} style={{...S.btn("green"),fontSize:10,padding:"3px 8px"}}>בחר הכל</button>
+                <button onClick={()=>setMigSel(new Set())} style={{...S.btn("gray"),fontSize:10,padding:"3px 8px"}}>נקה</button>
+              </div>
+              <div style={{maxHeight:300,overflowY:"auto",marginBottom:8}}>
+                {newOnly.map((s,i)=>{
+                  const serial=String(s.serial||s.s||"");
+                  const name=cleanItemName(s.name||s.n||"");
+                  const unit=s.unit||s.u||"גדודי";
+                  return (<label key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 6px",borderRadius:4,background:migSel.has(i)?"var(--color-accent-subtle)":"transparent",cursor:"pointer",marginBottom:2}}>
+                    <input type="checkbox" checked={migSel.has(i)} onChange={e=>{
+                      const ns=new Set(migSel);
+                      e.target.checked?ns.add(i):ns.delete(i);
+                      setMigSel(ns);
+                    }}/>
+                    <span style={{fontWeight:600,fontSize:"var(--text-sm)"}}>{name}</span>
+                    {serial&&<span style={{fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)"}}>צ: {serial}</span>}
+                    <span style={{fontSize:10,color:"var(--color-text-muted)"}}>פלוגה {unit}</span>
+                  </label>);
+                })}
+              </div>
+              <button onClick={async()=>{
+                if(!migSel.size){alert("לא נבחרו פריטים");return;}
+                if(!window.confirm("להעביר "+migSel.size+" פריטים ל-unitItems?")) return;
+                let count=0;
+                const newUnitItems={...db.unitItems};
+                for(const i of migSel){
+                  const s=newOnly[i];
+                  const serial=String(s.serial||s.s||"");
+                  const name=cleanItemName(s.name||s.n||"");
+                  const unit=s.unit||s.u||"גדודי";
+                  const uid="mig_"+Date.now()+"_"+count;
+                  const item={n:name,s:serial||null,u:unit,t:"unit"};
+                  await fbSet("db/unitItems/"+uid,sanitizeForFirebase(item)).catch(()=>{});
+                  newUnitItems[uid]=item;
+                  count++;
+                }
+                setDb(prev=>({...prev,unitItems:newUnitItems}));
+                setMigShow(false); setMigSel(new Set());
+                alert("✅ הועברו "+count+" פריטים");
+              }} style={{...S.btn("green"),width:"100%"}}>✅ העבר {migSel.size} פריטים נבחרים</button>
+            </div>)}
+          </>);
+        })()}
+
         <button onClick={()=>{
           const serial = window.prompt("הכנס מספר צ או סידורי לחיפוש:");
           if(!serial||!serial.trim()) return;
@@ -12631,11 +12694,15 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                       effectiveUid="loc_"+serial;
                       effectiveVal={n:r.itemName, s:serial, u:r.soldier.unit||"גדודי", t:"unit", cabName:""};
                     }
-                    if(!uid && r.source==="inventory" && r.unitItemKey){
+                    if(!uid && (r.source==="inventory"||r.source==="registry") && r.unitItemKey){
                       effectiveUid=r.unitItemKey;
                       effectiveVal=r.unitItemVal||{n:r.itemName, s:serial, u:r.unit||"גדודי", t:"unit", cabName:""};
                     }
-                    if(!effectiveUid) return null;
+                    if(!effectiveUid){
+                      // יצור entry וירטואלי כדי לאפשר שיוך ארון
+                      effectiveUid="loc_"+serial;
+                      effectiveVal={n:r.itemName, s:serial, u:r.unit||"גדודי", t:"unit", cabName:""};
+                    }
                     const curUnit=effectiveVal?.u||effectiveVal?.unit||"גדודי";
                     const curCab=effectiveVal?.cabName||"";
                     const cabList=db.cabinetNames?.[curUnit]||["כנה "+curUnit,"ארון "+curUnit+" 1","ארון "+curUnit+" 2"];
