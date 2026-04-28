@@ -3241,6 +3241,17 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
         delete newUnitItems2[keyToDelete];
         fbSet("db/unitItems/"+keyToDelete, null).catch(()=>{});
       }
+      // מחק כל unitItem נוסף עם אותו צ (מנע כפילויות)
+      if(i.serial){
+        const srlCheck=String(i.serial);
+        Object.keys(newUnitItems2).forEach(k=>{
+          const v=newUnitItems2[k];
+          if(cleanItemName(v.n||v.name||"")===cleanItemName(i.name)&&String(v.s||v.serial||"")===srlCheck){
+            delete newUnitItems2[k];
+            fbSet("db/unitItems/"+k,null).catch(()=>{});
+          }
+        });
+      }
     });
     ndb={...ndb, unitItems:newUnitItems2};
     // שמור רק unitItems שהשתנו
@@ -7838,6 +7849,33 @@ function ResetTab({db, setDb, auth}){
             </div>)}
           </>);
         })()}
+
+        <button onClick={async()=>{
+          // מצא כל unitItems שהצ שלהם מופיע גם ב-assignments (כפילות)
+          const assignedSerials=new Set();
+          getSoldiers(db).forEach(sol=>{
+            Object.values(db.assignments?.[sol.id]||{}).forEach(val=>{
+              if(val&&val!==1) assignedSerials.add(String(val));
+            });
+          });
+          const dups=Object.entries(db.unitItems||{}).filter(([,v])=>{
+            const s=String(v.s||v.serial||"");
+            return s && assignedSerials.has(s);
+          });
+          if(!dups.length){alert("✅ אין כפילויות");return;}
+          if(!window.confirm("נמצאו "+dups.length+" unitItems שהצ שלהם גם ב-assignments:\n"+
+            dups.slice(0,10).map(([,v])=>(v.n||v.name||"")+" צ:"+( v.s||v.serial||"")).join("\n")+
+            "\n\nלמחוק אותם?")) return;
+          for(const [uid] of dups){
+            await fbSet("db/unitItems/"+uid,null).catch(()=>{});
+          }
+          setDb(prev=>{
+            const ui={...prev.unitItems};
+            dups.forEach(([uid])=>delete ui[uid]);
+            return{...prev,unitItems:ui};
+          });
+          alert("✅ נמחקו "+dups.length+" כפילויות");
+        }} style={{...S.btn("red"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות (unitItems שגם ב-assignments)</button>
 
         <button onClick={()=>{
           const serial = window.prompt("הכנס מספר צ או סידורי לחיפוש:");
