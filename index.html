@@ -10058,9 +10058,26 @@ function VisutTab({db, setDb, soldiers, auth}){
                           return <div style={{marginTop:4,borderTop:"1px solid var(--color-border-muted)",paddingTop:4}}>
                             {solList.map(s=>{
                               const sig=db.signatures?.[s.id];
-                              return <div key={s.id} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"1px 0"}}>
-                                <span style={{color:"var(--color-text-primary)"}}>{s.name}</span>
-                                <span style={{color:sig?"var(--color-success-fg)":"var(--color-warning-fg)",fontWeight:600}}>{sig?"✅":"⏳"}</span>
+                              return <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,padding:"2px 0",gap:4}}>
+                                <span style={{color:"var(--color-text-primary)",flex:1}}>{s.name}</span>
+                                <span style={{color:sig?"var(--color-success-fg)":"var(--color-warning-fg)",fontWeight:600,whiteSpace:"nowrap"}}>{sig?"✅":"⏳"}</span>
+                                {(auth.role==="admin"||auth.username==="מתן"||auth.username==="יעקב")&&!sig&&(
+                                  <button onClick={e=>{e.stopPropagation();
+                                    if(!window.confirm("לשנות שיוך "+expandedItem+" משיוך מ-"+s.name+"?")) return;
+                                    // הסר מהחייל הנוכחי
+                                    const asgn={...(db.assignments?.[s.id]||{})};
+                                    const keyToRemove=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(expandedItem));
+                                    const removedSerial=keyToRemove?asgn[keyToRemove]:null;
+                                    if(keyToRemove) delete asgn[keyToRemove];
+                                    fbSet("db/assignments/"+s.id,sanitizeForFirebase(asgn)).catch(()=>{});
+                                    setDb(prev=>({...prev,assignments:{...prev.assignments,[s.id]:asgn}}));
+                                    // החזר ל-unitItems
+                                    const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+                                    const newUI={n:expandedItem,s:removedSerial&&removedSerial!==1?String(removedSerial):null,u:u,t:"unit",addedAt:new Date().toLocaleDateString("he-IL")};
+                                    fbSet("db/unitItems/"+uid,sanitizeForFirebase(newUI)).catch(()=>{});
+                                    setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:newUI}}));
+                                  }} style={{...S.btn("orange"),padding:"1px 6px",fontSize:9,whiteSpace:"nowrap"}}>🔄 שנה</button>
+                                )}
                               </div>;
                             })}
                           </div>;
