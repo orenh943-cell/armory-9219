@@ -12733,7 +12733,18 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                           const isKne=nc.startsWith("כנה ");
                           const destUnit=isKne?nc.replace("כנה ",""):(effectiveVal?.u||curUnit||"גדודי");
                           // שמור unitItem — צור אמיתי אם וירטואלי
-                          const realUid=effectiveUid.startsWith("loc_")?"loc_real_"+Date.now():effectiveUid;
+                          // מחק unitItems כפולים עם אותו צ לפני שמירה
+                          const newUIBase4={...(db.unitItems||{})};
+                          if(serial){
+                            Object.keys(newUIBase4).forEach(k=>{
+                              const v=newUIBase4[k];
+                              if(String(v.s||v.serial||"")===serial){
+                                delete newUIBase4[k];
+                                fbSet("db/unitItems/"+k,null).catch(()=>{});
+                              }
+                            });
+                          }
+                          const realUid=("loc_real_"+Date.now());
                           const updatedUI={n:nm,s:serial||null,u:destUnit,t:"unit",cabName:isKne?"":nc};
                           fbSet("db/unitItems/"+realUid,sanitizeForFirebase(updatedUI)).catch(()=>{});
                           setDb(prev=>({...prev,unitItems:{...prev.unitItems,[realUid]:updatedUI}}));
