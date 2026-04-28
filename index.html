@@ -18566,7 +18566,7 @@ ${exitLink}
       {bulkExitModal&&<BulkExitSignModal db={db} setDb={setDb} soldiers={soldiers} auth={auth} onClose={()=>setBulkExitModal(false)}/>}
       {bulkSendModal&&<BulkSendModal db={db} soldiers={soldiers} onClose={()=>setBulkSendModal(false)} sendWhatsApp={sendWhatsApp} sendExitFormWA={sendExitFormWA}/>}
       {dailyType&&<DailyModal db={db} onClose={()=>setDailyType(null)} type={dailyType} auth={auth} soldiers={soldiers} onSaveHtml={(key,entry)=>setDb(prev=>({...prev,dailyFormsHtml:{...(prev.dailyFormsHtml||{}),[key]:entry}}))}/>}
-      {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db}/>}
+      {searchModal&&<SearchModal onClose={()=>setSearchModal(false)} soldiers={soldiers} db={db} setDb={setDb}/>}
       {dashModal&&<DashDetailModal type={dashModal} soldiers={soldiers} db={db} onClose={()=>setDashModal(null)}/>}
       {showProfile&&<UserProfileModal auth={auth} db={db} setDb={setDb} onClose={()=>setShowProfile(false)}/>}
     </div>
