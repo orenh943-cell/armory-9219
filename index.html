@@ -9288,7 +9288,14 @@ function CabinetsTab({db, setDb, auth}){
         }
       }
     });
-    return [...custom, ...fromUnitItems, ...fromAssignmentMeta];
+    // dedup by serial — custom גובר
+    const seen = new Set();
+    const result = [];
+    for(const item of [...custom, ...fromUnitItems, ...fromAssignmentMeta]){
+      const key = item.serial ? String(item.serial) : (item.alias||item.fullname||"")+"|"+(item.soldierName||"");
+      if(!seen.has(key)){ seen.add(key); result.push(item); }
+    }
+    return result;
   }
   function saveItems(cabName, items){
     const ndb={...db, cabinets:{...(db.cabinets||{}), [cabName]:items}};
