@@ -9856,7 +9856,9 @@ function CabinetsTab({db, setDb, auth}){
              const n=cleanItemName(v.n||v.name||"");
              if(bundleAccessoryNames.has(n)) return false;
              const hasCab=v.cabName&&v.cabName.trim()&&v.cabName!=="UNPLACED";
-             if((u!==selectedUnit&&u!=="פנוי"&&u!=="גדודי")||t!=="unit"||hasCab) return false;
+             // פנוי/גדודי מופיע רק בגדודי, שאר הפלוגות רק הפריטים שלהן
+             const showHere = u===selectedUnit || (selectedUnit==="גדודי" && (u==="פנוי"||u==="גדודי"||u===""));
+             if(!showHere||t!=="unit"||hasCab) return false;
              const key=(v.s||v.serial)?String(v.s||v.serial):n;
              if(seenUnloc.has(key)) return false;
              seenUnloc.add(key);
