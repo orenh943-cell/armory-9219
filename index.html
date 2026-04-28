@@ -12429,7 +12429,7 @@ function DashDetailModal({type, soldiers, db, onClose}){
 }
 
 // =================== SEARCH MODAL (חיפוש צ / סידורי) ===================
-function SearchModal({onClose, soldiers, db, auth}){
+function SearchModal({onClose, soldiers, db, setDb, auth}){
   const [q, setQ] = React.useState("");
   const [searchItem, setSearchItem] = React.useState("");
   const allSols = React.useMemo(()=>getSoldiers(db),[db,soldiers]);
