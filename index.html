@@ -8844,7 +8844,7 @@ function LoginLogTab({db}){
   const entries = React.useMemo(()=>{
     return Object.values(db.loginLog||{})
       .sort((a,b)=>(b.ts||0)-(a.ts||0))
-      .slice(0, 200);
+      .slice(0, 1000);
   },[db.loginLog]);
 
   const ROLE_LABELS = {admin:"מנהל",manager:"מנפק",viewer:"צפייה",custom:"מותאם"};
@@ -9717,7 +9717,7 @@ function VisutTab({db, setDb, soldiers, auth}){
           if(cleanItemName(k)===name) liveByUnit[s.unit]=(liveByUnit[s.unit]||0)+1;
         });
       });
-      const liveTotal=Object.values(liveByUnit).reduce((a,b)=>a+b,0);
+      const liveTotal=getLiveCount(name,db); // מקור אחד — כולל orphans
       // חיילים vs פלוגה
       const toSoldiers={}, toUnits={};
       UNITS.forEach(u=>{ toSoldiers[u]=0; toUnits[u]=0; });
@@ -10815,7 +10815,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 </tr>
               </thead>
               <tbody>
-                {filteredSerials.slice(0,200).map((r,i)=>(
+                {filteredSerials.slice(0,1600).map((r,i)=>(
                   <tr key={r.name+r.serial} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-canvas)",borderBottom:"1px solid var(--color-border-muted)"}}>
                     <td style={{...S.td,color:"var(--color-text-muted)",fontSize:"var(--text-xs)"}}>{i+1}</td>
                     <td style={{...S.td,fontWeight:WEAPON_KEYS.includes(r.name)?700:400,color:WEAPON_KEYS.includes(r.name)?"var(--color-danger-fg)":"var(--color-text-primary)"}}>{r.name}</td>
@@ -10855,7 +10855,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 ))}
               </tbody>
             </table>
-            {filteredSerials.length>200&&<div style={{padding:"8px 16px",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center"}}>מציג 200 מתוך {filteredSerials.length} — סנן לצמצום</div>}
+            {filteredSerials.length>1600&&<div style={{padding:"8px 16px",color:"var(--color-text-secondary)",fontSize:"var(--text-sm)",textAlign:"center"}}>מציג 200 מתוך {filteredSerials.length} — סנן לצמצום</div>}
             {filteredSerials.length===0&&<div style={{padding:32,textAlign:"center",color:"var(--color-text-secondary)"}}>לא נמצאו תוצאות</div>}
           </div>
         </div>
