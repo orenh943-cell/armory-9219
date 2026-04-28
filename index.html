@@ -9849,8 +9849,21 @@ function CabinetsTab({db, setDb, auth}){
                return [...arr,...dyn];
              })
            );
+           // צ שיצאו לחיילים חתומים — לא מציגים
+           const signedIds2=new Set(Object.keys(db.signatures||{}));
+           const assignedSignedSerials=new Set();
+           getSoldiers(db).forEach(sol=>{
+             if(signedIds2.has(sol.id)){
+               Object.values(db.assignments?.[sol.id]||{}).forEach(val=>{
+                 if(val&&val!==1) assignedSignedSerials.add(String(val));
+               });
+             }
+           });
            const seenUnloc=new Set();
            const unassigned=Object.entries(db.unitItems||{}).filter(([uid,v])=>{
+             // אם הצ אצל חייל חתום — לא בארמון
+             const srl=String(v.s||v.serial||"");
+             if(srl && assignedSignedSerials.has(srl)) return false;
              const u=v.u||v.unit||"";
              const t=v.t||v.assignedType||"unit";
              const n=cleanItemName(v.n||v.name||"");
@@ -9864,15 +9877,34 @@ function CabinetsTab({db, setDb, auth}){
              seenUnloc.add(key);
              return true;
            });
-           if(!unassigned.length) return null;
+           // הוסף גם נשקים משויכים לחיילים לא חתומים ללא מיקום
+           const signedIds=new Set(Object.keys(db.signatures||{}));
+           const soldierItems=[];
+           const seenSoldierItems=new Set();
+           getSoldiers(db).filter(s=>s.unit===selectedUnit&&!signedIds.has(s.id)).forEach(sol=>{
+             const meta=(db.assignmentMeta||{})[sol.id]||{};
+             Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{
+               const n=cleanItemName(name);
+               const serial=val&&val!==1?String(val):null;
+               const cabName=(meta[n]||meta[name.replace(/[.#$\[\]"]/g,"")])?.cabName||"";
+               if(cabName) return; // כבר ממוקם
+               const key=serial||(n+"_"+sol.id);
+               if(seenSoldierItems.has(key)) return;
+               seenSoldierItems.add(key);
+               soldierItems.push({uid:"sol_"+sol.id+"_"+n, v:{n,s:serial,u:selectedUnit,t:"unit",cabName:""},
+                 soldierName:sol.name, soldierId:sol.id, itemKey:name});
+             });
+           });
+           const allUnplaced=[...unassigned.map(([uid,v])=>({uid,v,soldierName:null,soldierId:null,itemKey:null})),...soldierItems];
+           if(!allUnplaced.length) return null;
            const filteredUnloc=unlocSearch.trim()
-             ? unassigned.filter(([,v])=>{
+             ? allUnplaced.filter(({v,soldierName})=>{
                  const n=cleanItemName(v.n||v.name||"").toLowerCase();
                  const s=String(v.s||v.serial||"");
                  const q=unlocSearch.trim().toLowerCase();
-                 return n.includes(q)||s.includes(q);
+                 return n.includes(q)||s.includes(q)||(soldierName&&soldierName.toLowerCase().includes(q));
                })
-             : unassigned;
+             : allUnplaced;
            const thisCabs=getCabNames(selectedUnit);
            const otherCabOptions=Object.keys(UNIT_CABINETS_DEFAULT)
              .filter(u2=>u2!==selectedUnit)
@@ -9882,35 +9914,44 @@ function CabinetsTab({db, setDb, auth}){
                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                  marginBottom:8,borderBottom:"1px solid var(--color-border-muted)",paddingBottom:8,flexWrap:"wrap",gap:6}}>
                  <span style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-warning-fg)"}}>
-                   ⚠️ לא נרשם ארון ({unassigned.length})
+                   ⚠️ לא נרשם ארון ({allUnplaced.length})
                  </span>
                  <input value={unlocSearch} onChange={e=>setUnlocSearch(e.target.value)}
                    placeholder="🔍 חפש שם או צ..."
                    style={{...S.input,marginBottom:0,fontSize:11,maxWidth:180}}/>
                </div>
-               {filteredUnloc.map(([uid,v])=>(
+               {filteredUnloc.map(({uid,v,soldierName,soldierId,itemKey})=>(
                  <div key={uid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                    padding:"5px 0",borderBottom:"1px solid var(--color-bg-canvas)",gap:6,flexWrap:"wrap"}}>
                    <div style={{fontSize:"var(--text-sm)",flex:1,minWidth:120}}>
                      <span style={{fontWeight:600}}>{cleanItemName(v.n||v.name||"")}</span>
                      {(v.s||v.serial)&&<span style={{fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)",marginRight:6}}> · צ: {v.s||v.serial}</span>}
-                     {(v.u||v.unit||"")!==selectedUnit&&<span style={{fontSize:10,background:"var(--color-warning-subtle)",color:"var(--color-warning-fg)",borderRadius:4,padding:"1px 5px",marginRight:4}}>פלוגה {v.u||v.unit||""}</span>}
+                     {soldierName&&<span style={{fontSize:10,color:"var(--color-text-muted)",marginRight:4}}>👤 {soldierName}</span>}
                    </div>
                    <select defaultValue="" onChange={e=>{
                      const newCab=e.target.value;
                      if(!newCab) return;
                      const destUnit=newCab.startsWith("כנה ")?newCab.replace("כנה ",""):selectedUnit;
-                     const updated={...v,cabName:newCab,u:destUnit};
-                     fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
-                     setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                     if(soldierId&&itemKey){
+                       // פריט של חייל — שמור ב-assignmentMeta
+                       const safeKey=itemKey.replace(/[.#$\[\]"]/g,"");
+                       fbSet("db/assignmentMeta/"+soldierId+"/"+safeKey+"/cabName",newCab).catch(()=>{});
+                       setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[soldierId]:{...(prev.assignmentMeta?.[soldierId]||{}),[safeKey]:{...(prev.assignmentMeta?.[soldierId]?.[safeKey]||{}),cabName:newCab}}}}));
+                     } else {
+                       // unitItem — עדכן cabName
+                       const updated={...v,cabName:newCab,u:destUnit};
+                       fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
+                       setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                     }
                      if(!newCab.startsWith("כנה ")){
                        const nm=cleanItemName(v.n||v.name||"");
                        const srl=String(v.s||v.serial||"")||null;
                        const existing=db.cabinets?.[newCab]||[];
                        const alreadyIn=srl&&existing.some(it=>String(it.serial||"")===srl);
                        if(!alreadyIn){
+                         const lbl=soldierName||"בארמון";
                          const newItems=[...existing,{alias:nm,fullname:nm,qty:1,serial:srl,
-                           makat:getMakat(nm,db)||"",soldierName:"בארמון",signed:false}];
+                           makat:getMakat(nm,db)||"",soldierName:lbl,signed:false}];
                          fbSet("db/cabinets/"+encodeURIComponent(newCab),newItems).catch(()=>{});
                          setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[newCab]:newItems}}));
                        }
