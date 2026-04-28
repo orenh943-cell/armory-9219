@@ -9886,7 +9886,10 @@ function CabinetsTab({db, setDb, auth}){
              Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{
                const n=cleanItemName(name);
                const serial=val&&val!==1?String(val):null;
-               const cabName=(meta[n]||meta[name.replace(/[.#$\[\]"]/g,"")])?.cabName||"";
+               // חפש cabName בכל דרך אפשרית
+               const metaVal=meta[name]||meta[n]||meta[name.replace(/[.#$\[\]"]/g,"")]||
+                 Object.entries(meta).find(([k])=>cleanItemName(k)===n)?.[1];
+               const cabName=metaVal?.cabName||"";
                if(cabName) return; // כבר ממוקם
                const key=serial||(n+"_"+sol.id);
                if(seenSoldierItems.has(key)) return;
