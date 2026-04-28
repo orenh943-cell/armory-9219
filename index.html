@@ -9312,6 +9312,7 @@ function CabinetsTab({db, setDb, auth}){
   const [showSugg, setShowSugg] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [cabSearch, setCabSearch] = React.useState("");
+  const [unlocSearch, setUnlocSearch] = React.useState("");
 
   const UNIT_CABINETS_DEFAULT = {
     "א":       ["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],
@@ -9841,8 +9842,6 @@ function CabinetsTab({db, setDb, auth}){
 
          {/* ארון "לא נרשם ארון" — unitItems ללא cabName */}
          {(()=>{
-           const [unlocSearch, setUnlocSearch] = React.useState("");
-           // אביזרי חבילה עוברים עם הנשק — לא צריך למקם בנפרד
            const bundleAccessoryNames=new Set(
              Object.values(WEAPON_BUNDLES).flatMap(b=>{
                const arr=Array.isArray(b)?b:((b&&b.fixed)||[]);
@@ -9851,19 +9850,20 @@ function CabinetsTab({db, setDb, auth}){
              })
            );
            const seenUnloc=new Set();
-           const unassigned = Object.entries(db.unitItems||{}).filter(([uid,v])=>{
-             const u = v.u||v.unit||"";
-             const t = v.t||v.assignedType||"unit";
+           const unassigned=Object.entries(db.unitItems||{}).filter(([uid,v])=>{
+             const u=v.u||v.unit||"";
+             const t=v.t||v.assignedType||"unit";
              const n=cleanItemName(v.n||v.name||"");
-             if(bundleAccessoryNames.has(n)) return false; // אביזר חבילה
-             const hasCab = v.cabName&&v.cabName.trim()&&v.cabName!=="UNPLACED";
-             if(u!==selectedUnit || t!=="unit" || hasCab) return false;
-              if(u!==selectedUnit && u!=="פנוי" && u!=="גדודי" || t!=="unit" || hasCab) return false;
+             if(bundleAccessoryNames.has(n)) return false;
+             const hasCab=v.cabName&&v.cabName.trim()&&v.cabName!=="UNPLACED";
+             if((u!==selectedUnit&&u!=="פנוי"&&u!=="גדודי")||t!=="unit"||hasCab) return false;
+             const key=(v.s||v.serial)?String(v.s||v.serial):n;
              if(seenUnloc.has(key)) return false;
              seenUnloc.add(key);
              return true;
            });
-           const filteredUnloc = unlocSearch.trim()
+           if(!unassigned.length) return null;
+           const filteredUnloc=unlocSearch.trim()
              ? unassigned.filter(([,v])=>{
                  const n=cleanItemName(v.n||v.name||"").toLowerCase();
                  const s=String(v.s||v.serial||"");
@@ -9871,12 +9871,10 @@ function CabinetsTab({db, setDb, auth}){
                  return n.includes(q)||s.includes(q);
                })
              : unassigned;
-           if(!unassigned.length) return null;
-           // ארונות הפלוגה הנוכחית ראשונים, אחר כך שאר הפלוגות
            const thisCabs=getCabNames(selectedUnit);
            const otherCabOptions=Object.keys(UNIT_CABINETS_DEFAULT)
-             .filter(u=>u!==selectedUnit)
-             .flatMap(u=>getCabNames(u).map(cn=>({cn,u})));
+             .filter(u2=>u2!==selectedUnit)
+             .flatMap(u2=>getCabNames(u2).map(cn=>({cn,u:u2})));
            return (
              <div style={{...S.card,marginBottom:0,border:"2px dashed var(--color-warning-fg)"}}>
                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
@@ -9899,7 +9897,7 @@ function CabinetsTab({db, setDb, auth}){
                    <select defaultValue="" onChange={e=>{
                      const newCab=e.target.value;
                      if(!newCab) return;
-                      const destUnit=newCab.startsWith("כנה ")?newCab.replace("כנה ",""):selectedUnit;
+                     const destUnit=newCab.startsWith("כנה ")?newCab.replace("כנה ",""):selectedUnit;
                      const updated={...v,cabName:newCab,u:destUnit};
                      fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
                      setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
@@ -9918,14 +9916,10 @@ function CabinetsTab({db, setDb, auth}){
                    }} style={{...S.input,marginBottom:0,fontSize:11,padding:"2px 4px",maxWidth:160}}>
                      <option value="">— שייך לארון —</option>
                      <optgroup label={"פלוגה "+selectedUnit}>
-                       {thisCabs.map(cn=>(
-                         <option key={cn} value={cn}>{cn}</option>
-                       ))}
+                       {thisCabs.map(cn=>(<option key={cn} value={cn}>{cn}</option>))}
                      </optgroup>
                      <optgroup label="פלוגות אחרות">
-                       {otherCabOptions.map(({cn,u})=>(
-                         <option key={u+cn} value={cn}>{cn} ({u})</option>
-                       ))}
+                       {otherCabOptions.map(({cn,u})=>(<option key={u+cn} value={cn}>{cn} ({u})</option>))}
                      </optgroup>
                    </select>
                  </div>
