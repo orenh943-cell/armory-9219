@@ -3913,9 +3913,8 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                 );
               })()}
               {item.name&&item.fromUnit&&(()=>{
-                const hasSerial=getSerials(db).some(s=>cleanItemName(s.name)===cleanItemName(item.name));
-                if(!hasSerial) return null;
                 const avSerials=getAvailableSerials(db,soldiers,item.name,item.fromUnit);
+                if(!avSerials.length) return null;
                 return (
                   <select value={item.serial||""} onChange={e=>{const n=[...newItems];n[i]={...n[i],serial:e.target.value};setNewItems(n);}}
                     style={{...S.input,marginBottom:0,fontFamily:"monospace",fontSize:"var(--text-sm)",
@@ -3924,7 +3923,6 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
                     {avSerials.map(({serial})=>(
                       <option key={serial} value={serial}>{serial}</option>
                     ))}
-                    {avSerials.length===0&&<option disabled value="">אין צ זמינים בפלוגה זו</option>}
                   </select>
                 );
               })()}
