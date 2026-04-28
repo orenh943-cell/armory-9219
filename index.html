@@ -12628,12 +12628,9 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                     // אם אין unitItem — בדוק אם יש חייל לא חתום עם הצ הזה
                     let effectiveUid=uid, effectiveVal=uiVal;
                     if(!uid && r.source==="soldier" && r.soldier){
-                      const sig=db.signatures?.[r.soldier.id];
-                      if(!sig){
-                        // צור/עדכן unitItem עם ה-soldier assignment
-                        effectiveUid="loc_"+serial;
-                        effectiveVal={n:r.itemName, s:serial, u:r.soldier.unit||"גדודי", t:"unit", cabName:""};
-                      }
+                      // גם חתום וגם לא חתום — אפשר להגדיר מיקום
+                      effectiveUid="loc_"+serial;
+                      effectiveVal={n:r.itemName, s:serial, u:r.soldier.unit||"גדודי", t:"unit", cabName:""};
                     }
                     if(!effectiveUid) return null;
                     const curUnit=effectiveVal?.u||effectiveVal?.unit||"גדודי";
@@ -12653,7 +12650,23 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                         </select>
                         <select value={curCab} onChange={e=>{
                           const nc=e.target.value;
-                          if(!nc) return;
+                          if(nc===""){
+                            // ניקוי ארון — שמור cabName ריק
+                            const updated={...effectiveVal,cabName:""};
+                            fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
+                            setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
+                            if(r.source==="soldier"&&r.soldier){
+                              const solId=r.soldier.id;
+                              const asgn=db.assignments?.[solId]||{};
+                              const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(r.itemName));
+                              if(itemKey){
+                                const safeKey=itemKey.replace(/[.#$\[\]"]/g,"");
+                                fbSet("db/assignmentMeta/"+solId+"/"+safeKey+"/cabName","").catch(()=>{});
+                                setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[safeKey]:{...(prev.assignmentMeta?.[solId]?.[safeKey]||{}),cabName:""}}}}));
+                              }
+                            }
+                            return;
+                          }
                           const updated={...effectiveVal,cabName:nc};
                           fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
                           setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
