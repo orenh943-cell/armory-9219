@@ -7662,7 +7662,7 @@ function ResetTab({db, setDb, auth}){
               cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
             ).length;
             
-            const live = soldierCount + unitCount;
+            const live = getLiveCount(name, db);
             const diff = live - total;
             const status = diff>0?"❌ עודף +"+diff : diff<0?"⚠️ חסר "+diff : "✅";
             const dups = dupSoldiers.length>0?" כפילויות:"+dupSoldiers.join(","):"";
@@ -7875,7 +7875,7 @@ function ResetTab({db, setDb, auth}){
           }
         });
         const live=getLiveCount(name,db);
-        return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:unsignedCount+unitCount};
+        return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:live-signedCount};
       }).sort((a,b)=>{
         // מיון לפי מקט עולה, אם אין מקט — בסוף
         if(!a.makat&&!b.makat) return a.name.localeCompare(b.name,"he");
