@@ -3234,10 +3234,10 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
       // הערה: אם fromUnit="גדודי" והפריט הגיע מ-armoryMaster (ולא מ-unitItems), freeKeys יהיה ריק
       // וזה בסדר — armoryMaster מחושב דינמית לפי (total - assigned - unitItems)
       for(let q=0;q<Math.min(qty,freeKeys.length);q++){
-        newUnitItems2[freeKeys[q]]={...newUnitItems2[freeKeys[q]],
-          t:"soldier",assignedType:"soldier",
-          si:soldier.id,assignedSoldierId:soldier.id,
-          sn:soldier.name,assignedSoldierName:soldier.name};
+        // מחק מ-unitItems לגמרי — הפריט עבר לחייל (assignments)
+        const keyToDelete=freeKeys[q];
+        delete newUnitItems2[keyToDelete];
+        fbSet("db/unitItems/"+keyToDelete, null).catch(()=>{});
       }
     });
     ndb={...ndb, unitItems:newUnitItems2};
@@ -12520,8 +12520,11 @@ function SearchModal({onClose, soldiers, db}){
                           // אם ארון רגיל (לא כנה) — הוסף גם ל-db.cabinets
                           if(!nc.startsWith("כנה ")){
                             const serial=String(r.serial||"");
-                            const nm=cleanItemName(r.itemName||"");
-                            const makat=db.armoryMaster?.[nm]?.makat||getMakat(nm)||"";
+                            const rawNm=r.itemName||"";
+                            const nm=cleanItemName(rawNm);
+                            // מצא מקט מ-armoryMaster לפי שם נקי
+                            const masterEntry=Object.entries(db.armoryMaster||{}).find(([k])=>cleanItemName(k)===nm);
+                            const makat=masterEntry?.[1]?.makat||getMakat(nm,db)||"";
                             const existingItems=db.cabinets?.[nc]||[];
                             const alreadyIn=existingItems.some(it=>String(it.serial||"")===serial&&cleanItemName(it.alias||"")===nm);
                             if(!alreadyIn){
