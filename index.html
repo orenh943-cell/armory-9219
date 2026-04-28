@@ -3231,6 +3231,13 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
       for(let q=0;q<Math.min(qty,freeKeys.length);q++){
         // מחק מ-unitItems לגמרי — הפריט עבר לחייל (assignments)
         const keyToDelete=freeKeys[q];
+        const deletedItem=newUnitItems2[keyToDelete];
+        // שמור cabName ב-assignmentMeta לפני המחיקה
+        if(deletedItem?.cabName){
+          const safeKey=cleanItemName(i.name).replace(/[.#$\[\]"]/g,"");
+          fbSet("db/assignmentMeta/"+soldier.id+"/"+safeKey+"/cabName",deletedItem.cabName).catch(()=>{});
+          ndb={...ndb,assignmentMeta:{...(ndb.assignmentMeta||{}),[soldier.id]:{...(ndb.assignmentMeta?.[soldier.id]||{}),[safeKey]:{...(ndb.assignmentMeta?.[soldier.id]?.[safeKey]||{}),cabName:deletedItem.cabName}}}};
+        }
         delete newUnitItems2[keyToDelete];
         fbSet("db/unitItems/"+keyToDelete, null).catch(()=>{});
       }
@@ -3290,27 +3297,26 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     retSel.forEach(name=>{
       const serial=assigned[name]; const sStr=isSerial(serial)?String(serial):null; const rowKey=cleanItemName(name)+(sStr||""); const rc=finalRetCabinet[rowKey]||finalRetCabinet[name]||finalRetCabinet[cleanItemName(name)];
       if(rc?.inCabinet && rc.cabName){
-        if(signoffMode){
-          // זיכוי: הציוד בארון אבל עדיין שייך לחייל — סמן soldierId
-          const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
-            alias:name, fullname:name, qty:1,
-            serial:serial&&serial!==1?String(serial):null,
-            makat:getMakat(name)||null,
-            soldierId:soldier.id, soldierName:soldier.name,
-            signedOff:true, signedOffAt:new Date().toLocaleDateString("he-IL"),
-          }];
-          ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
-          fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
-        } else {
-          // ביטול שיוך: הציוד חוזר לארמון — returnedFrom
-          const cabItems=[...(ndb.cabinets?.[rc.cabName]||[]),{
-            alias:name, fullname:name, qty:1,
-            serial:serial&&serial!==1?String(serial):null,
-            makat:getMakat(name)||null,
-            returnedFrom:soldier.name, returnedAt:new Date().toLocaleDateString("he-IL"),
-          }];
-          ndb={...ndb, cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
-          fbSet("db/cabinets/"+encodeURIComponent(rc.cabName), cabItems).catch(()=>{});
+        {
+          // הסר את כל השורות הקיימות של הפריט הזה מהארון (מנע כפילויות)
+          const sStrCab=serial&&serial!==1?String(serial):null;
+          const nm=cleanItemName(name);
+          const existingCab=ndb.cabinets?.[rc.cabName]||[];
+          const filtered=sStrCab
+            ? existingCab.filter(it=>String(it.serial||"")!==sStrCab)
+            : existingCab.filter(it=>cleanItemName(it.alias||it.fullname||"")!==nm);
+          // הוסף שורה חדשה לפי מצב
+          const newEntry=signoffMode
+            ? {alias:name,fullname:name,qty:1,serial:sStrCab,makat:getMakat(name)||null,
+               soldierId:soldier.id,soldierName:soldier.name,
+               signedOff:true,signedOffAt:new Date().toLocaleDateString("he-IL")}
+            : {alias:name,fullname:name,qty:1,serial:sStrCab,makat:getMakat(name)||null,
+               returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+          const cabItems=[...filtered,newEntry];
+          ndb={...ndb,cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
+          fbSet("db/cabinets/"+encodeURIComponent(rc.cabName),cabItems).catch(()=>{});
+        }
+        if(!signoffMode){
           // unitItems רק בביטול שיוך אמיתי
           const cabUnit=(()=>{
             const cabN=rc.cabName||"";
