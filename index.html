@@ -1931,7 +1931,7 @@ function SoldierSignView({auth,onLogout,db,setDb}){
     return ()=>off2();
   },[]);
 
-  const customSoldier = soldier || Object.values(db.customSoldiers||{}).find(s=>s.id===auth.soldierId);
+  const customSoldier = soldier || Object.values(db.customSoldiers||{}).find(s=>String(s.id)===String(auth.soldierId)) || getSoldiers(db).find(s=>String(s.id)===String(auth.soldierId));
   if(!customSoldier) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,padding:24}}>
     <div style={{fontSize:40}}>⚠️</div>
     <div style={{fontWeight:700,fontSize:16,color:"var(--color-warning-fg)"}}>החייל לא נמצא במערכת</div>
@@ -12404,6 +12404,41 @@ function SearchModal({onClose, soldiers, db}){
                     {r.source!=="soldier"&&`פלוגה ${r.unit||"—"}`}
                     {r.broken&&" · ⚠️ תקול"}
                   </div>
+                  {(()=>{
+                    const serial=String(r.serial||"");
+                    const uiEntry=Object.entries(db.unitItems||{}).find(([,v])=>String(v.s||v.serial||"")===serial);
+                    const uid=uiEntry?.[0]; const uiVal=uiEntry?.[1];
+                    if(!uid) return null;
+                    const UNITS_LIST=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+                    const curUnit=uiVal?.u||uiVal?.unit||"גדודי";
+                    const curCab=uiVal?.cabName||"";
+                    const cabList=db.cabinetNames?.[curUnit]||["כנה "+curUnit,"ארון "+curUnit+" 1","ארון "+curUnit+" 2"];
+                    return (
+                      <div style={{marginTop:6,padding:"6px 8px",background:"var(--color-bg-default)",borderRadius:6,
+                        border:"1px solid var(--color-border-muted)",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                        <span style={{fontSize:10,fontWeight:700}}>📍 מיקום:</span>
+                        <select value={curUnit} onChange={e=>{
+                          const nu=e.target.value;
+                          const updated={...uiVal,u:nu,cabName:""};
+                          fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
+                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                        }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
+                          {UNITS_LIST.map(u=><option key={u} value={u}>{u==="גדודי"?"גדודי":u}</option>)}
+                        </select>
+                        <select value={curCab} onChange={e=>{
+                          const nc=e.target.value;
+                          const updated={...uiVal,cabName:nc};
+                          fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
+                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                        }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
+                          <option value="">— ללא ארון —</option>
+                          {cabList.map(cn=><option key={cn} value={cn}>{cn}</option>)}
+                        </select>
+                        {curCab?<span style={{fontSize:10,color:"var(--color-success-fg)",fontWeight:600}}>✅ {curCab}</span>
+                          :<span style={{fontSize:10,color:"var(--color-warning-fg)"}}>⚠️ לא נרשם ארון</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
