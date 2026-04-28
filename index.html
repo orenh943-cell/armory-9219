@@ -3297,56 +3297,71 @@ function SoldierDetail({soldier,db,onClose,onSave,onSendWA,onSendExitWA,onSendTe
     retSel.forEach(name=>{
       const serial=assigned[name]; const sStr=isSerial(serial)?String(serial):null; const rowKey=cleanItemName(name)+(sStr||""); const rc=finalRetCabinet[rowKey]||finalRetCabinet[name]||finalRetCabinet[cleanItemName(name)];
       if(rc?.inCabinet && rc.cabName){
-        {
-          // הסר את כל השורות הקיימות של הפריט הזה מהארון (מנע כפילויות)
-          const sStrCab=serial&&serial!==1?String(serial):null;
-          const nm=cleanItemName(name);
+        const srlRet=serial&&serial!==1?String(serial):null;
+        const nmRet=cleanItemName(name);
+        const isKne=rc.cabName.startsWith("כנה ");
+        // מצא פלוגה מהארון
+        const cabUnitRet=(()=>{
+          if(isKne) return rc.cabName.replace("כנה ","");
+          const cabN=rc.cabName||"";
+          for(const [u,names] of Object.entries(db.cabinetNames||{})){
+            if(names.includes(cabN)) return u;
+          }
+          for(const u of ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]){
+            if(cabN.includes(u)) return u;
+          }
+          return soldier.unit||"גדודי";
+        })();
+
+        if(isKne){
+          // כנה — חזור כ-unitItem (הדרך היחידה להופיע בכנה)
+          const newUIBase2={...(ndb.unitItems||{})};
+          // מחק unitItem ישן עם אותו צ
+          if(srlRet){
+            Object.keys(newUIBase2).forEach(k=>{
+              const v=newUIBase2[k];
+              if(cleanItemName(v.n||v.name||"")===nmRet&&String(v.s||v.serial||"")===srlRet){
+                delete newUIBase2[k];
+                fbSet("db/unitItems/"+k,null).catch(()=>{});
+              }
+            });
+          }
+          const uid2="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+          newUIBase2[uid2]={n:name,s:srlRet,u:cabUnitRet,t:"unit",addedAt:new Date().toLocaleDateString("he-IL")};
+          fbSet("db/unitItems/"+uid2,sanitizeForFirebase(newUIBase2[uid2])).catch(()=>{});
+          ndb={...ndb,unitItems:newUIBase2};
+        } else {
+          // ארון רגיל — הוסף ל-db.cabinets (הסר ישן קודם)
           const existingCab=ndb.cabinets?.[rc.cabName]||[];
-          const filtered=sStrCab
-            ? existingCab.filter(it=>String(it.serial||"")!==sStrCab)
-            : existingCab.filter(it=>cleanItemName(it.alias||it.fullname||"")!==nm);
-          // הוסף שורה חדשה לפי מצב
+          const filtered=srlRet
+            ? existingCab.filter(it=>String(it.serial||"")!==srlRet)
+            : existingCab.filter(it=>cleanItemName(it.alias||it.fullname||"")!==nmRet);
           const newEntry=signoffMode
-            ? {alias:name,fullname:name,qty:1,serial:sStrCab,makat:getMakat(name)||null,
+            ? {alias:name,fullname:name,qty:1,serial:srlRet,makat:getMakat(name)||null,
                soldierId:soldier.id,soldierName:soldier.name,
                signedOff:true,signedOffAt:new Date().toLocaleDateString("he-IL")}
-            : {alias:name,fullname:name,qty:1,serial:sStrCab,makat:getMakat(name)||null,
+            : {alias:name,fullname:name,qty:1,serial:srlRet,makat:getMakat(name)||null,
                returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
           const cabItems=[...filtered,newEntry];
           ndb={...ndb,cabinets:{...(ndb.cabinets||{}),[rc.cabName]:cabItems}};
           fbSet("db/cabinets/"+encodeURIComponent(rc.cabName),cabItems).catch(()=>{});
-        }
-        if(!signoffMode){
-          // unitItems רק בביטול שיוך אמיתי
-          const cabUnit=(()=>{
-            const cabN=rc.cabName||"";
-            for(const [u,names] of Object.entries(db.cabinetNames||{})){
-              if(names.includes(cabN)) return u;
+          // צור גם unitItem כדי שיופיע במלאי
+          if(!signoffMode){
+            const newUIBase3={...(ndb.unitItems||{})};
+            if(srlRet){
+              Object.keys(newUIBase3).forEach(k=>{
+                const v=newUIBase3[k];
+                if(cleanItemName(v.n||v.name||"")===nmRet&&String(v.s||v.serial||"")===srlRet){
+                  delete newUIBase3[k];
+                  fbSet("db/unitItems/"+k,null).catch(()=>{});
+                }
+              });
             }
-            for(const u of ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]){
-              if(cabN.includes(u)) return u;
-            }
-            return "גדודי";
-          })();
-          const srl = serial&&serial!==1?String(serial):null;
-          // מחק unitItem קיים עם אותו סידורי (t:"soldier") למניעת כפילות
-          const newUIBase={...(ndb.unitItems||{})};
-          if(srl){
-            Object.keys(newUIBase).forEach(k=>{
-              const v=newUIBase[k];
-              if(cleanItemName(v.n||v.name||"")===cleanItemName(name)&&String(v.s||v.serial||"")===srl){
-                delete newUIBase[k];
-                fbSet("db/unitItems/"+k, null).catch(()=>{});
-              }
-            });
+            const uid3="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+            newUIBase3[uid3]={n:name,s:srlRet,u:cabUnitRet,t:"unit",cabName:rc.cabName,addedAt:new Date().toLocaleDateString("he-IL")};
+            fbSet("db/unitItems/"+uid3,sanitizeForFirebase(newUIBase3[uid3])).catch(()=>{});
+            ndb={...ndb,unitItems:newUIBase3};
           }
-          const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-          const newUI={...newUIBase,[uid]:{
-            n:name, s:srl,
-            u:cabUnit, t:"unit", cabName:rc.cabName,
-            addedAt:new Date().toLocaleDateString("he-IL"),
-          }};
-          ndb={...ndb, unitItems:newUI};
         }
       }
     });
@@ -9257,22 +9272,19 @@ function CabinetsTab({db, setDb, auth}){
 
   // Cabinet items stored in db.cabinets[cabName]
   function getItems(cabName){
-    // כנה = מה שיושב פיזית בארמון:
-    // 1. unitItems t=unit (מוקצה לפלוגה, לא יצא)
-    // 2. משוייך לחייל אבל לא חתום (הנשק עדיין בארמון, ממתין לחתימה)
-    // לא מופיע: משוייך + חתום (יצא פיזית מהארמון)
     if(cabName.startsWith("כנה ")){
+      // כנה = רק unitItems פיזיים בארמון (לא חיילים לא חתומים)
       const unit = cabName.replace("כנה ","");
-      const signedIds = new Set(Object.keys(db.signatures||{}));
-      const items = [];
-      // 1. unitItems t=unit — נשק בארמון (לא יצא לחייל)
       // בנה סט של כל הצ שיצאו לחיילים (assignments)
-      const allSols2=getSoldiers(db);
       const assignedSerials=new Set();
-      allSols2.forEach(sol=>{
-        const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
-        Object.values(asgn||{}).forEach(val=>{ if(val&&val!==1) assignedSerials.add(String(val)); });
+      getSoldiers(db).forEach(sol=>{
+        Object.values(db.assignments?.[sol.id]||{}).forEach(val=>{
+          if(val&&val!==1) assignedSerials.add(String(val));
+        });
       });
+      const items=[];
+      // dedup by serial
+      const seenSerials=new Set();
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
         const u=v.u||v.unit||"";
@@ -9280,96 +9292,28 @@ function CabinetsTab({db, setDb, auth}){
         if(!WEAPON_KEYS.includes(n)) return;
         if(u!==unit || t!=="unit") return;
         const serial=v.s||v.serial||null;
-        // אם הצ מופיע ב-assignments של חייל — הוא אצל החייל, לא בארמון
+        // אם הצ מופיע ב-assignments — הוא אצל החייל, לא בארמון
         if(serial && assignedSerials.has(String(serial))) return;
-        items.push({
-          alias:n, fullname:n, qty:1,
-          serial:serial?String(serial):null,
-          makat:getMakat(n)||null,
-          soldierName:"בארמון", soldierId:null,
-          signed:false,
-        });
-      });
-      // 2. משוייך לחייל + לא חתום
-      const allSolsHere=getSoldiers(db).filter(s=>s.unit===unit);
-      allSolsHere.forEach(sol=>{
-        if(signedIds.has(sol.id)) return; // חתום — יצא מהארמון
-        const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
-        if(Object.keys(asgn).length===0) return;
-        Object.entries(asgn).forEach(([name,val])=>{
-          if(!WEAPON_KEYS.includes(name)) return;
-          items.push({
-            alias:name, fullname:name, qty:1,
-            serial:val&&val!==1?String(val):null,
-            makat:getMakat(name)||null,
-            soldierName:"⏳ "+sol.name+" (לא חתם)",
-            soldierId:sol.id, signed:false,
-          });
-        });
+        // dedup
+        const key=serial?String(serial):(n+"_"+items.length);
+        if(seenSerials.has(key)) return;
+        seenSerials.add(key);
+        items.push({alias:n,fullname:n,qty:1,serial:serial?String(serial):null,makat:getMakat(n)||null,soldierName:"בארמון",soldierId:null,signed:false});
       });
       return items;
     }
-    // ארון רגיל — מיזוג: db.cabinets (ידני) + unitItems + assignmentMeta עם cabName תואם
-    const custom = db.cabinets?.[cabName] || [];
-    // פריטים מ-assignmentMeta (חיילים לא חתומים עם ארון מוגדר)
-    const fromAssignmentMeta = [];
-    const signedIds2 = new Set(Object.keys(db.signatures||{}));
-    Object.entries(db.assignmentMeta||{}).forEach(([solId, meta])=>{
-      if(signedIds2.has(solId)) return; // חתום — יצא
-      const sol = getSoldiers(db).find(s=>s.id===solId);
-      if(!sol) return;
-      Object.entries(meta||{}).forEach(([itemKey, metaVal])=>{
-        if((metaVal.cabName||"")!==cabName) return;
-        const n=cleanItemName(itemKey);
-        if(WEAPON_KEYS.includes(n)) return; // נשק → בכנה, לא כאן
-        const asgn=db._assignmentsLoaded?(db.assignments?.[solId]||{}):(db.assignments?.[solId]||{});
-        const val=asgn[itemKey]||asgn[n];
-        if(!val) return;
-        fromAssignmentMeta.push({
-          alias:n, fullname:n, qty:1,
-          serial:val&&val!==1?String(val):null,
-          makat:getMakat(n)||null,
-          soldierName:"⏳ "+sol.name+" (לא חתם)",
-          soldierId:solId, signed:false,
-        });
-      });
+    // ארון רגיל — רק db.cabinets, ללא מיזוג נוסף
+    const items = db.cabinets?.[cabName] || [];
+    // dedup by serial
+    const seen=new Set();
+    return items.filter(it=>{
+      const key=it.serial?String(it.serial):(cleanItemName(it.alias||it.fullname||"")+"_"+JSON.stringify(it));
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-    const fromUnitItems = [];
-    Object.values(db.unitItems||{}).forEach(v=>{
-      if((v.cabName||"")=== cabName){
-        const n=cleanItemName(v.n||v.name||"");
-        const serial=v.s||v.serial||null;
-        const t=v.t||v.assignedType||"unit";
-        // בנה סט של צ שכבר יצאו לחיילים
-        const allSols=getSoldiers(db);
-        const assignedSerials=new Set();
-        allSols.forEach(sol=>{
-          const asgn=db._assignmentsLoaded?(db.assignments?.[sol.id]||{}):(db.assignments?.[sol.id]||{});
-          Object.values(asgn||{}).forEach(val=>{if(val&&val!==1) assignedSerials.add(String(val));});
-        });
-        if(serial && assignedSerials.has(String(serial))) return; // אצל חייל
-        if(t!=="unit") return; // משוייך לחייל
-        // בדוק שלא כבר קיים ב-custom
-        const alreadyInCustom = custom.some(c=>(c.alias||c.fullname||"")===n && (!serial || String(c.serial||"")===String(serial)));
-        if(!alreadyInCustom){
-          fromUnitItems.push({
-            alias:n, fullname:n, qty:1,
-            serial:serial?String(serial):null,
-            makat:getMakat(n)||null,
-            fromUnitItems:true,
-          });
-        }
-      }
-    });
-    // dedup by serial — custom גובר
-    const seen = new Set();
-    const result = [];
-    for(const item of [...custom, ...fromUnitItems, ...fromAssignmentMeta]){
-      const key = item.serial ? String(item.serial) : (item.alias||item.fullname||"")+"|"+(item.soldierName||"");
-      if(!seen.has(key)){ seen.add(key); result.push(item); }
-    }
-    return result;
   }
+
   function saveItems(cabName, items){
     const ndb={...db, cabinets:{...(db.cabinets||{}), [cabName]:items}};
     setDb(ndb);
