@@ -12726,38 +12726,40 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                             }
                             return;
                           }
-                          const updated={...effectiveVal,cabName:nc};
-                          fbSet("db/unitItems/"+effectiveUid,sanitizeForFirebase(updated)).catch(()=>{});
-                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[effectiveUid]:updated}}));
-                          // אם זה חייל (לא unitItem) — עדכן גם assignmentMeta
+                          const serial=String(r.serial||"");
+                          const nm=cleanItemName(r.itemName||"");
+                          const masterEntry2=Object.entries(db.armoryMaster||{}).find(([k])=>cleanItemName(k)===nm);
+                          const makat2=masterEntry2?.[1]?.makat||getMakat(nm,db)||"";
+                          const isKne=nc.startsWith("כנה ");
+                          const destUnit=isKne?nc.replace("כנה ",""):(effectiveVal?.u||curUnit||"גדודי");
+                          // שמור unitItem — צור אמיתי אם וירטואלי
+                          const realUid=effectiveUid.startsWith("loc_")?"loc_real_"+Date.now():effectiveUid;
+                          const updatedUI={n:nm,s:serial||null,u:destUnit,t:"unit",cabName:isKne?"":nc};
+                          fbSet("db/unitItems/"+realUid,sanitizeForFirebase(updatedUI)).catch(()=>{});
+                          setDb(prev=>({...prev,unitItems:{...prev.unitItems,[realUid]:updatedUI}}));
+                          // עדכן assignmentMeta לחיילים
                           if(r.source==="soldier"&&r.soldier){
                             const solId=r.soldier.id;
                             const asgn=db.assignments?.[solId]||{};
-                            const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(r.itemName));
+                            const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===nm);
                             if(itemKey){
                               const safeKey=itemKey.replace(/[.#$\[\]"]/g,"");
                               fbSet("db/assignmentMeta/"+solId+"/"+safeKey+"/cabName",nc).catch(()=>{});
-                              setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[itemKey]:{...(prev.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}}}}));
+                              setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[safeKey]:{...(prev.assignmentMeta?.[solId]?.[safeKey]||{}),cabName:nc}}}}));
                             }
                           }
-                          // הוסף ל-db.cabinets (גם חייל וגם פנוי)
-                          {
-                            const serial=String(r.serial||"");
-                            const rawNm=r.itemName||"";
-                            const nm=cleanItemName(rawNm);
-                            const masterEntry=Object.entries(db.armoryMaster||{}).find(([k])=>cleanItemName(k)===nm);
-                            const makat=masterEntry?.[1]?.makat||getMakat(nm,db)||"";
-                            const existingItems=db.cabinets?.[nc]||[];
-                            const alreadyIn=existingItems.some(it=>String(it.serial||"")===serial&&cleanItemName(it.alias||"")===nm);
-                            if(!alreadyIn){
+                          // אם ארון רגיל — הוסף גם ל-db.cabinets
+                          if(!isKne){
+                            const existingItems2=db.cabinets?.[nc]||[];
+                            const alreadyIn2=serial&&existingItems2.some(it=>String(it.serial||"")===serial);
+                            if(!alreadyIn2){
                               const soldierLabel=(r.source==="soldier"&&r.soldier)?r.soldier.name:"בארמון";
-                              const newItems=[...existingItems,{alias:nm,fullname:nm,qty:1,serial:serial||null,makat,soldierName:soldierLabel,signed:false}];
-                              fbSet("db/cabinets/"+encodeURIComponent(nc),newItems).catch(()=>{});
-                              setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[nc]:newItems}}));
+                              const newItems2=[...existingItems2,{alias:nm,fullname:nm,qty:1,serial:serial||null,makat:makat2,soldierName:soldierLabel,signed:false}];
+                              fbSet("db/cabinets/"+encodeURIComponent(nc),newItems2).catch(()=>{});
+                              setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[nc]:newItems2}}));
                             }
                           }
-                        }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)"}}>
-                          <option value="">— ללא ארון —</option>
+                        }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)",maxWidth:140}}>
                           {cabList.map(cn=><option key={cn} value={cn}>{cn}</option>)}
                         </select>
                         {curCab?<span style={{fontSize:10,color:"var(--color-success-fg)",fontWeight:600}}>✅ {curCab}</span>
