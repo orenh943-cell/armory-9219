@@ -10631,9 +10631,9 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       const master2={...(db.armoryMaster||{})};
       const existing2=master2[addName.trim()]||{};
       const makatVal = addMakat.trim()||existing2.makat||getMakat(addName.trim())||null;
-      // עדכן armoryMaster — רק מק"ט, לא total (total מחושב אוטומטית מ-assignments+unitItems)
-      master2[addName.trim()]={...existing2, makat:makatVal};
-      newDb.armoryMaster=master2;
+      // ספור כמה unitItems יש לפריט זה (כולל החדש)
+      const countInUnits = Object.values(nItems).filter(v=>cleanItemName(v.n||v.name||"")===cleanItemName(addName.trim())).length;
+      master2[addName.trim()]={...existing2, makat:makatVal, total:Math.max(existing2.total||0, countInUnits)};
       setDb(newDb);
       fbSet("db/armoryMaster/"+addName.trim(), master2[addName.trim()]).catch(()=>{});
       logAction("הוספת_פריט_ארמון", "נוסף: "+addName+(serialVal?" צ "+serialVal:"")+" פלוגה "+addUnit, auth?.name);
