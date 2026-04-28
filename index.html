@@ -12599,18 +12599,18 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                               setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[itemKey]:{...(prev.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}}}}));
                             }
                           }
-                          // אם ארון רגיל (לא כנה) — הוסף גם ל-db.cabinets
-                          if(!nc.startsWith("כנה ")){
+                          // הוסף ל-db.cabinets (גם חייל וגם פנוי)
+                          {
                             const serial=String(r.serial||"");
                             const rawNm=r.itemName||"";
                             const nm=cleanItemName(rawNm);
-                            // מצא מקט מ-armoryMaster לפי שם נקי
                             const masterEntry=Object.entries(db.armoryMaster||{}).find(([k])=>cleanItemName(k)===nm);
                             const makat=masterEntry?.[1]?.makat||getMakat(nm,db)||"";
                             const existingItems=db.cabinets?.[nc]||[];
                             const alreadyIn=existingItems.some(it=>String(it.serial||"")===serial&&cleanItemName(it.alias||"")===nm);
                             if(!alreadyIn){
-                              const newItems=[...existingItems,{alias:nm,fullname:nm,qty:1,serial:serial||null,makat,soldierName:"בארמון",signed:false}];
+                              const soldierLabel=(r.source==="soldier"&&r.soldier)?r.soldier.name:"בארמון";
+                              const newItems=[...existingItems,{alias:nm,fullname:nm,qty:1,serial:serial||null,makat,soldierName:soldierLabel,signed:false}];
                               fbSet("db/cabinets/"+encodeURIComponent(nc),newItems).catch(()=>{});
                               setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[nc]:newItems}}));
                             }
