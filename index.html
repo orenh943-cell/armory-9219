@@ -7877,6 +7877,26 @@ function ResetTab({db, setDb, auth}){
           alert("✅ נמחקו "+dups.length+" כפילויות");
         }} style={{...S.btn("red"),width:"100%",marginBottom:8}}>🧹 נקה כפילויות (unitItems שגם ב-assignments)</button>
 
+        <button onClick={async()=>{
+          if(!window.confirm("למחוק את כל המיקומים מכל הארונות?\nהפריטים יועברו לרשימת 'לא נרשם ארון' ויהיה ניתן למקמם מחדש.\nלא ימחקו חתימות, שיוכים או כל מידע אחר.")) return;
+          // נקה cabName מכל unitItems
+          const updates={};
+          Object.entries(db.unitItems||{}).forEach(([uid,v])=>{
+            if(v.cabName){
+              updates[uid]={...v,cabName:""};
+              fbSet("db/unitItems/"+uid,sanitizeForFirebase({...v,cabName:""})).catch(()=>{});
+            }
+          });
+          // נקה db/cabinets לגמרי
+          await fbSet("db/cabinets",{}).catch(()=>{});
+          setDb(prev=>({
+            ...prev,
+            cabinets:{},
+            unitItems:{...prev.unitItems,...updates}
+          }));
+          alert("✅ כל המיקומים נוקו. ניתן למקם מחדש מטאב ארונות.");
+        }} style={{...S.btn("orange"),width:"100%",marginBottom:8}}>🗑️ נקה כל המיקומים (ארונות ריקים — מקם מחדש)</button>
+
         <button onClick={()=>{
           const serial = window.prompt("הכנס מספר צ או סידורי לחיפוש:");
           if(!serial||!serial.trim()) return;
@@ -9810,48 +9830,78 @@ function CabinetsTab({db, setDb, auth}){
           );
         })}
 
-        {/* ארון "לא נרשם ארון" — unitItems ללא cabName */}
-        {(()=>{
-          const unassigned = Object.entries(db.unitItems||{}).filter(([uid,v])=>{
-            const u = v.u||v.unit||"";
-            const t = v.t||v.assignedType||"unit";
-            const hasCab = v.cabName&&v.cabName.trim();
-            return u===selectedUnit && t==="unit" && !hasCab;
-          });
-          if(!unassigned.length) return null;
-          return (
-            <div style={{...S.card,marginBottom:0,border:"2px dashed var(--color-warning-fg)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,
-                borderBottom:"1px solid var(--color-border-muted)",paddingBottom:8}}>
-                <span style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-warning-fg)"}}>
-                  ⚠️ לא נרשם ארון
-                </span>
-                <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>({unassigned.length} פריטים)</span>
-              </div>
-              {unassigned.map(([uid,v])=>(
-                <div key={uid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                  padding:"5px 0",borderBottom:"1px solid var(--color-bg-canvas)",gap:6}}>
-                  <div style={{fontSize:"var(--text-sm)",flex:1}}>
-                    <span style={{fontWeight:600}}>{cleanItemName(v.n||v.name||"")}</span>
-                    {(v.s||v.serial)&&<span style={{fontFamily:"monospace",fontSize:11,color:"var(--color-text-muted)",marginRight:6}}> צ: {v.s||v.serial}</span>}
-                  </div>
-                  <select defaultValue="" onChange={e=>{
-                    const newCab=e.target.value;
-                    if(!newCab) return;
-                    const updated={...v, cabName:newCab};
-                    fbSet("db/unitItems/"+uid, sanitizeForFirebase(updated)).catch(()=>{});
-                    setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
-                  }} style={{...S.input,marginBottom:0,fontSize:11,padding:"2px 4px",maxWidth:140}}>
-                    <option value="">— שייך לארון —</option>
-                    {currentCabNames.map(cn=>(
-                      <option key={cn} value={cn}>{cn}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
+         {/* ארון "לא נרשם ארון" — unitItems ללא cabName */}
+         {(()=>{
+           const [unlocSearch, setUnlocSearch] = React.useState("");
+           const unassigned = Object.entries(db.unitItems||{}).filter(([uid,v])=>{
+             const u = v.u||v.unit||"";
+             const t = v.t||v.assignedType||"unit";
+             const hasCab = v.cabName&&v.cabName.trim();
+             return u===selectedUnit && t==="unit" && !hasCab;
+           });
+           const filteredUnloc = unlocSearch.trim()
+             ? unassigned.filter(([,v])=>{
+                 const n=cleanItemName(v.n||v.name||"").toLowerCase();
+                 const s=String(v.s||v.serial||"");
+                 const q=unlocSearch.trim().toLowerCase();
+                 return n.includes(q)||s.includes(q);
+               })
+             : unassigned;
+           if(!unassigned.length) return null;
+           const allCabOptions=Object.keys(UNIT_CABINETS_DEFAULT).flatMap(u=>
+             getCabNames(u).map(cn=>({cn,u}))
+           );
+           return (
+             <div style={{...S.card,marginBottom:0,border:"2px dashed var(--color-warning-fg)"}}>
+               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                 marginBottom:8,borderBottom:"1px solid var(--color-border-muted)",paddingBottom:8,flexWrap:"wrap",gap:6}}>
+                 <span style={{fontWeight:700,fontSize:"var(--text-base)",color:"var(--color-warning-fg)"}}>
+                   ⚠️ לא נרשם ארון ({unassigned.length})
+                 </span>
+                 <input value={unlocSearch} onChange={e=>setUnlocSearch(e.target.value)}
+                   placeholder="🔍 חפש שם או צ..."
+                   style={{...S.input,marginBottom:0,fontSize:11,maxWidth:180}}/>
+               </div>
+               {filteredUnloc.map(([uid,v])=>(
+                 <div key={uid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                   padding:"5px 0",borderBottom:"1px solid var(--color-bg-canvas)",gap:6,flexWrap:"wrap"}}>
+                   <div style={{fontSize:"var(--text-sm)",flex:1,minWidth:120}}>
+                     <span style={{fontWeight:600}}>{cleanItemName(v.n||v.name||"")}</span>
+                     {(v.s||v.serial)&&<span style={{fontFamily:"monospace",fontSize:11,
+                       color:"var(--color-accent-fg)",marginRight:6}}> · צ: {v.s||v.serial}</span>}
+                   </div>
+                   <select defaultValue="" onChange={e=>{
+                     const newCab=e.target.value;
+                     if(!newCab) return;
+                     const destUnit=newCab.startsWith("כנה ")?newCab.replace("כנה ",""):(v.u||v.unit||selectedUnit);
+                     const updated={...v,cabName:newCab,u:destUnit};
+                     fbSet("db/unitItems/"+uid,sanitizeForFirebase(updated)).catch(()=>{});
+                     setDb(prev=>({...prev,unitItems:{...prev.unitItems,[uid]:updated}}));
+                     if(!newCab.startsWith("כנה ")){
+                       const nm=cleanItemName(v.n||v.name||"");
+                       const srl=String(v.s||v.serial||"")||null;
+                       const existing=db.cabinets?.[newCab]||[];
+                       const alreadyIn=srl&&existing.some(it=>String(it.serial||"")===srl);
+                       if(!alreadyIn){
+                         const newItems=[...existing,{alias:nm,fullname:nm,qty:1,serial:srl,
+                           makat:getMakat(nm,db)||"",soldierName:"בארמון",signed:false}];
+                         fbSet("db/cabinets/"+encodeURIComponent(newCab),newItems).catch(()=>{});
+                         setDb(prev=>({...prev,cabinets:{...(prev.cabinets||{}),[newCab]:newItems}}));
+                       }
+                     }
+                   }} style={{...S.input,marginBottom:0,fontSize:11,padding:"2px 4px",maxWidth:160}}>
+                     <option value="">— שייך לארון —</option>
+                     {allCabOptions.map(({cn,u})=>(
+                       <option key={u+cn} value={cn}>{cn}{u!==selectedUnit?" ("+u+")":""}</option>
+                     ))}
+                   </select>
+                 </div>
+               ))}
+               {filteredUnloc.length===0&&unlocSearch&&
+                 <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",padding:"8px 0"}}>לא נמצאו תוצאות</div>}
+             </div>
+           );
+         })()}
 
         {/* הוסף ארון חדש */}
         {editMode&&(
@@ -12774,9 +12824,18 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                           // מחק unitItems כפולים עם אותו צ לפני שמירה
                           const newUIBase4={...(db.unitItems||{})};
                           if(serial){
+                            // בנה סט של צ שנמצאים ב-assignments
+                            const assignedSrls=new Set();
+                            getSoldiers(db).forEach(sol=>{
+                              Object.values(db.assignments?.[sol.id]||{}).forEach(val=>{
+                                if(val&&val!==1) assignedSrls.add(String(val));
+                              });
+                            });
                             Object.keys(newUIBase4).forEach(k=>{
                               const v=newUIBase4[k];
-                              if(String(v.s||v.serial||"")===serial){
+                              const vSerial=String(v.s||v.serial||"");
+                              // מחק רק אם: אותו צ, ואינו ב-assignments של חייל אחר
+                              if(vSerial===serial && !assignedSrls.has(vSerial)){
                                 delete newUIBase4[k];
                                 fbSet("db/unitItems/"+k,null).catch(()=>{});
                               }
