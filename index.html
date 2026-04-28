@@ -5126,7 +5126,6 @@ function InspectionTab({db, setDb, soldiers, auth}){
   const [view, setView] = React.useState("dashboard"); // dashboard | inspect
   const [detailModal, setDetailModal] = React.useState(null); // null | "all" | "inspected" | "pending"
   const [search, setSearch] = React.useState("");
-  const [cabSearch, setCabSearch] = React.useState("");
   const [results, setResults] = React.useState([]);
   const [selected, setSelected] = React.useState(new Set());
   const [inspectorName, setInspectorName] = React.useState(()=>auth?.name||formatSigner(auth||{}, db||{})||"");
@@ -9146,6 +9145,7 @@ function CabinetsTab({db, setDb, auth}){
   const [addForm, setAddForm] = React.useState({alias:"",makat:"",qty:1,serial:""});
   const [showSugg, setShowSugg] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [cabSearch, setCabSearch] = React.useState("");
 
   const UNIT_CABINETS_DEFAULT = {
     "א":       ["כנה א","ארון א 1","ארון א 2","ארון רחפנים א"],
@@ -9588,10 +9588,13 @@ function CabinetsTab({db, setDb, auth}){
                                       <select defaultValue="" onChange={e=>{
                                         const destCab=e.target.value;
                                         if(!destCab) return;
-                                        const destItems=[...getItems(destCab),{...item}];
+                                        const destItems=[...(db.cabinets?.[destCab]||[]),{...item,_idx:undefined}];
                                         saveItems(destCab, destItems);
-                                        const srcItems=getItems(cabName).filter((_,i2)=>i2!==item._idx);
-                                        saveItems(cabName, srcItems);
+                                        if(!cabName.startsWith("כנה ")){
+                                          const srcItems=(db.cabinets?.[cabName]||[]).filter((_,i2)=>i2!==item._idx);
+                                          saveItems(cabName, srcItems);
+                                        }
+                                        setExpandedCabItem(null);
                                       }} style={{fontSize:10,padding:"2px 4px",border:"1px solid var(--color-border-muted)",borderRadius:4,background:"var(--color-bg-default)",maxWidth:110}}>
                                         <option value="">🔄 העבר...</option>
                                         {currentCabNames.filter(cn=>cn!==cabName).map(cn=>(
