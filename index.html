@@ -2473,11 +2473,9 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
 
     // total: תמיד לפי armoryMaster — לא liveCount (שמשתנה עם פעולות)
     const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
-    const masterTotal = armEntry?.total||0;
-    // total = armoryMaster.total — המקור האמין (מסונכרן עם דוח Excel)
+    // total = liveCount תמיד (חישוב דינמי, לא מהמאגר)
     // lockedTotals עוקף הכל (שמירה ידנית)
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd]
-      : masterTotal>0 ? masterTotal : liveCount;
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : liveCount;
 
     // השאלות: לפי שם נרמל
     const loans = allLoans[amName]||allLoans[cleanAlias]||0;
@@ -7862,7 +7860,7 @@ function ResetTab({db, setDb, auth}){
           }
         });
         const unitCount=Object.values(db.unitItems||{}).filter(v=>
-          cleanItemName(v.n||v.name||"")===name&&(v.t||"unit")==="unit"
+          cleanItemName(v.n||v.name||"")===name // כולל t:"soldier" ישנים
         ).length;
         const live=signedCount+unsignedCount+unitCount;
         return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:unsignedCount+unitCount};
@@ -9690,12 +9688,14 @@ function VisutTab({db, setDb, soldiers, auth}){
       const liveByUnit = {};
       const allSols = getSoldiers(db);
       UNITS.forEach(u=>{ liveByUnit[u]=0; });
+      // ספור unitItems — אם יש סידורי בודק שלא מופיע גם ב-assignments
+      const assignedSerials2=new Set();
+      allSols.forEach(s=>{Object.values(db.assignments?.[s.id]||{}).forEach(v=>{if(v&&v!==1&&v!==true) assignedSerials2.add(String(v));});});
       Object.values(db.unitItems||{}).forEach(v=>{
         const n=cleanItemName(v.n||v.name||"");
         if(n!==name) return;
-        // Only count unit-assigned items (not soldier - those are in assignments)
-        const t=v.t||v.assignedType||"unit";
-        if(t==="soldier") return;
+        const serial=String(v.s||v.serial||"");
+        if(serial && assignedSerials2.has(serial)) return; // כפילות
         const u=v.u||v.unit||"גדודי";
         liveByUnit[u]=(liveByUnit[u]||0)+1;
       });
@@ -9720,7 +9720,7 @@ function VisutTab({db, setDb, soldiers, auth}){
         const t=v.t||v.assignedType||"unit";
         if(t==="unit") toUnits[u]=(toUnits[u]||0)+1;
       });
-      return {name,makat,total:info.total||liveTotal,liveByUnit,liveTotal,toSoldiers,toUnits};
+      return {name,makat,total:liveTotal,liveByUnit,liveTotal,toSoldiers,toUnits};
     }).filter(i=>i.liveTotal>0).sort((a,b)=>a.name.localeCompare(b.name,"he"));
   },[db,soldiers]);
 
