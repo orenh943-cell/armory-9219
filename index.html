@@ -748,8 +748,31 @@ function getSoldiers(db){
 }
 // getSerials: returns Firebase serials if available, else falls back to ALL_SERIALS
 function getSerials(db){
-  if(db.serials && db.serials.length > 0) return db.serials;
-  return ALL_SERIALS;
+  // בנה רשימת סידוריים מ-unitItems (המקור העיקרי)
+  const fromUnits = Object.values(db.unitItems||{})
+    .filter(v=>v.s||v.serial)
+    .map(v=>({name:cleanItemName(v.n||v.name||""), serial:String(v.s||v.serial), unit:v.u||v.unit||"גדודי"}));
+  // בנה מ-assignments
+  const fromAssign = [];
+  try {
+    Object.entries(db.assignments||{}).forEach(([solId,items])=>{
+      Object.entries(items||{}).forEach(([name,val])=>{
+        if(val&&val!==1&&typeof val==="string"&&val.length>3){
+          fromAssign.push({name:cleanItemName(name),serial:String(val)});
+        }
+      });
+    });
+  } catch(e){}
+  // מיזוג: unitItems + assignments + db.serials הישן
+  const seen = new Set();
+  const all = [...fromUnits,...fromAssign,...(db.serials||[]),...ALL_SERIALS];
+  return all.filter(s=>{
+    if(!s.serial||!s.name) return false;
+    const k = String(s.serial);
+    if(seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 const EQ_COLS = ["קלע סער","M16","M4","מטולון M320","נגב 556","נגב 762","מאג","מקלר","מק״כ 05","HTR 338","מקלרון","M-24 חדש","מק פורק","מדפסים","כוונת קידמית","כוונת אחורית","כנה ספיר למאג","כנה ספיר לנגב","כנה ספיר למקכ","קנה לנגב 556","קנה לנגב 7.62","קנה למאג","אקילה X4","אקילה X6","NYX","מיקרון","שח″ע","שח″ע ממותג","שח″מ כחולה","שח''מ ירוקה","ליאור","ערמון","מכבית","טרמיס","עכבר","עדי","עמית","עמית איכון","וילון","עידו","פליר T75","רחפן איבו","אבטה","אבטה","משקפי אבטה","שלט אבטה","מטריס 30","שלט מטריס 30","אלפא","שלט אלפא","כדור ברזל- מתקן הטלה","טריגיקון","מטלון ישן","מטלון חדש","לאופולד 2","לאופולד 65","ירין הגדלה משתנה","מרק 5","מרק 6","ציין לייזר לנגב","סמן PACK","מפרומור","כוונת M5","מפרולייט","זאבון","פיגיון","סמן לייזר למפקד","נטלי","סמן לייזר ללאו","מטלון ינאי","איוטק OGL","יראור","משקפת","מצפן","משקפת 80*15","שבשבת רוח","מטל סרוג 10","מטל סרוג 20","ישלט","צגון","אורלי","מתפס רב תכליתי עליון","מתפס רב תכליתי תחתון","כוונת גיבוי אחורית","כוונת קדמית מתקפלת","חסם בית בליעה","מתפס M4 לקלע","דורגל לקלע משופר פלדה","כמות נשקים לחייל"];
