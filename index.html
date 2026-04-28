@@ -10522,12 +10522,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
         rows.push({name:cleanItemName(v.n||v.name||""), serial:String(s), soldierName:"—", soldierId:null, unit:v.u||v.unit||"גדודי", source:"free", key});
       }
     });
-    // From serials not yet in rows
-    getSerials(db).forEach(s=>{
-      if(!usedSerials.has(String(s.serial))){
-        rows.push({name:s.name, serial:String(s.serial), soldierName:"—", soldierId:null, unit:s.unit, source:"free", key:null});
-      }
-    });
+
     return rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||a.serial.localeCompare(b.serial));
   },[db.assignments, db.customSoldiers, db.unitItems, soldiers]);
 
