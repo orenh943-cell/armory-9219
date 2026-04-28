@@ -9885,13 +9885,14 @@ function CabinetsTab({db, setDb, auth}){
              const meta=(db.assignmentMeta||{})[sol.id]||{};
              Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{
                const n=cleanItemName(name);
+               if(bundleAccessoryNames.has(n)) return; // אביזר חבילה
                const serial=val&&val!==1?String(val):null;
                // חפש cabName בכל דרך אפשרית
                const metaVal=meta[name]||meta[n]||meta[name.replace(/[.#$\[\]"]/g,"")]||
                  Object.entries(meta).find(([k])=>cleanItemName(k)===n)?.[1];
                const cabName=metaVal?.cabName||"";
                if(cabName) return; // כבר ממוקם
-               const key=serial||(n+"_"+sol.id);
+                const key=serial?serial:n; // dedup: עם צ לפי צ, בלי צ לפי שם
                if(seenSoldierItems.has(key)) return;
                seenSoldierItems.add(key);
                soldierItems.push({uid:"sol_"+sol.id+"_"+n, v:{n,s:serial,u:selectedUnit,t:"unit",cabName:""},
