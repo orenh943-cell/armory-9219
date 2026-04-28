@@ -10595,7 +10595,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     const serialVal = addSerial.trim();
     // בדוק כפילות
     if(serialVal){
-      // בדוק כפילות רק לאותו שם פריט (לא בין פריטים שונים)
+      // בדוק כפילות: אותו צ + אותו שם בלבד (צ זהה עם שם שונה = תקין)
       const itemNameClean = cleanItemName(addName.trim());
       const existingInUnit = Object.values(db.unitItems||{}).find(v=>
         String(v.s||v.serial||"")===serialVal && cleanItemName(v.n||v.name||"")===itemNameClean
@@ -10604,7 +10604,14 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
         Object.entries(asgn).some(([k,v])=>cleanItemName(k)===itemNameClean && String(v)===serialVal)
       );
       if(existingInUnit||existingInAssign){
-        alert("⚠️ צ "+serialVal+" כבר קיים עבור פריט זה ("+addName+")!"); return;
+        alert("⚠️ צ "+serialVal+" כבר קיים עבור "+addName+"!"); return;
+      }
+      // אזהרה בלבד אם קיים תחת שם אחר (לא חוסם)
+      const existingOther = Object.values(db.unitItems||{}).find(v=>
+        String(v.s||v.serial||"")===serialVal && cleanItemName(v.n||v.name||"")!==itemNameClean
+      );
+      if(existingOther){
+        if(!window.confirm("⚠️ צ "+serialVal+" קיים כבר עבור "+( existingOther.n||existingOther.name)+". להמשיך ולהוסיף גם עבור "+addName+"?")) return;
       }
     }
     requirePin("הוספת פריט: "+addName+(serialVal?" צ "+serialVal:""), ()=>{ try {
