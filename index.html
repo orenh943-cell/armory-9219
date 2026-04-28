@@ -2473,9 +2473,8 @@ function DailyModal({db,onClose,type,auth,soldiers=[],onSaveHtml}){
 
     // total: תמיד לפי armoryMaster — לא liveCount (שמשתנה עם פעולות)
     const liveCount = liveByName[amName]||liveByName[cleanAlias]||0;
-    // total = liveCount תמיד (חישוב דינמי, לא מהמאגר)
-    // lockedTotals עוקף הכל (שמירה ידנית)
-    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : liveCount;
+    // total = getLiveCount — מקור אחד לכל המקומות
+    const total = lockedTotals[item.msd]!==undefined ? lockedTotals[item.msd] : getLiveCount(amName,db);
 
     // השאלות: לפי שם נרמל
     const loans = allLoans[amName]||allLoans[cleanAlias]||0;
@@ -7683,6 +7682,22 @@ function ResetTab({db, setDb, auth}){
           win.document.close();
         }} style={{...S.btn("purple"),width:"100%",marginBottom:8}}>🔍 אבחון מלאי (עם העתקה)</button>
 
+        <button onClick={async ()=>{
+          if(!window.confirm("למחוק כל unitItems עם t:soldier מהמסד? (יתקן כפילויות ישנות)")) return;
+          const toDelete=Object.entries(db.unitItems||{}).filter(([,v])=>(v.t||v.assignedType)==="soldier");
+          let count=0;
+          for(const [uid] of toDelete){
+            await fbSet("db/unitItems/"+uid,null).catch(()=>{});
+            count++;
+          }
+          setDb(prev=>{
+            const ui={...prev.unitItems};
+            toDelete.forEach(([uid])=>delete ui[uid]);
+            return {...prev,unitItems:ui};
+          });
+          alert("✅ נמחקו "+count+" unitItems ישנים עם t:soldier");
+        }} style={{...S.btn("red"),width:"100%",marginBottom:8}}>🧹 נקה unitItems ישנים (t:soldier)</button>
+
         <button onClick={()=>{
           const serial = window.prompt("הכנס מספר צ או סידורי לחיפוש:");
           if(!serial||!serial.trim()) return;
@@ -7859,10 +7874,7 @@ function ResetTab({db, setDb, auth}){
             else unsignedCount+=keys.length;
           }
         });
-        const unitCount=Object.values(db.unitItems||{}).filter(v=>
-          cleanItemName(v.n||v.name||"")===name // כולל t:"soldier" ישנים
-        ).length;
-        const live=signedCount+unsignedCount+unitCount;
+        const live=getLiveCount(name,db);
         return {name, makat:info.makat||"", total:info.total||0, live, loaned:signedCount, free:unsignedCount+unitCount};
       }).sort((a,b)=>{
         // מיון לפי מקט עולה, אם אין מקט — בסוף
@@ -14980,6 +14992,40 @@ async function exportUnitSoldiersExcel(unit, soldiers, db){
   a.href=url; a.download="פלוגה_"+unit+"_"+TODAY.replace(/\//g,"-")+".xlsx";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+
+// =================== פונקציה גלובלית לחישוב כמות חיה ===================
+// כל המקומות משתמשים בפונקציה זו — מקור אחד, תוצאה אחת
+function getLiveCount(name, db){
+  const cleanN = cleanItemName(name);
+  const allSols = getSoldiers(db);
+  let count = 0;
+
+  // 1. assignments — כל חייל שיש לו את הפריט
+  allSols.forEach(s=>{
+    const asgn = db.assignments?.[s.id]||{};
+    Object.keys(asgn).forEach(k=>{ if(cleanItemName(k)===cleanN) count++; });
+  });
+  // orphans
+  Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{
+    if(allSols.find(s=>s.id===solId)) return;
+    Object.keys(asgn).forEach(k=>{ if(cleanItemName(k)===cleanN) count++; });
+  });
+
+  // 2. unitItems — רק אם הסידורי לא מופיע כבר ב-assignments
+  const assignedSerials = new Set();
+  allSols.forEach(s=>{ Object.values(db.assignments?.[s.id]||{}).forEach(v=>{ if(v&&v!==1&&v!==true) assignedSerials.add(String(v)); }); });
+  Object.entries(db.assignments||{}).forEach(([,asgn])=>{ Object.values(asgn||{}).forEach(v=>{ if(v&&v!==1&&v!==true) assignedSerials.add(String(v)); }); });
+
+  Object.values(db.unitItems||{}).forEach(v=>{
+    if(cleanItemName(v.n||v.name||"")!==cleanN) return;
+    const serial = String(v.s||v.serial||"");
+    if(serial && assignedSerials.has(serial)) return; // כפילות
+    count++;
+  });
+
+  return count;
 }
 
 
