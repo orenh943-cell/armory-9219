@@ -5126,6 +5126,7 @@ function InspectionTab({db, setDb, soldiers, auth}){
   const [view, setView] = React.useState("dashboard"); // dashboard | inspect
   const [detailModal, setDetailModal] = React.useState(null); // null | "all" | "inspected" | "pending"
   const [search, setSearch] = React.useState("");
+  const [cabSearch, setCabSearch] = React.useState("");
   const [results, setResults] = React.useState([]);
   const [selected, setSelected] = React.useState(new Set());
   const [inspectorName, setInspectorName] = React.useState(()=>auth?.name||formatSigner(auth||{}, db||{})||"");
@@ -9438,6 +9439,40 @@ function CabinetsTab({db, setDb, auth}){
         )}
       </div>
 
+      {/* חיפוש בארונות */}
+      <div style={{marginBottom:12}}>
+        <input value={cabSearch} onChange={e=>setCabSearch(e.target.value)}
+          placeholder="🔍 חפש פריט או צ בארונות..."
+          style={{...S.input,marginBottom:0,maxWidth:340}}/>
+        {cabSearch.trim()&&(()=>{
+          const q=cabSearch.trim().toLowerCase();
+          const results=[];
+          Object.keys(UNIT_CABINETS_DEFAULT).forEach(unit=>{
+            getCabNames(unit).forEach(cn=>{
+              getItems(cn).forEach(it=>{
+                const nm=(it.alias||it.fullname||"").toLowerCase();
+                const sr=String(it.serial||"").toLowerCase();
+                if(nm.includes(q)||sr.includes(q)){
+                  results.push({unit,cab:cn,item:it});
+                }
+              });
+            });
+          });
+          if(results.length===0) return <div style={{marginTop:6,fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}}>לא נמצא</div>;
+          return <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+            {results.map((r,i)=>(
+              <div key={i} style={{fontSize:"var(--text-sm)",padding:"5px 10px",background:"var(--color-accent-subtle)",borderRadius:6,display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontWeight:700}}>{r.item.alias}</span>
+                {r.item.serial&&<span style={{fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)"}}>צ: {r.item.serial}</span>}
+                <span style={{color:"var(--color-text-muted)"}}>→</span>
+                <span style={{fontWeight:600,color:"var(--color-success-fg)"}}>{r.cab}</span>
+                <span style={{fontSize:10,color:"var(--color-text-muted)"}}>פלוגה {r.unit}</span>
+              </div>
+            ))}
+          </div>;
+        })()}
+      </div>
+
       {/* בחירת פלוגה */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
         {units.map(u=>(
@@ -9476,7 +9511,16 @@ function CabinetsTab({db, setDb, auth}){
                   <div style={{display:"flex",alignItems:"center",gap:8,flex:1}}>
                     <span style={{fontWeight:700,fontSize:"var(--text-base)"}}>{cabName}</span>
                     <span style={{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}}>({total} פריטים)</span>
-                    {editMode&&<button onClick={()=>{setEditingCabName({unit:selectedUnit,idx:cabIdx});setCabNameVal(cabName);}}
+                    {editMode&&<button onClick={()=>{
+                        if(!window.confirm("למחוק את הארון "+cabName+"?")) return;
+                        const newNames=getCabNames(selectedUnit).filter((_,i)=>i!==cabIdx);
+                        saveCabNames(selectedUnit,newNames);
+                        const newCabs={...db.cabinets};
+                        delete newCabs[cabName];
+                        fbSet("db/cabinets/"+encodeURIComponent(cabName),null).catch(()=>{});
+                        setDb(p=>({...p,cabinets:newCabs}));
+                      }} style={{...S.btn("red"),padding:"2px 7px",fontSize:10}}>🗑️</button>}
+                      {editMode&&<button onClick={()=>{setEditingCabName({unit:selectedUnit,idx:cabIdx});setCabNameVal(cabName);}}
                       style={{...S.btn("gray"),padding:"2px 7px",fontSize:10}}>✎</button>}
 
                   </div>
@@ -12595,7 +12639,8 @@ function SearchModal({onClose, soldiers, db, setDb, auth}){
                             const asgn=db.assignments?.[solId]||{};
                             const itemKey=Object.keys(asgn).find(k=>cleanItemName(k)===cleanItemName(r.itemName));
                             if(itemKey){
-                              fbSet("db/assignmentMeta/"+solId+"/"+itemKey+"/cabName",nc).catch(()=>{});
+                              const safeKey=itemKey.replace(/[.#$\[\]"]/g,"");
+                              fbSet("db/assignmentMeta/"+solId+"/"+safeKey+"/cabName",nc).catch(()=>{});
                               setDb(prev=>({...prev,assignmentMeta:{...(prev.assignmentMeta||{}),[solId]:{...(prev.assignmentMeta?.[solId]||{}),[itemKey]:{...(prev.assignmentMeta?.[solId]?.[itemKey]||{}),cabName:nc}}}}));
                             }
                           }
