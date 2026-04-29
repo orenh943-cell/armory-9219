@@ -11104,7 +11104,7 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     hRow.font={bold:true,color:{argb:"FFFFFFFF"}};
 
     Object.entries(items)
-      .filter(([,d])=>d.signed+d.unsigned+d.inArmory>0)
+      .filter(([,d])=>d.signed+d.assignedUnsigned+d.unassigned>0)
       .sort((a,b)=>a[0].localeCompare(b[0],"he"))
       .forEach(([name,d])=>{
         const physical = d.assignedUnsigned+d.unassigned;
