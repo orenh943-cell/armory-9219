@@ -19168,11 +19168,12 @@ ${exitLink}
         {tab==="invcount"&&(auth.role==="admin"||auth.username==="מתן"||auth.username==="יעקב")&&(
           <InventoryCountTab db={db} setDb={setDb} soldiers={soldiers} auth={auth}/>
         )}
+        {tab==="inventorybuilder"&&auth.role==="admin"&&(
+          <InventoryBuilderTab db={db} setDb={setDb} auth={auth}/>
+        )}
         {tab==="reset"&&auth.role==="admin"&&(
           resetUnlocked
             ? <ResetTab db={db} setDb={setDb} auth={auth}/>
-            : tab==="inventorybuilder"
-            ? <InventoryBuilderTab db={db} setDb={setDb} auth={auth}/>
             : <div style={{maxWidth:360,margin:"60px auto",padding:24,textAlign:"center"}}>
                 <div style={{fontSize:48,marginBottom:16}}>🔒</div>
                 <h3 style={{marginBottom:16}}>טאב איפוס — נדרשת סיסמה</h3>
