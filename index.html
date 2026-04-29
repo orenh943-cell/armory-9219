@@ -18609,7 +18609,7 @@ ${exitLink}
     ...(auth.role==="admin"?[{id:"greeneyes",label:"ירוק בעיניים",icon:"🟢"}]:[]),
     ...((auth.role==="admin"||auth.username==="מתן"||auth.username==="יעקב")?[{id:"invcount",label:"ספירת מלאי",icon:"📦"}]:[]),
     ...(auth.role==="admin"?[{id:"reset",label:"איפוס",icon:"⚠️"}]:[]),
-    ...(auth.username==="7680832"?[{id:"inventorybuilder",label:"בניית מלאי",icon:"🏗️"}]:[]),
+    ...(auth.role==="admin"?[{id:"inventorybuilder",label:"בניית מלאי",icon:"🏗️"}]:[]),
     ...(auth.role==="admin"?[{id:"external",label:"החתמה חיצונית",icon:"🏢"}]:[]),
     ...(auth.role==="admin"?[{id:"poll",label:"סקר נוכחות",icon:"📊"}]:[]),
   ];
