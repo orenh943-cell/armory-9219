@@ -11061,31 +11061,29 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     const signedIds = new Set(Object.keys(db.signatures||{}));
     const allSols = getSoldiers(db);
 
-    // חשב לפי פריט
-    // signed = יצא לחייל חתום (לא פיזי בארמון)
-    // physical = כל השאר (לא חתום = פיזית בארמון)
-    const items = {}; // {name: {makat, signed, physical}}
+    // {name: {makat, signed, assignedUnsigned, unassigned}}
+    const items = {};
 
     // מ-assignments
     allSols.forEach(sol=>{
       const isSigned = signedIds.has(sol.id);
       Object.entries(db.assignments?.[sol.id]||{}).forEach(([name])=>{
         const n = cleanItemName(name);
-        if(!items[n]) items[n]={makat:getMakat(n,db)||"",signed:0,physical:0};
-        if(isSigned) items[n].signed++;   // יצא פיזית
-        else items[n].physical++;          // מוקצה לחייל אבל עדיין בארמון
+        if(!items[n]) items[n]={makat:getMakat(n,db)||"",signed:0,assignedUnsigned:0,unassigned:0};
+        if(isSigned) items[n].signed++;
+        else items[n].assignedUnsigned++;
       });
     });
 
-    // מ-unitItems (מוקצה לפלוגה או פנוי — כולם פיזית בארמון)
+    // מ-unitItems — פנויים/מוקצי פלוגה (לא ב-assignments)
     const assignedSerials = new Set();
     allSols.forEach(s=>Object.values(db.assignments?.[s.id]||{}).forEach(val=>{ if(val&&val!==1) assignedSerials.add(String(val)); }));
     Object.values(db.unitItems||{}).forEach(v=>{
       const srl = String(v.s||v.serial||"");
-      if(srl && assignedSerials.has(srl)) return; // כבר נספר ב-assignments
+      if(srl && assignedSerials.has(srl)) return;
       const n = cleanItemName(v.n||v.name||"");
-      if(!items[n]) items[n]={makat:getMakat(n,db)||"",signed:0,physical:0};
-      items[n].physical++; // פיזית בארמון
+      if(!items[n]) items[n]={makat:getMakat(n,db)||"",signed:0,assignedUnsigned:0,unassigned:0};
+      items[n].unassigned++;
     });
 
     // בנה Excel
@@ -11094,10 +11092,12 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     ws.views=[{rightToLeft:true}];
     ws.columns=[
       {header:"מקט",key:"makat",width:16},
-      {header:"פריט",key:"name",width:24},
-      {header:"חתומים (יצאו)",key:"signed",width:16},
-      {header:"פיזית בארמון",key:"physical",width:18},
-      {header:"סהכ מלאי",key:"total",width:12},
+      {header:"שם פריט",key:"name",width:24},
+      {header:"חתומים",key:"signed",width:12},
+      {header:"משויך לא חתום",key:"assignedUnsigned",width:18},
+      {header:"לא מוקצים",key:"unassigned",width:14},
+      {header:"פיזית בארמון",key:"physical",width:16},
+      {header:"סהכ",key:"total",width:10},
     ];
     const hRow = ws.getRow(1);
     hRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a2e"}};
@@ -11107,25 +11107,22 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
       .filter(([,d])=>d.signed+d.unsigned+d.inArmory>0)
       .sort((a,b)=>a[0].localeCompare(b[0],"he"))
       .forEach(([name,d])=>{
+        const physical = d.assignedUnsigned+d.unassigned;
+        const total = d.signed+physical;
         const row = ws.addRow({
           makat:d.makat, name,
           signed:d.signed,
-          physical:d.physical,
-          total:d.signed+d.physical
+          assignedUnsigned:d.assignedUnsigned,
+          unassigned:d.unassigned,
+          physical,
+          total
         });
-        if(d.physical===0){
+        if(physical===0 && d.signed>0){
           row.getCell("physical").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFE0E0"}};
         }
       });
 
-    // שורת סיכום
-    const lastRow = ws.rowCount+1;
-    ws.addRow({makat:"",name:"סהכ",
-      signed:Object.values(items).reduce((s,d)=>s+d.signed,0),
-      physical:Object.values(items).reduce((s,d)=>s+d.physical,0),
-      total:Object.values(items).reduce((s,d)=>s+d.signed+d.physical,0),
-    });
-    ws.getRow(lastRow).font={bold:true};
+
 
     wb.xlsx.writeBuffer().then(buf=>{
       const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
