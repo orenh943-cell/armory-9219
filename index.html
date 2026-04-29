@@ -11055,6 +11055,140 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
     });
   }
 
+
+  function exportStatusReport(){
+    // בנה נתונים מהמערכת
+    const signedIds = new Set(Object.keys(db.signatures||{}));
+    const allSols = getSoldiers(db);
+    const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+
+    // גיליון 1 — נתוני מערכת לפי פלוגה
+    const byUnit = {}; // {unit: {itemName: {makat, signed:0, unsigned:0}}}
+    UNITS.forEach(u=>{ byUnit[u]={}; });
+
+    allSols.forEach(sol=>{
+      const unit = sol.unit||"גדודי";
+      if(!byUnit[unit]) byUnit[unit]={};
+      const isSigned = signedIds.has(sol.id);
+      Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{
+        const n = cleanItemName(name);
+        if(!byUnit[unit][n]) byUnit[unit][n]={makat:getMakat(n,db)||"",signed:0,unsigned:0};
+        if(isSigned) byUnit[unit][n].signed++;
+        else byUnit[unit][n].unsigned++;
+      });
+    });
+
+    // גיליון 2 — נתוני Firebase ישירות
+    const fbRows = []; // {unit, name, makat, serial, source}
+    // מ-assignments
+    allSols.forEach(sol=>{
+      Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{
+        fbRows.push({
+          unit:sol.unit||"גדודי",
+          name:cleanItemName(name),
+          makat:getMakat(cleanItemName(name),db)||"",
+          serial:val&&val!==1?String(val):"",
+          soldierName:sol.name,
+          status:signedIds.has(sol.id)?"חתום":"לא חתום",
+          source:"assignments"
+        });
+      });
+    });
+    // מ-unitItems
+    Object.values(db.unitItems||{}).forEach(v=>{
+      const assignedSerials = new Set();
+      allSols.forEach(s=>Object.values(db.assignments?.[s.id]||{}).forEach(val=>{ if(val&&val!==1) assignedSerials.add(String(val)); }));
+      const srl = String(v.s||v.serial||"");
+      if(srl && assignedSerials.has(srl)) return; // כבר ב-assignments
+      fbRows.push({
+        unit:v.u||v.unit||"גדודי",
+        name:cleanItemName(v.n||v.name||""),
+        makat:v.makat||getMakat(cleanItemName(v.n||v.name||""),db)||"",
+        serial:srl,
+        soldierName:"בארמון",
+        status:"פנוי",
+        source:"unitItems"
+      });
+    });
+
+    // בנה Excel
+    const wb = new ExcelJS.Workbook();
+
+    // גיליון 1 — מערכת לפי פלוגה
+    const ws1 = wb.addWorksheet("מצב לפי פלוגה");
+    ws1.views=[{rightToLeft:true}];
+    ws1.columns=[
+      {header:"פלוגה",key:"unit",width:12},
+      {header:"מקט",key:"makat",width:14},
+      {header:"פריט",key:"name",width:22},
+      {header:"חתומים",key:"signed",width:10},
+      {header:"מוקצים לא חתומים",key:"unsigned",width:18},
+      {header:"סהכ",key:"total",width:8},
+    ];
+    ws1.getRow(1).font={bold:true};
+    ws1.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a2e"}};
+    ws1.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
+
+    UNITS.forEach(unit=>{
+      const items = byUnit[unit]||{};
+      Object.entries(items).sort((a,b)=>a[0].localeCompare(b[0],"he")).forEach(([name,data])=>{
+        ws1.addRow({unit,makat:data.makat,name,signed:data.signed,unsigned:data.unsigned,total:data.signed+data.unsigned});
+      });
+    });
+
+    // גיליון 2 — Firebase גולמי
+    const ws2 = wb.addWorksheet("נתוני Firebase");
+    ws2.views=[{rightToLeft:true}];
+    ws2.columns=[
+      {header:"פלוגה",key:"unit",width:12},
+      {header:"שם פריט",key:"name",width:22},
+      {header:"מקט",key:"makat",width:14},
+      {header:"צ / סידורי",key:"serial",width:12},
+      {header:"חייל",key:"soldierName",width:20},
+      {header:"סטטוס",key:"status",width:12},
+      {header:"מקור",key:"source",width:14},
+    ];
+    ws2.getRow(1).font={bold:true};
+    ws2.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a2e"}};
+    ws2.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
+    fbRows.sort((a,b)=>(a.unit+a.name).localeCompare(b.unit+b.name,"he")).forEach(r=>ws2.addRow(r));
+
+    // גיליון 3 — סיכום גדודי
+    const ws3 = wb.addWorksheet("סיכום גדוד");
+    ws3.views=[{rightToLeft:true}];
+    ws3.columns=[
+      {header:"מקט",key:"makat",width:14},
+      {header:"פריט",key:"name",width:22},
+      {header:"חתומים סהכ",key:"signed",width:12},
+      {header:"מוקצים לא חתומים",key:"unsigned",width:18},
+      {header:"סהכ",key:"total",width:8},
+    ];
+    ws3.getRow(1).font={bold:true};
+    ws3.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a2e"}};
+    ws3.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
+
+    const totals = {};
+    Object.values(byUnit).forEach(items=>{
+      Object.entries(items).forEach(([name,data])=>{
+        if(!totals[name]) totals[name]={makat:data.makat,signed:0,unsigned:0};
+        totals[name].signed+=data.signed;
+        totals[name].unsigned+=data.unsigned;
+      });
+    });
+    Object.entries(totals).sort((a,b)=>a[0].localeCompare(b[0],"he")).forEach(([name,data])=>{
+      ws3.addRow({makat:data.makat,name,signed:data.signed,unsigned:data.unsigned,total:data.signed+data.unsigned});
+    });
+
+    wb.xlsx.writeBuffer().then(buf=>{
+      const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download="דוח_מצב_מלאי_"+new Date().toLocaleDateString("he-IL").replace(/\//g,"-")+".xlsx";
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
+    });
+  }
+
   function exportSerials(){
     var BOM="\uFEFF";
     var headers=["פריט","מקט","מספר סידורי","חייל","מ.א","פלוגה","סטטוס"];
@@ -11224,7 +11358,8 @@ function ArmoryDashTab({db, setDb, soldiers, auth}){
                 {u==="הכל"?"כולם":u}
               </button>
             ))}
-            <button onClick={exportSerials} style={{...S.btn("success"),padding:"7px 14px"}}>📥 ייצוא Excel</button>
+            <button onClick={exportStatusReport} style={{...S.btn("purple"),padding:"7px 14px",marginLeft:6}}>📊 דוח מצב מלאי</button>
+          <button onClick={exportSerials} style={{...S.btn("success"),padding:"7px 14px"}}>📥 ייצוא Excel</button>
           </div>
           <div style={{...S.card,padding:0,overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
