@@ -9352,11 +9352,14 @@ function InventoryBuilderTab({db, setDb, auth}){
   const [serialCheckMsg, setSerialCheckMsg] = React.useState("");
   const [view, setView] = React.useState("manual"); // manual | import
   // import state
-  const [importRows, setImportRows] = React.useState([]); // parsed from excel
-  const [importStep, setImportStep] = React.useState("upload"); // upload | preview | applying | done
+  const [importRows, setImportRows] = React.useState([]); // legacy
+  const [importStep, setImportStep] = React.useState("upload"); // upload | analyze | names | preview | applying | done
   const [importPin, setImportPin] = React.useState("");
   const [importPinErr, setImportPinErr] = React.useState("");
   const [applyLog, setApplyLog] = React.useState([]);
+  // === ניתוח 2-גיליונות ===
+  const [analysisData, setAnalysisData] = React.useState(null); // {sheet1, sheet2, summary, conflicts, newMakats}
+  const [importErr, setImportErr] = React.useState("");
 
   // מקטים קיימים
   const makatToName = React.useMemo(()=>{
@@ -9426,72 +9429,192 @@ function InventoryBuilderTab({db, setDb, auth}){
     }
   }
 
-  // ── ייבוא מאקסל ────────────────────────────────────────
+  // ── ייבוא מאקסל — שלב 1: ניתוח 2 גיליונות ────────────────
   async function handleExcelUpload(e){
+    setImportErr("");
     const file = e.target.files[0];
     if(!file) return;
-    const buf = await file.arrayBuffer();
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf);
-    const ws = wb.worksheets[0];
-
-    // בנה מיפוי מקט→שם מ-armoryMaster
-    const mkMap = {};
-    Object.entries(db.armoryMaster||{}).forEach(([n,v])=>{ if(v.makat) mkMap[String(v.makat)]=n; });
-
-    // בנה סט של צ קיימים
-    const signedIds = new Set(Object.keys(db.signatures||{}));
-    const assignedMap = {}; // serial → {soldierName, unit, signed}
-    getSoldiers(db).forEach(sol=>{
-      Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
-        if(v&&v!==1) assignedMap[String(v)]={soldierName:sol.name,unit:sol.unit,signed:signedIds.has(sol.id),itemName:cleanItemName(k)};
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf);
+      
+      // === קרא 2 גיליונות ===
+      // גיליון 1: דוח צ — מקט | צ | כמות
+      // גיליון 2: מלאי ככלי — מק"ט | מלאי כולל
+      let ws1 = null, ws2 = null;
+      wb.worksheets.forEach(ws=>{
+        const name = (ws.name||"").trim();
+        if(name.includes("דוח צ") || name.includes("דוח_צ")) ws1 = ws;
+        else if(name.includes("מלאי ככלי") || name.includes("מלאי_ככלי") || name.includes("מלאי כולל")) ws2 = ws;
       });
-    });
-    const unitItemsMap = {}; // serial → {unit, name}
-    Object.values(db.unitItems||{}).forEach(v=>{
-      const s = String(v.s||v.serial||"");
-      if(s) unitItemsMap[s]={unit:v.u||v.unit||"גדודי",name:cleanItemName(v.n||v.name||"")};
-    });
-
-    const parsed = [];
-    ws.eachRow((row, idx)=>{
-      if(idx===1) return; // כותרות
-      const makat = String(row.getCell(1).value||"").trim();
-      const serial = String(row.getCell(2).value||"").trim();
-      const qty = parseInt(row.getCell(3).value)||1;
-      if(!makat) return;
-
-      const itemName = mkMap[makat]||"מקט לא מוכר: "+makat;
-      const isUnknown = !mkMap[makat];
-
-      if(serial && serial!=="0"){
-        // פריט עם צ
-        let status, statusLabel, unit="גדודי";
-        if(assignedMap[serial]){
-          const a = assignedMap[serial];
-          status = a.signed?"signed":"unsigned";
-          statusLabel = a.signed
-            ? "✅ חתום — "+a.soldierName+" ("+a.unit+")"
-            : "⏳ לא חתום — "+a.soldierName+" ("+a.unit+")";
-          unit = a.unit;
-        } else if(unitItemsMap[serial]){
-          status = "inArmory";
-          statusLabel = "📦 בארמון — פלוגה "+unitItemsMap[serial].unit;
-          unit = unitItemsMap[serial].unit;
-        } else {
-          status = "new";
-          statusLabel = "🆕 חדש";
-        }
-        parsed.push({makat,serial,qty:1,itemName,status,statusLabel,unit,isUnknown,include:status!=="signed"});
-      } else {
-        // פריט ללא צ
-        for(let i=0;i<qty;i++){
-          parsed.push({makat,serial:"",qty:1,itemName,status:"new",statusLabel:"🆕 חדש (ללא צ)",unit:"גדודי",isUnknown,include:true});
-        }
+      // אם לא מצאנו לפי שם — קח לפי סדר
+      if(!ws1 && wb.worksheets[0]) ws1 = wb.worksheets[0];
+      if(!ws2 && wb.worksheets[1]) ws2 = wb.worksheets[1];
+      if(!ws1){ setImportErr("לא נמצא גיליון 'דוח צ'"); e.target.value=""; return; }
+      
+      // === קרא גיליון 1 ===
+      const sheet1Rows = []; // {makat, serial, qty}
+      ws1.eachRow((row, idx)=>{
+        if(idx===1) return;
+        const makat = String(row.getCell(1).value||"").trim();
+        const serial = String(row.getCell(2).value||"").trim();
+        const qty = parseInt(row.getCell(3).value)||1;
+        if(!makat) return;
+        sheet1Rows.push({makat, serial: (serial && serial!=="0")?serial:"", qty});
+      });
+      
+      // === קרא גיליון 2 ===
+      const sheet2Map = {}; // makat → total
+      if(ws2){
+        ws2.eachRow((row, idx)=>{
+          if(idx===1) return;
+          const makat = String(row.getCell(1).value||"").trim();
+          const total = parseInt(row.getCell(2).value)||0;
+          if(makat) sheet2Map[makat] = total;
+        });
       }
-    });
-
-    setImportRows(parsed);
+      
+      // === ניתוח ===
+      // אסוף כל המקטים מ-2 הגיליונות
+      const allMakats = new Set();
+      sheet1Rows.forEach(r=>allMakats.add(r.makat));
+      Object.keys(sheet2Map).forEach(m=>allMakats.add(m));
+      
+      // לכל מקט: כמה צ סידוריים בגיליון 1, כמה ללא צ בגיליון 1, סה"כ בגיליון 2
+      const byMakat = {}; // makat → {serials:[], noSerialQty, sheet2Total, name, isInMaster}
+      allMakats.forEach(m=>{
+        byMakat[m] = {makat:m, serials:[], noSerialQty:0, sheet2Total: sheet2Map[m]||0,
+                     name: makatToName[m]||"", isInMaster: !!makatToName[m]};
+      });
+      sheet1Rows.forEach(r=>{
+        if(r.serial) byMakat[r.makat].serials.push(r.serial);
+        else byMakat[r.makat].noSerialQty += r.qty;
+      });
+      
+      // === בדיקות ===
+      // התאמת ספירות: גיליון 1 מול גיליון 2
+      const countMismatches = [];
+      Object.values(byMakat).forEach(v=>{
+        const s1 = v.serials.length + v.noSerialQty;
+        const s2 = v.sheet2Total;
+        if(s1>0 && s2>0 && s1!==s2){
+          countMismatches.push({makat:v.makat, sheet1: s1, sheet2: s2, diff: s2-s1, name:v.name});
+        }
+      });
+      
+      // מקטים שיש רק בגיליון 1
+      const onlyInSheet1 = Object.values(byMakat).filter(v=>{
+        const s1 = v.serials.length + v.noSerialQty;
+        return s1>0 && v.sheet2Total===0;
+      });
+      // מקטים שיש רק בגיליון 2
+      const onlyInSheet2 = Object.values(byMakat).filter(v=>{
+        const s1 = v.serials.length + v.noSerialQty;
+        return s1===0 && v.sheet2Total>0;
+      });
+      
+      // מקטים חדשים (לא ב-armoryMaster)
+      const newMakats = Object.values(byMakat).filter(v=>!v.isInMaster);
+      
+      // === מצב נוכחי ב-Firebase ===
+      const signedIds = new Set(Object.keys(db.signatures||{}));
+      const allSols = getSoldiers(db);
+      // אסוף כל הצ המוקצים לחיילים
+      const fbAssigned = {}; // serial → {soldierName, unit, signed, itemName}
+      allSols.forEach(sol=>{
+        Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
+          if(v && v!==1) fbAssigned[String(v)] = {
+            soldierId: sol.id, soldierName: sol.name, unit: sol.unit||"גדודי",
+            signed: signedIds.has(sol.id), itemName: cleanItemName(k)
+          };
+        });
+      });
+      
+      // === בדיקות מול Firebase ===
+      // צ חתומים בקובץ
+      const signedInFile = [];
+      const unsignedInFile = [];
+      const inArmoryInFile = [];
+      const newSerialsInFile = [];
+      
+      // unitItems map
+      const fbUnitItems = {}; // serial → {unit, name}
+      Object.values(db.unitItems||{}).forEach(v=>{
+        const s = String(v.s||v.serial||"");
+        if(s) fbUnitItems[s] = {unit: v.u||v.unit||"גדודי", name: cleanItemName(v.n||v.name||"")};
+      });
+      
+      sheet1Rows.forEach(r=>{
+        if(!r.serial) return;
+        const fb = fbAssigned[r.serial];
+        if(fb && fb.signed) signedInFile.push({...r, fb});
+        else if(fb) unsignedInFile.push({...r, fb});
+        else if(fbUnitItems[r.serial]) inArmoryInFile.push({...r, fb: fbUnitItems[r.serial]});
+        else newSerialsInFile.push(r);
+      });
+      
+      // צ ב-Firebase שלא בקובץ
+      const filSerialsSet = new Set(sheet1Rows.filter(r=>r.serial).map(r=>r.serial));
+      const signedNotInFile = []; // חתומים אצל חיילים אבל לא בקובץ ⚠️
+      Object.entries(fbAssigned).forEach(([srl, fb])=>{
+        if(fb.signed && !filSerialsSet.has(srl)){
+          signedNotInFile.push({serial: srl, ...fb});
+        }
+      });
+      const assignedNotInFile = [];
+      Object.entries(fbAssigned).forEach(([srl, fb])=>{
+        if(!fb.signed && !filSerialsSet.has(srl)){
+          assignedNotInFile.push({serial: srl, ...fb});
+        }
+      });
+      
+      // === סיכום ===
+      const summary = {
+        // קובץ
+        sheet1Rows: sheet1Rows.length,
+        totalSerialsInFile: sheet1Rows.filter(r=>r.serial).length,
+        totalNoSerialInFile: sheet1Rows.filter(r=>!r.serial).reduce((a,r)=>a+r.qty,0),
+        totalQtySheet2: Object.values(sheet2Map).reduce((a,b)=>a+b,0),
+        makatCount: allMakats.size,
+        // התאמה
+        countMismatches: countMismatches.length,
+        onlyInSheet1: onlyInSheet1.length,
+        onlyInSheet2: onlyInSheet2.length,
+        // ל-armoryMaster
+        newMakats: newMakats.length,
+        existingMakats: allMakats.size - newMakats.length,
+        // מול Firebase
+        signedInFile: signedInFile.length,
+        unsignedInFile: unsignedInFile.length,
+        inArmoryInFile: inArmoryInFile.length,
+        newSerialsInFile: newSerialsInFile.length,
+        signedNotInFile: signedNotInFile.length,
+        assignedNotInFile: assignedNotInFile.length,
+      };
+      
+      setAnalysisData({
+        byMakat,
+        sheet1Rows,
+        sheet2Map,
+        countMismatches,
+        onlyInSheet1, onlyInSheet2,
+        newMakats,
+        signedInFile, unsignedInFile, inArmoryInFile, newSerialsInFile,
+        signedNotInFile, assignedNotInFile,
+        summary
+      });
+      setImportStep("analyze");
+      e.target.value="";
+    } catch(err){
+      console.error(err);
+      setImportErr("שגיאה בקריאת הקובץ: "+err.message);
+      e.target.value="";
+    }
+  }
+  
+  // === legacy: handleExcelUpload_OLD נשאר כקוד ישן בטל ===
+  async function handleExcelUpload_OLD(e){    setImportRows(parsed);
     setImportStep("preview");
     e.target.value="";
   }
@@ -9620,15 +9743,185 @@ function InventoryBuilderTab({db, setDb, auth}){
             <div style={{fontSize:40,marginBottom:8}}>📥</div>
             <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>העלה קובץ אקסל</div>
             <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginBottom:16}}>
-              עמודות נדרשות: מקט | צ | כמות
+              קובץ עם 2 גיליונות: <b>"דוח צ"</b> (מקט | צ | כמות) ו-<b>"מלאי ככלי"</b> (מקט | מלאי כולל)
+            </div>
+            <div style={{fontSize:11,color:"var(--color-text-muted)",marginBottom:16,padding:"8px 12px",background:"var(--color-warning-subtle)",borderRadius:6,maxWidth:500,margin:"0 auto 16px"}}>
+              ⚠️ שלב 1 בלבד: ניתוח קריא בלבד — <b>לא מבצע שום שינוי</b> ב-Firebase
             </div>
             <input type="file" accept=".xlsx,.xls" onChange={handleExcelUpload}
               style={{display:"none"}} id="excel-upload"/>
             <label htmlFor="excel-upload" style={{...S.btn("blue"),padding:"10px 24px",cursor:"pointer",display:"inline-block"}}>
               בחר קובץ...
             </label>
+            {importErr&&<div style={{marginTop:12,color:"var(--color-danger-fg)",fontSize:"var(--text-sm)"}}>{importErr}</div>}
           </div>
         )}
+
+        {importStep==="analyze" && analysisData && (() => {
+          const a = analysisData;
+          const s = a.summary;
+          const Card = ({title, children, color}) => (
+            <div style={{...S.card, marginBottom:12, borderRight: "4px solid "+color}}>
+              <div style={{fontWeight:700, marginBottom:8, fontSize:14, color}}>{title}</div>
+              {children}
+            </div>
+          );
+          const Stat = ({label, val, color}) => (
+            <div style={{textAlign:"center", padding:"10px 6px", background:"var(--color-bg-canvas)", borderRadius:6, minWidth:120}}>
+              <div style={{fontSize:24, fontWeight:800, color: color||"var(--color-text-primary)"}}>{val}</div>
+              <div style={{fontSize:10, color:"var(--color-text-muted)"}}>{label}</div>
+            </div>
+          );
+          return (
+            <div>
+              {/* כותרת */}
+              <div style={{...S.card, marginBottom:12, background:"var(--color-accent-subtle)"}}>
+                <div style={{fontWeight:800, fontSize:16, marginBottom:4}}>📊 ניתוח קובץ — שלב 1: קריאה בלבד</div>
+                <div style={{fontSize:"var(--text-sm)", color:"var(--color-text-muted)"}}>
+                  זוהי תצוגה אינפורמטיבית בלבד. <b>לא בוצע שום שינוי</b> ב-Firebase.
+                </div>
+              </div>
+
+              {/* א. תוכן הקובץ */}
+              <Card title="📄 א. תוכן הקובץ" color="var(--color-accent-fg)">
+                <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+                  <Stat label='שורות בגיליון "דוח צ"' val={s.sheet1Rows}/>
+                  <Stat label="צ סידוריים" val={s.totalSerialsInFile} color="var(--color-accent-fg)"/>
+                  <Stat label="פריטים ללא צ" val={s.totalNoSerialInFile} color="var(--color-warning-fg)"/>
+                  <Stat label='סה"כ "מלאי ככלי"' val={s.totalQtySheet2}/>
+                  <Stat label="מקטים שונים" val={s.makatCount}/>
+                </div>
+              </Card>
+
+              {/* ב. התאמה בין הגיליונות */}
+              <Card title="🔍 ב. התאמה בין הגיליונות (גיליון 1 מול גיליון 2)" 
+                color={s.countMismatches>0||s.onlyInSheet1>0?"var(--color-warning-fg)":"var(--color-success-fg)"}>
+                <div style={{display:"flex", gap:10, flexWrap:"wrap", marginBottom:10}}>
+                  <Stat label="פערי כמות" val={s.countMismatches} color={s.countMismatches>0?"var(--color-danger-fg)":"var(--color-success-fg)"}/>
+                  <Stat label='רק ב"דוח צ"' val={s.onlyInSheet1} color="var(--color-warning-fg)"/>
+                  <Stat label='רק ב"מלאי ככלי"' val={s.onlyInSheet2} color="var(--color-warning-fg)"/>
+                </div>
+                {a.countMismatches.length>0 && (
+                  <details style={{marginTop:8}}>
+                    <summary style={{cursor:"pointer", fontWeight:600, fontSize:"var(--text-sm)"}}>
+                      פערי כמות בין הגיליונות ({a.countMismatches.length})
+                    </summary>
+                    <div style={{maxHeight:200, overflowY:"auto", marginTop:8, fontSize:11, fontFamily:"monospace"}}>
+                      {a.countMismatches.map((m,i)=>(
+                        <div key={i} style={{padding:"4px 8px", background: i%2?"var(--color-bg-subtle)":"var(--color-bg-canvas)"}}>
+                          <b>{m.makat}</b> {m.name?"("+m.name+")":""} — דוח צ: {m.sheet1} | מלאי ככלי: {m.sheet2} | פער: {m.diff>0?"+":""}{m.diff}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+                {a.onlyInSheet2.length>0 && (
+                  <details style={{marginTop:8}}>
+                    <summary style={{cursor:"pointer", fontWeight:600, fontSize:"var(--text-sm)"}}>
+                      מקטים שיש רק ב"מלאי ככלי" — אין להם צ סידורי ({a.onlyInSheet2.length})
+                    </summary>
+                    <div style={{maxHeight:200, overflowY:"auto", marginTop:8, fontSize:11, fontFamily:"monospace"}}>
+                      {a.onlyInSheet2.map((v,i)=>(
+                        <div key={i} style={{padding:"4px 8px", background: i%2?"var(--color-bg-subtle)":"var(--color-bg-canvas)"}}>
+                          <b>{v.makat}</b> {v.name?"("+v.name+")":<span style={{color:"var(--color-danger-fg)"}}>שם חסר</span>} — כמות: {v.sheet2Total}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </Card>
+
+              {/* ג. מקטים מול armoryMaster */}
+              <Card title="📚 ג. מקטים מול armoryMaster" 
+                color={s.newMakats>0?"var(--color-warning-fg)":"var(--color-success-fg)"}>
+                <div style={{display:"flex", gap:10, flexWrap:"wrap", marginBottom:10}}>
+                  <Stat label="מקטים קיימים" val={s.existingMakats} color="var(--color-success-fg)"/>
+                  <Stat label="מקטים חדשים (נדרש שם)" val={s.newMakats} color="var(--color-warning-fg)"/>
+                </div>
+                {a.newMakats.length>0 && (
+                  <details style={{marginTop:8}}>
+                    <summary style={{cursor:"pointer", fontWeight:600, fontSize:"var(--text-sm)"}}>
+                      רשימת מקטים חדשים ({a.newMakats.length})
+                    </summary>
+                    <div style={{maxHeight:200, overflowY:"auto", marginTop:8, fontSize:11, fontFamily:"monospace"}}>
+                      {a.newMakats.map((v,i)=>{
+                        const cnt = v.serials.length + v.noSerialQty + (v.sheet2Total - v.serials.length - v.noSerialQty>0?v.sheet2Total - v.serials.length - v.noSerialQty:0);
+                        const total = Math.max(v.sheet2Total, v.serials.length + v.noSerialQty);
+                        return (
+                          <div key={i} style={{padding:"4px 8px", background: i%2?"var(--color-bg-subtle)":"var(--color-bg-canvas)"}}>
+                            <b>{v.makat}</b> — סידוריים: {v.serials.length} | ללא צ: {v.noSerialQty} | מלאי כולל: {v.sheet2Total}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
+              </Card>
+
+              {/* ד. מצב צ סידוריים בקובץ מול Firebase */}
+              <Card title="🔗 ד. מצב הצ הסידוריים בקובץ מול Firebase" color="var(--color-accent-fg)">
+                <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+                  <Stat label="חתומים על ידי חיילים" val={s.signedInFile} color="var(--color-success-fg)"/>
+                  <Stat label="מוקצים לא חתומים" val={s.unsignedInFile} color="var(--color-warning-fg)"/>
+                  <Stat label="בארמון (unitItems)" val={s.inArmoryInFile} color="var(--color-accent-fg)"/>
+                  <Stat label="צ חדשים — לא במערכת" val={s.newSerialsInFile} color="var(--color-text-muted)"/>
+                </div>
+              </Card>
+
+              {/* ה. אזהרות — Firebase מכיל צ שלא בקובץ */}
+              {(s.signedNotInFile>0 || s.assignedNotInFile>0) && (
+                <Card title="⚠️ ה. צ ב-Firebase שלא נמצאים בקובץ" color="var(--color-danger-fg)">
+                  <div style={{display:"flex", gap:10, flexWrap:"wrap", marginBottom:10}}>
+                    <Stat label="חתומים על ידי חיילים" val={s.signedNotInFile} color="var(--color-danger-fg)"/>
+                    <Stat label="מוקצים לא חתומים" val={s.assignedNotInFile} color="var(--color-warning-fg)"/>
+                  </div>
+                  <div style={{fontSize:11, color:"var(--color-text-muted)", marginBottom:8}}>
+                    אלה צ שחיילים מחזיקים או שמשויכים — אבל לא מופיעים בקובץ. דרושה החלטה מה לעשות איתם.
+                  </div>
+                  {a.signedNotInFile.length>0 && (
+                    <details style={{marginTop:8}}>
+                      <summary style={{cursor:"pointer", fontWeight:600, fontSize:"var(--text-sm)", color:"var(--color-danger-fg)"}}>
+                        חתומים אצל חיילים אבל אין בקובץ ({a.signedNotInFile.length})
+                      </summary>
+                      <div style={{maxHeight:200, overflowY:"auto", marginTop:8, fontSize:11, fontFamily:"monospace"}}>
+                        {a.signedNotInFile.map((v,i)=>(
+                          <div key={i} style={{padding:"4px 8px", background: i%2?"var(--color-bg-subtle)":"var(--color-bg-canvas)"}}>
+                            <b>{v.serial}</b> — {v.itemName} | {v.soldierName} ({v.unit})
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {a.assignedNotInFile.length>0 && (
+                    <details style={{marginTop:8}}>
+                      <summary style={{cursor:"pointer", fontWeight:600, fontSize:"var(--text-sm)", color:"var(--color-warning-fg)"}}>
+                        מוקצים לא חתומים שאין בקובץ ({a.assignedNotInFile.length})
+                      </summary>
+                      <div style={{maxHeight:200, overflowY:"auto", marginTop:8, fontSize:11, fontFamily:"monospace"}}>
+                        {a.assignedNotInFile.map((v,i)=>(
+                          <div key={i} style={{padding:"4px 8px", background: i%2?"var(--color-bg-subtle)":"var(--color-bg-canvas)"}}>
+                            <b>{v.serial}</b> — {v.itemName} | {v.soldierName} ({v.unit})
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </Card>
+              )}
+
+              {/* כפתורים */}
+              <div style={{...S.card, display:"flex", gap:10, justifyContent:"space-between", flexWrap:"wrap"}}>
+                <button onClick={()=>{setImportStep("upload"); setAnalysisData(null);}}
+                  style={{...S.btn("gray"), padding:"10px 20px"}}>
+                  ⬅️ חזרה
+                </button>
+                <div style={{fontSize:11, color:"var(--color-text-muted)", padding:"10px"}}>
+                  ✅ ניתוח הושלם. השלב הבא (השלמת שמות + תצוגה מקדימה + החלה) יתווסף בהמשך אחרי אישור.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {importStep==="preview"&&(
           <div>
