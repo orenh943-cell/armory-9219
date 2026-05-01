@@ -9496,6 +9496,9 @@ function InventoryBuilderTab({db, setDb, auth}){
   }
 
   // === שמירה אוטומטית של טיוטה ב-localStorage ===
+  // דגל: האם הטיוטה כבר נטענה? (כדי שהשמירה לא תרוץ לפני הטעינה ותמחק את הנתונים)
+  const draftLoadedRef = React.useRef(false);
+  
   React.useEffect(()=>{
     try{
       const saved = localStorage.getItem("inv_builder_draft");
@@ -9503,16 +9506,59 @@ function InventoryBuilderTab({db, setDb, auth}){
         const arr = JSON.parse(saved);
         if(Array.isArray(arr) && arr.length>0){
           setRows(arr);
+          console.log("📦 נטענה טיוטה: "+arr.length+" שורות");
         }
       }
-    }catch(e){}
+    }catch(e){console.warn("draft load failed",e);}
+    // סמן שהטעינה הסתיימה — רק עכשיו מותר לשמור
+    draftLoadedRef.current = true;
   },[]);
+  
   React.useEffect(()=>{
+    // לא לשמור עד שהטעינה הראשונית הסתיימה!
+    if(!draftLoadedRef.current) return;
     try{
-      if(rows.length>0) localStorage.setItem("inv_builder_draft", JSON.stringify(rows));
-      else localStorage.removeItem("inv_builder_draft");
-    }catch(e){}
+      if(rows.length>0){
+        const json = JSON.stringify(rows);
+        localStorage.setItem("inv_builder_draft", json);
+        // גיבוי תמידי — נשמר גם אחרי החלה, נמחק רק ידנית
+        localStorage.setItem("inv_builder_draft_backup", json);
+        localStorage.setItem("inv_builder_draft_backup_time", new Date().toISOString());
+      } else {
+        localStorage.removeItem("inv_builder_draft");
+        // לא מוחקים את ה-backup!
+      }
+    }catch(e){console.warn("draft save failed",e);}
   },[rows]);
+  
+  // === התראה לפני יציאה מהדף אם יש טיוטה לא שמורה ===
+  React.useEffect(()=>{
+    function beforeUnload(e){
+      if(rows.length>0){
+        e.preventDefault();
+        e.returnValue = "יש לך "+rows.length+" שורות בטיוטה. בטוח לעזוב?";
+        return e.returnValue;
+      }
+    }
+    window.addEventListener("beforeunload", beforeUnload);
+    return ()=>window.removeEventListener("beforeunload", beforeUnload);
+  },[rows.length]);
+  
+  // === שחזור מהגיבוי ===
+  function restoreFromBackup(){
+    try{
+      const backup = localStorage.getItem("inv_builder_draft_backup");
+      const time = localStorage.getItem("inv_builder_draft_backup_time");
+      if(!backup){ alert("אין גיבוי שמור"); return; }
+      const arr = JSON.parse(backup);
+      if(!Array.isArray(arr)){ alert("גיבוי פגום"); return; }
+      const timeStr = time?new Date(time).toLocaleString("he-IL"):"לא ידוע";
+      if(!window.confirm("שחזר טיוטה של "+arr.length+" שורות?\nגובתה ב: "+timeStr+"\n\nזה יחליף את הרשימה הנוכחית.")) return;
+      setRows(arr);
+    }catch(e){
+      alert("שגיאה בשחזור: "+e.message);
+    }
+  }
   
   // === הורדת גיבוי JSON של ה-DB הנוכחי ===
   function downloadBackup(){
@@ -10013,12 +10059,45 @@ function InventoryBuilderTab({db, setDb, auth}){
       </div>
 
       {/* בחירת מצב */}
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setView("manual")}
           style={{...S.btn(view==="manual"?"blue":"neutral"),padding:"7px 18px"}}>✏️ הכנסה ידנית</button>
         <button onClick={()=>{setView("import");setImportStep("upload");}}
           style={{...S.btn(view==="import"?"blue":"neutral"),padding:"7px 18px"}}>📥 ייבוא מאקסל</button>
+        <div style={{flex:1}}/>
+        <button onClick={restoreFromBackup}
+          style={{...S.btn("gray"),padding:"7px 14px",fontSize:12}}
+          title="שחזר טיוטה אחרונה מהגיבוי">📥 שחזר גיבוי</button>
       </div>
+      {/* בנר מצב טיוטה */}
+      {(()=>{
+        let backupInfo = null;
+        try{
+          const t = localStorage.getItem("inv_builder_draft_backup_time");
+          const b = localStorage.getItem("inv_builder_draft_backup");
+          if(b){
+            const arr = JSON.parse(b);
+            if(Array.isArray(arr)) backupInfo = {count: arr.length, time: t};
+          }
+        }catch(e){}
+        return (
+          <div style={{padding:"7px 12px",borderRadius:6,marginBottom:14,fontSize:11,
+            background:rows.length>0?"var(--color-success-subtle)":"var(--color-bg-subtle)",
+            border:"1px solid var(--color-border-muted)",
+            display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+            <div>
+              <b>📋 רשימה נוכחית:</b> {rows.length} שורות
+              {rows.length>0 && <span style={{color:"var(--color-success-fg)",marginRight:8}}> • נשמר אוטומטית ✓</span>}
+            </div>
+            {backupInfo && (
+              <div style={{color:"var(--color-text-muted)"}}>
+                💾 גיבוי אחרון: {backupInfo.count} שורות
+                {backupInfo.time && " ("+new Date(backupInfo.time).toLocaleString("he-IL")+")"}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── ייבוא מאקסל ── */}
       {view==="import"&&(<>
