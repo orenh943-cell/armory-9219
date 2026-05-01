@@ -9340,6 +9340,7 @@ function ActivityLogTab({db}){
 // InventoryBuilderTab — בניית מלאי מעודכן (רק לאורן)
 // ============================================================
 function InventoryBuilderTab({db, setDb, auth}){
+  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
   const [rows, setRows] = React.useState([]);
   const [makat, setMakat] = React.useState("");
   const [name, setName] = React.useState("");
@@ -9348,14 +9349,17 @@ function InventoryBuilderTab({db, setDb, auth}){
   const [unit, setUnit] = React.useState("");
   const [err, setErr] = React.useState("");
   const [filterRow, setFilterRow] = React.useState("");
-  const [applying, setApplying] = React.useState(false);
-  const [applied, setApplied] = React.useState(false);
   const [serialCheckMsg, setSerialCheckMsg] = React.useState("");
-
-  const UNITS = ["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const [view, setView] = React.useState("manual"); // manual | import
+  // import state
+  const [importRows, setImportRows] = React.useState([]); // parsed from excel
+  const [importStep, setImportStep] = React.useState("upload"); // upload | preview | applying | done
+  const [importPin, setImportPin] = React.useState("");
+  const [importPinErr, setImportPinErr] = React.useState("");
+  const [applyLog, setApplyLog] = React.useState([]);
 
   // מקטים קיימים
-  const existingMakats = React.useMemo(()=>{
+  const makatToName = React.useMemo(()=>{
     const m = {};
     Object.entries(db.armoryMaster||{}).forEach(([n,v])=>{ if(v.makat) m[String(v.makat)]=n; });
     return m;
@@ -9363,30 +9367,26 @@ function InventoryBuilderTab({db, setDb, auth}){
 
   // כשמקט משתנה — מלא שם אוטומטי
   React.useEffect(()=>{
-    if(makat.trim() && existingMakats[makat.trim()] && !name)
-      setName(existingMakats[makat.trim()]);
+    if(makat.trim() && makatToName[makat.trim()] && !name)
+      setName(makatToName[makat.trim()]);
   },[makat]);
 
   // כשצ משתנה — חפש פלוגה אוטומטית
   React.useEffect(()=>{
     if(!serial.trim()){ setSerialCheckMsg(""); setUnit(""); return; }
     const srl = serial.trim();
-    // בדוק כפילות ברשימה שהכנסת
     const dupInRows = rows.find(r=>r.serial===srl);
     if(dupInRows){ setSerialCheckMsg("⚠️ כבר הכנסת צ זה: "+dupInRows.name); return; }
-    // חפש ב-assignments
-    let foundUnit="", foundSoldier="", foundName="", foundSigned=false;
     const signedIds = new Set(Object.keys(db.signatures||{}));
+    let foundUnit="", foundSoldier="", foundName="", foundSigned=false;
     getSoldiers(db).forEach(sol=>{
       Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
         if(String(v)===srl){
           foundUnit=sol.unit; foundSoldier=sol.name;
-          foundName=cleanItemName(k);
-          foundSigned=signedIds.has(sol.id);
+          foundName=cleanItemName(k); foundSigned=signedIds.has(sol.id);
         }
       });
     });
-    // חפש ב-unitItems
     if(!foundUnit){
       Object.values(db.unitItems||{}).forEach(v=>{
         if(String(v.s||v.serial||"")===srl){
@@ -9398,7 +9398,7 @@ function InventoryBuilderTab({db, setDb, auth}){
     if(foundUnit){
       setUnit(foundUnit);
       if(foundSoldier)
-        setSerialCheckMsg((foundSigned?"✅ חתום":"⏳ לא חתום")+" — "+foundSoldier+" (פלוגה "+foundUnit+")");
+        setSerialCheckMsg((foundSigned?"✅ חתום":"⏳ לא חתום")+" — "+foundSoldier+" ("+foundUnit+")");
       else
         setSerialCheckMsg("📦 בארמון — פלוגה "+foundUnit);
       if(!name && foundName) setName(foundName);
@@ -9406,13 +9406,12 @@ function InventoryBuilderTab({db, setDb, auth}){
       setUnit("גדודי");
       setSerialCheckMsg("🆕 צ חדש — לא נמצא במערכת");
     }
-  },[serial, rows]);
+  },[serial]);
 
   function addRow(){
     setErr("");
     if(!name.trim()){setErr("נדרש שם פריט");return;}
     const srl = serial.trim();
-    // בדוק כפילות
     if(srl && rows.find(r=>r.serial===srl)){ setErr("צ "+srl+" כבר ברשימה!"); return; }
     const q = parseInt(qty)||1;
     const finalUnit = unit||"גדודי";
@@ -9427,237 +9426,444 @@ function InventoryBuilderTab({db, setDb, auth}){
     }
   }
 
-  function removeRow(i){ setRows(prev=>prev.filter((_,j)=>j!==i)); }
+  // ── ייבוא מאקסל ────────────────────────────────────────
+  async function handleExcelUpload(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const buf = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0];
 
-  async function applyInventory(){
-    if(!rows.length){setErr("אין שורות להחיל");return;}
-    if(!window.confirm(
-      "החל "+rows.length+" פריטים כבסיס מלאי חדש?\n\n"+
-      "✅ לא ימחקו: חתימות, שיוכים, יציאות, בוחנים\n"+
-      "⚠️ יתווספו: unitItems חדשים + armoryMaster\n"+
-      "⚠️ פריטים קיימים ב-unitItems שלא ב-assignments — יימחקו\n\n"+
-      "להמשיך?"
-    )) return;
+    // בנה מיפוי מקט→שם מ-armoryMaster
+    const mkMap = {};
+    Object.entries(db.armoryMaster||{}).forEach(([n,v])=>{ if(v.makat) mkMap[String(v.makat)]=n; });
 
-    setApplying(true);
-
-    // בנה assignments serials set — לא נוגעים בהם
-    const assignedSerials = new Set();
-    const assignedItems = new Set(); // "solId|itemName"
+    // בנה סט של צ קיימים
+    const signedIds = new Set(Object.keys(db.signatures||{}));
+    const assignedMap = {}; // serial → {soldierName, unit, signed}
     getSoldiers(db).forEach(sol=>{
       Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
-        if(v&&v!==1) assignedSerials.add(String(v));
-        assignedItems.add(sol.id+"|"+cleanItemName(k));
+        if(v&&v!==1) assignedMap[String(v)]={soldierName:sol.name,unit:sol.unit,signed:signedIds.has(sol.id),itemName:cleanItemName(k)};
       });
     });
-
-    // מחק unitItems קיימים שלא ב-assignments
-    const oldUIKeys = Object.keys(db.unitItems||{});
-    for(const k of oldUIKeys){
-      const v = db.unitItems[k];
-      const srl = String(v.s||v.serial||"");
-      if(srl && assignedSerials.has(srl)) continue; // אצל חייל — לא נוגעים
-      await fbSet("db/unitItems/"+k, null).catch(()=>{});
-    }
-
-    // הוסף unitItems חדשים
-    const newUnitItems = {};
-    // שמור קיימים שב-assignments
-    Object.entries(db.unitItems||{}).forEach(([k,v])=>{
-      const srl = String(v.s||v.serial||"");
-      if(srl && assignedSerials.has(srl)) newUnitItems[k] = v;
+    const unitItemsMap = {}; // serial → {unit, name}
+    Object.values(db.unitItems||{}).forEach(v=>{
+      const s = String(v.s||v.serial||"");
+      if(s) unitItemsMap[s]={unit:v.u||v.unit||"גדודי",name:cleanItemName(v.n||v.name||"")};
     });
 
-    // הוסף שורות חדשות
+    const parsed = [];
+    ws.eachRow((row, idx)=>{
+      if(idx===1) return; // כותרות
+      const makat = String(row.getCell(1).value||"").trim();
+      const serial = String(row.getCell(2).value||"").trim();
+      const qty = parseInt(row.getCell(3).value)||1;
+      if(!makat) return;
+
+      const itemName = mkMap[makat]||"מקט לא מוכר: "+makat;
+      const isUnknown = !mkMap[makat];
+
+      if(serial && serial!=="0"){
+        // פריט עם צ
+        let status, statusLabel, unit="גדודי";
+        if(assignedMap[serial]){
+          const a = assignedMap[serial];
+          status = a.signed?"signed":"unsigned";
+          statusLabel = a.signed
+            ? "✅ חתום — "+a.soldierName+" ("+a.unit+")"
+            : "⏳ לא חתום — "+a.soldierName+" ("+a.unit+")";
+          unit = a.unit;
+        } else if(unitItemsMap[serial]){
+          status = "inArmory";
+          statusLabel = "📦 בארמון — פלוגה "+unitItemsMap[serial].unit;
+          unit = unitItemsMap[serial].unit;
+        } else {
+          status = "new";
+          statusLabel = "🆕 חדש";
+        }
+        parsed.push({makat,serial,qty:1,itemName,status,statusLabel,unit,isUnknown,include:status!=="signed"});
+      } else {
+        // פריט ללא צ
+        for(let i=0;i<qty;i++){
+          parsed.push({makat,serial:"",qty:1,itemName,status:"new",statusLabel:"🆕 חדש (ללא צ)",unit:"גדודי",isUnknown,include:true});
+        }
+      }
+    });
+
+    setImportRows(parsed);
+    setImportStep("preview");
+    e.target.value="";
+  }
+
+  // ── סיכום לתצוגה מקדימה ────────────────────────────────
+  const importSummary = React.useMemo(()=>{
+    const s={signed:0,unsigned:0,inArmory:0,new:0,unknown:0};
+    importRows.forEach(r=>{
+      if(r.isUnknown) s.unknown++;
+      else s[r.status]=(s[r.status]||0)+1;
+    });
+    return s;
+  },[importRows]);
+
+  const includedRows = importRows.filter(r=>r.include);
+
+  // ── החלת הייבוא ────────────────────────────────────────
+  async function applyImport(){
+    if(importPin!==ARMORY_DASH_PIN){ setImportPinErr("סיסמה שגויה ❌"); return; }
+    setImportStep("applying");
+    const log = [];
+
+    // בנה סטים קיימים
+    const signedIds = new Set(Object.keys(db.signatures||{}));
+    const assignedSerials = new Set();
+    getSoldiers(db).forEach(s=>Object.values(db.assignments?.[s.id]||{}).forEach(v=>{ if(v&&v!==1) assignedSerials.add(String(v)); }));
+
+    const newUnitItems = {...db.unitItems};
     const masterUpdates = {};
-    for(const row of rows){
-      // אל תוסיף אם הצ כבר ב-assignments
-      if(row.serial && assignedSerials.has(row.serial)) continue;
-      const uid = "ib_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
-      const item = {n:row.name,s:row.serial||null,u:row.unit,t:"unit",
-        makat:row.makat||null};
-      newUnitItems[uid] = item;
-      await fbSet("db/unitItems/"+uid, sanitizeForFirebase(item)).catch(()=>{});
+
+    for(const row of includedRows){
+      if(row.isUnknown){ log.push("⚠️ דולג — מקט לא מוכר: "+row.makat); continue; }
+      if(row.status==="signed"){ log.push("⏭️ דולג — חתום: "+row.itemName+" צ:"+row.serial); continue; }
+
+      const srl = row.serial||null;
+
+      // עדכן/הוסף unitItem
+      if(srl){
+        // חפש unitItem קיים עם אותו צ
+        const existingKey = Object.keys(newUnitItems).find(k=>{
+          const v=newUnitItems[k];
+          return String(v.s||v.serial||"")===srl;
+        });
+        if(existingKey){
+          // עדכן מקט בלבד אם צריך
+          const v = newUnitItems[existingKey];
+          if(v.makat!==row.makat){
+            newUnitItems[existingKey]={...v,makat:row.makat};
+            await fbSet("db/unitItems/"+existingKey, sanitizeForFirebase(newUnitItems[existingKey])).catch(()=>{});
+            log.push("🔄 עודכן מקט: "+row.itemName+" צ:"+srl);
+          } else {
+            log.push("✓ קיים: "+row.itemName+" צ:"+srl);
+          }
+        } else if(!assignedSerials.has(srl)){
+          // הוסף חדש
+          const uid = "imp_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+          newUnitItems[uid]={n:row.itemName,s:srl,u:row.unit,t:"unit",makat:row.makat};
+          await fbSet("db/unitItems/"+uid, sanitizeForFirebase(newUnitItems[uid])).catch(()=>{});
+          log.push("✅ נוסף: "+row.itemName+" צ:"+srl);
+        }
+      } else {
+        // ללא צ — הוסף תמיד
+        const uid = "imp_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+        newUnitItems[uid]={n:row.itemName,s:null,u:row.unit,t:"unit",makat:row.makat};
+        await fbSet("db/unitItems/"+uid, sanitizeForFirebase(newUnitItems[uid])).catch(()=>{});
+        log.push("✅ נוסף (ללא צ): "+row.itemName);
+      }
+
       // עדכן armoryMaster
-      if(!masterUpdates[row.name]) masterUpdates[row.name] = {makat:row.makat||null,total:0};
-      masterUpdates[row.name].total++;
+      if(!masterUpdates[row.itemName]) masterUpdates[row.itemName]={makat:row.makat,count:0};
+      masterUpdates[row.itemName].count++;
     }
 
     // עדכן armoryMaster
-    for(const [name,info] of Object.entries(masterUpdates)){
-      const existing = db.armoryMaster?.[name]||{};
-      const updated = {...existing,...info,
-        total:Math.max(existing.total||0,info.total)};
-      await fbSet("db/armoryMaster/"+name, sanitizeForFirebase(updated)).catch(()=>{});
+    for(const [nm,info] of Object.entries(masterUpdates)){
+      const existing = db.armoryMaster?.[nm]||{};
+      const updated = {...existing, makat:info.makat};
+      await fbSet("db/armoryMaster/"+nm, sanitizeForFirebase(updated)).catch(()=>{});
     }
 
-    setDb(prev=>({...prev,
-      unitItems:newUnitItems,
-      armoryMaster:{...(prev.armoryMaster||{}),...masterUpdates}
+    setDb(prev=>({...prev, unitItems:newUnitItems,
+      armoryMaster:{...(prev.armoryMaster||{}),...Object.fromEntries(
+        Object.entries(masterUpdates).map(([nm,info])=>[nm,{...(prev.armoryMaster?.[nm]||{}),makat:info.makat}])
+      )}
     }));
 
-    setApplying(false);
-    setApplied(true);
-    setRows([]);
-    alert("✅ המלאי הוחל! "+Object.keys(newUnitItems).length+" פריטים ב-unitItems");
+    setApplyLog(log);
+    setImportStep("done");
   }
 
   const filteredRows = filterRow.trim()
     ? rows.filter(r=>r.name.includes(filterRow)||r.serial.includes(filterRow)||r.makat.includes(filterRow))
     : rows;
 
-  // סיכום לפי שם
   const summary = React.useMemo(()=>{
-    const m = {};
+    const m={};
     rows.forEach(r=>{
       if(!m[r.name]) m[r.name]={name:r.name,makat:r.makat,count:0,withSerial:0};
-      m[r.name].count++;
-      if(r.serial) m[r.name].withSerial++;
+      m[r.name].count++; if(r.serial) m[r.name].withSerial++;
     });
     return Object.values(m).sort((a,b)=>a.name.localeCompare(b.name,"he"));
   },[rows]);
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:16}}>
-      <div style={{marginBottom:16}}>
+    <div style={{maxWidth:960,margin:"0 auto",padding:16}}>
+      <div style={{marginBottom:14}}>
         <h2 style={{fontSize:17,fontWeight:800,margin:0}}>🏗️ בניית מלאי מעודכן</h2>
-        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginTop:4}}>
-          הכנס פריטים → בדוק → החל כבסיס נתונים. לא ימחקו חתימות/שיוכים.
+        <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginTop:2}}>
+          הכנסה ידנית או ייבוא מאקסל. לא ימחקו חתימות/שיוכים.
         </div>
       </div>
 
-      {/* טופס הכנסה */}
-      <div style={{...S.card,marginBottom:16}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:10}}>
-          <div>
-            <div style={S.label}>מקט</div>
-            <input value={makat} onChange={e=>setMakat(e.target.value)}
-              placeholder="מקט..." style={{...S.input,marginBottom:0}}
-              onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-name")?.focus();}}/>
+      {/* בחירת מצב */}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={()=>setView("manual")}
+          style={{...S.btn(view==="manual"?"blue":"neutral"),padding:"7px 18px"}}>✏️ הכנסה ידנית</button>
+        <button onClick={()=>{setView("import");setImportStep("upload");}}
+          style={{...S.btn(view==="import"?"blue":"neutral"),padding:"7px 18px"}}>📥 ייבוא מאקסל</button>
+      </div>
+
+      {/* ── ייבוא מאקסל ── */}
+      {view==="import"&&(<>
+
+        {importStep==="upload"&&(
+          <div style={{...S.card,textAlign:"center",padding:32}}>
+            <div style={{fontSize:40,marginBottom:8}}>📥</div>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>העלה קובץ אקסל</div>
+            <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginBottom:16}}>
+              עמודות נדרשות: מקט | צ | כמות
+            </div>
+            <input type="file" accept=".xlsx,.xls" onChange={handleExcelUpload}
+              style={{display:"none"}} id="excel-upload"/>
+            <label htmlFor="excel-upload" style={{...S.btn("blue"),padding:"10px 24px",cursor:"pointer",display:"inline-block"}}>
+              בחר קובץ...
+            </label>
           </div>
+        )}
+
+        {importStep==="preview"&&(
           <div>
-            <div style={S.label}>שם פריט *</div>
-            <input id="inv-name" value={name} onChange={e=>setName(e.target.value)}
-              placeholder="שם הפריט..." style={{...S.input,marginBottom:0}}
-              onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-serial")?.focus();}}/>
-          </div>
-          <div style={{gridColumn:"span 2"}}>
-            <div style={S.label}>צ / סידורי (אם יש)</div>
-            <input id="inv-serial" value={serial} onChange={e=>setSerial(e.target.value)}
-              placeholder="ריק = ללא צ" style={{...S.input,marginBottom:4}}
-              onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-qty")?.focus();}}/>
-            {serialCheckMsg&&(
-              <div style={{fontSize:11,padding:"4px 8px",borderRadius:5,marginBottom:2,
-                background:serialCheckMsg.startsWith("⚠️")?"var(--color-warning-subtle)":
-                  serialCheckMsg.startsWith("✅")?"var(--color-success-subtle)":
-                  serialCheckMsg.startsWith("⏳")?"var(--color-warning-subtle)":"var(--color-accent-subtle)",
-                color:serialCheckMsg.startsWith("⚠️")?"var(--color-warning-fg)":
-                  serialCheckMsg.startsWith("✅")?"var(--color-success-fg)":
-                  serialCheckMsg.startsWith("⏳")?"var(--color-warning-fg)":"var(--color-accent-fg)"}}>
-                {serialCheckMsg}
+            {/* סיכום */}
+            <div style={{...S.card,marginBottom:12,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+              {[
+                {label:"סה\"כ שורות",val:importRows.length,color:"var(--color-text-primary)"},
+                {label:"חתומים — לא נוגעים",val:importSummary.signed,color:"var(--color-success-fg)"},
+                {label:"לא חתומים",val:importSummary.unsigned,color:"var(--color-warning-fg)"},
+                {label:"בארמון",val:importSummary.inArmory,color:"var(--color-accent-fg)"},
+                {label:"חדשים",val:importSummary.new,color:"var(--color-success-fg)"},
+                {label:"מקט לא מוכר",val:importSummary.unknown,color:"var(--color-danger-fg)"},
+              ].map(s=>(
+                <div key={s.label} style={{textAlign:"center",padding:"10px 6px",background:"var(--color-bg-canvas)",borderRadius:8}}>
+                  <div style={{fontSize:22,fontWeight:800,color:s.color}}>{s.val}</div>
+                  <div style={{fontSize:10,color:"var(--color-text-muted)"}}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* בחירה מה לכלול */}
+            <div style={{...S.card,marginBottom:12}}>
+              <div style={{fontWeight:700,marginBottom:8}}>מה לכלול בייבוא:</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={()=>setImportRows(prev=>prev.map(r=>({...r,include:r.status!=="signed"})))}
+                  style={{...S.btn("green"),fontSize:11,padding:"4px 10px"}}>בחר הכל (חוץ מחתומים)</button>
+                <button onClick={()=>setImportRows(prev=>prev.map(r=>({...r,include:false})))}
+                  style={{...S.btn("gray"),fontSize:11,padding:"4px 10px"}}>בטל הכל</button>
+                <button onClick={()=>setImportRows(prev=>prev.map(r=>({...r,include:r.status==="new"})))}
+                  style={{...S.btn("blue"),fontSize:11,padding:"4px 10px"}}>רק חדשים ({importSummary.new})</button>
+              </div>
+            </div>
+
+            {/* טבלת תצוגה מקדימה */}
+            <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:12}}>
+              <div style={{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",fontWeight:700}}>
+                תצוגה מקדימה — {importRows.length} שורות ({includedRows.length} נבחרו)
+              </div>
+              <div style={{maxHeight:400,overflowY:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr style={{background:"var(--color-bg-subtle)",position:"sticky",top:0}}>
+                      <th style={{...S.th,width:36}}>✓</th>
+                      <th style={{...S.th}}>מקט</th>
+                      <th style={{...S.th}}>שם פריט</th>
+                      <th style={{...S.th}}>צ</th>
+                      <th style={{...S.th}}>סטטוס</th>
+                      <th style={{...S.th}}>פלוגה</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.map((r,i)=>(
+                      <tr key={i} style={{
+                        background:r.status==="signed"?"var(--color-success-subtle)":
+                          r.isUnknown?"var(--color-danger-subtle)":
+                          r.status==="new"?"var(--color-accent-subtle)":
+                          i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)",
+                        opacity:r.status==="signed"?0.6:1
+                      }}>
+                        <td style={{...S.td,textAlign:"center"}}>
+                          <input type="checkbox" checked={r.include}
+                            disabled={r.status==="signed"}
+                            onChange={e=>{
+                              const nr=[...importRows]; nr[i]={...nr[i],include:e.target.checked};
+                              setImportRows(nr);
+                            }}/>
+                        </td>
+                        <td style={{...S.td,fontFamily:"monospace",fontSize:11}}>{r.makat}</td>
+                        <td style={{...S.td,fontWeight:600,fontSize:"var(--text-sm)"}}>{r.itemName}</td>
+                        <td style={{...S.td,fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)"}}>{r.serial||"—"}</td>
+                        <td style={{...S.td,fontSize:11}}>{r.statusLabel}</td>
+                        <td style={{...S.td,fontSize:11}}>{r.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* אישור + סיסמה */}
+            {importSummary.unknown>0&&(
+              <div style={{padding:"10px 14px",background:"var(--color-danger-subtle)",borderRadius:8,marginBottom:10,fontSize:"var(--text-sm)",color:"var(--color-danger-fg)"}}>
+                ⚠️ {importSummary.unknown} שורות עם מקט לא מוכר — ידולגו בייבוא
               </div>
             )}
-            {unit&&<div style={{fontSize:11,color:"var(--color-text-muted)"}}>פלוגה שנבחרה אוטומטית: <strong>{unit}</strong></div>}
+            <div style={{...S.card,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:"var(--text-sm)",fontWeight:700,marginBottom:4}}>סיסמת ארמון לאישור:</div>
+                <input type="password" value={importPin} onChange={e=>{setImportPin(e.target.value);setImportPinErr("");}}
+                  placeholder="הכנס סיסמה..." style={{...S.input,marginBottom:0,maxWidth:200}}
+                  onKeyDown={e=>{if(e.key==="Enter") applyImport();}}/>
+                {importPinErr&&<div style={{color:"var(--color-danger-fg)",fontSize:11,marginTop:4}}>{importPinErr}</div>}
+              </div>
+              <button onClick={applyImport}
+                style={{...S.btn("green"),padding:"10px 24px",fontSize:14,fontWeight:700}}>
+                ✅ החל {includedRows.length} שורות
+              </button>
+              <button onClick={()=>setImportStep("upload")}
+                style={{...S.btn("gray"),padding:"10px 16px"}}>ביטול</button>
+            </div>
           </div>
-          <div>
-            <div style={S.label}>כמות (ללא צ בלבד)</div>
-            <input id="inv-qty" value={qty} onChange={e=>setQty(e.target.value)}
-              type="number" min="1" style={{...S.input,marginBottom:0}}
-              onKeyDown={e=>{if(e.key==="Enter") addRow();}}
-              disabled={!!serial.trim()}/>
-          </div>
-          <div>
-            <div style={S.label}>פלוגה {serial.trim()?"(אוטומטי)":"*"}</div>
-            <select value={unit} onChange={e=>setUnit(e.target.value)}
-              style={{...S.input,marginBottom:0}}>
-              <option value="">— בחר —</option>
-              {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
-            </select>
-          </div>
-        </div>
-        {err&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginBottom:8}}>{err}</div>}
-        <button onClick={addRow} style={{...S.btn("green"),width:"100%"}}>
-          ➕ הוסף שורה {serial.trim()?"(עם צ "+serial+")":`(${qty||1} יחידות)`}
-        </button>
-      </div>
+        )}
 
-      {/* סיכום */}
-      {summary.length>0&&(
+        {importStep==="applying"&&(
+          <div style={{...S.card,textAlign:"center",padding:40}}>
+            <div style={{fontSize:32,marginBottom:12}}>⏳</div>
+            <div style={{fontWeight:700,fontSize:16}}>מחיל נתונים...</div>
+            <div style={{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",marginTop:4}}>אנא המתן</div>
+          </div>
+        )}
+
+        {importStep==="done"&&(
+          <div style={{...S.card}}>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:12,color:"var(--color-success-fg)"}}>✅ הייבוא הושלם!</div>
+            <div style={{maxHeight:400,overflowY:"auto",fontFamily:"monospace",fontSize:11,
+              background:"var(--color-bg-canvas)",padding:10,borderRadius:6}}>
+              {applyLog.map((l,i)=><div key={i}>{l}</div>)}
+            </div>
+            <button onClick={()=>{setImportStep("upload");setImportRows([]);setApplyLog([]);setImportPin("");}}
+              style={{...S.btn("blue"),marginTop:12,width:"100%"}}>ייבוא נוסף</button>
+          </div>
+        )}
+      </>)}
+
+      {/* ── הכנסה ידנית ── */}
+      {view==="manual"&&(<>
         <div style={{...S.card,marginBottom:16}}>
-          <div style={{fontWeight:700,marginBottom:8}}>📊 סיכום ({rows.length} שורות, {summary.length} סוגים)</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {summary.map(s=>(
-              <span key={s.name} style={{fontSize:11,padding:"3px 8px",borderRadius:12,
-                background:"var(--color-accent-subtle)",color:"var(--color-accent-fg)"}}>
-                {s.name} × {s.count}
-                {s.withSerial>0&&<span style={{color:"var(--color-text-muted)"}}> ({s.withSerial} עם צ)</span>}
-              </span>
-            ))}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginBottom:10}}>
+            <div>
+              <div style={S.label}>מקט</div>
+              <input value={makat} onChange={e=>setMakat(e.target.value)}
+                placeholder="מקט..." style={{...S.input,marginBottom:0}}
+                onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-name")?.focus();}}/>
+            </div>
+            <div>
+              <div style={S.label}>שם פריט *</div>
+              <input id="inv-name" value={name} onChange={e=>setName(e.target.value)}
+                placeholder="שם הפריט..." style={{...S.input,marginBottom:0}}
+                onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-serial")?.focus();}}/>
+            </div>
+            <div style={{gridColumn:"span 2"}}>
+              <div style={S.label}>צ / סידורי</div>
+              <input id="inv-serial" value={serial} onChange={e=>setSerial(e.target.value)}
+                placeholder="ריק = ללא צ" style={{...S.input,marginBottom:4}}
+                onKeyDown={e=>{if(e.key==="Enter") document.getElementById("inv-qty")?.focus();}}/>
+              {serialCheckMsg&&(
+                <div style={{fontSize:11,padding:"4px 8px",borderRadius:5,
+                  background:serialCheckMsg.startsWith("⚠️")||serialCheckMsg.startsWith("⏳")?"var(--color-warning-subtle)":
+                    serialCheckMsg.startsWith("✅")?"var(--color-success-subtle)":"var(--color-accent-subtle)",
+                  color:serialCheckMsg.startsWith("⚠️")||serialCheckMsg.startsWith("⏳")?"var(--color-warning-fg)":
+                    serialCheckMsg.startsWith("✅")?"var(--color-success-fg)":"var(--color-accent-fg)"}}>
+                  {serialCheckMsg}
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={S.label}>כמות (ללא צ)</div>
+              <input id="inv-qty" value={qty} onChange={e=>setQty(e.target.value)}
+                type="number" min="1" style={{...S.input,marginBottom:0}}
+                disabled={!!serial.trim()}
+                onKeyDown={e=>{if(e.key==="Enter") addRow();}}/>
+            </div>
+            <div>
+              <div style={S.label}>פלוגה</div>
+              <select value={unit} onChange={e=>setUnit(e.target.value)}
+                style={{...S.input,marginBottom:0}}>
+                <option value="">— בחר —</option>
+                {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
           </div>
+          {err&&<div style={{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginBottom:8}}>{err}</div>}
+          <button onClick={addRow} style={{...S.btn("green"),width:"100%"}}>
+            ➕ הוסף {serial.trim()?"(עם צ "+serial+")":`(${qty||1} יחידות)`}
+          </button>
         </div>
-      )}
 
-      {/* טבלת שורות */}
-      {rows.length>0&&(
-        <div style={{...S.card,marginBottom:16,padding:0,overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",
-            display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontWeight:700}}>{rows.length} שורות</span>
-            <input value={filterRow} onChange={e=>setFilterRow(e.target.value)}
-              placeholder="🔍 סנן..." style={{...S.input,marginBottom:0,maxWidth:180,fontSize:11}}/>
-            <button onClick={()=>setRows([])}
-              style={{...S.btn("danger"),padding:"3px 10px",fontSize:11,marginRight:"auto"}}>
-              🗑️ נקה הכל
-            </button>
+        {summary.length>0&&(
+          <div style={{...S.card,marginBottom:12}}>
+            <div style={{fontWeight:700,marginBottom:8}}>📊 סיכום ({rows.length} שורות)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {summary.map(s=>(
+                <span key={s.name} style={{fontSize:11,padding:"3px 8px",borderRadius:12,
+                  background:"var(--color-accent-subtle)",color:"var(--color-accent-fg)"}}>
+                  {s.name} × {s.count}
+                </span>
+              ))}
+            </div>
           </div>
-          <div style={{maxHeight:400,overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead>
-                <tr style={{background:"var(--color-bg-subtle)",position:"sticky",top:0}}>
-                  <th style={{...S.th}}>#</th>
-                  <th style={{...S.th}}>שם</th>
-                  <th style={{...S.th}}>מקט</th>
-                  <th style={{...S.th}}>צ</th>
-                  <th style={{...S.th}}>פלוגה</th>
-                  <th style={{...S.th,width:40}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((r,i)=>(
-                  <tr key={i} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)"}}>
-                    <td style={{...S.td,color:"var(--color-text-muted)",fontSize:11}}>{i+1}</td>
-                    <td style={{...S.td,fontWeight:600}}>{r.name}</td>
-                    <td style={{...S.td,fontFamily:"monospace",fontSize:11}}>{r.makat||"—"}</td>
-                    <td style={{...S.td,fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)"}}>
-                      {r.serial||<span style={{color:"var(--color-text-muted)"}}>ללא צ</span>}
-                    </td>
-                    <td style={{...S.td,fontSize:11}}>{r.unit}</td>
-                    <td style={{...S.td}}>
-                      <button onClick={()=>removeRow(rows.indexOf(r))}
-                        style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-danger-fg)",fontSize:14}}>✕</button>
-                    </td>
+        )}
+
+        {rows.length>0&&(
+          <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:12}}>
+            <div style={{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",
+              display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{fontWeight:700}}>{rows.length} שורות</span>
+              <input value={filterRow} onChange={e=>setFilterRow(e.target.value)}
+                placeholder="🔍 סנן..." style={{...S.input,marginBottom:0,maxWidth:180,fontSize:11}}/>
+              <button onClick={()=>setRows([])}
+                style={{...S.btn("danger"),padding:"3px 10px",fontSize:11,marginRight:"auto"}}>🗑️ נקה הכל</button>
+            </div>
+            <div style={{maxHeight:400,overflowY:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead>
+                  <tr style={{background:"var(--color-bg-subtle)",position:"sticky",top:0}}>
+                    <th style={{...S.th}}>#</th>
+                    <th style={{...S.th}}>שם</th>
+                    <th style={{...S.th}}>מקט</th>
+                    <th style={{...S.th}}>צ</th>
+                    <th style={{...S.th}}>פלוגה</th>
+                    <th style={{...S.th,width:40}}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredRows.map((r,i)=>(
+                    <tr key={i} style={{background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)"}}>
+                      <td style={{...S.td,color:"var(--color-text-muted)",fontSize:11}}>{i+1}</td>
+                      <td style={{...S.td,fontWeight:600}}>{r.name}</td>
+                      <td style={{...S.td,fontFamily:"monospace",fontSize:11}}>{r.makat||"—"}</td>
+                      <td style={{...S.td,fontFamily:"monospace",fontSize:11,color:"var(--color-accent-fg)"}}>
+                        {r.serial||<span style={{color:"var(--color-text-muted)"}}>ללא צ</span>}
+                      </td>
+                      <td style={{...S.td,fontSize:11}}>{r.unit}</td>
+                      <td style={{...S.td}}>
+                        <button onClick={()=>setRows(prev=>prev.filter((_,j)=>j!==i))}
+                          style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-danger-fg)",fontSize:14}}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* כפתור החל */}
-      {rows.length>0&&(
-        <button onClick={applyInventory} disabled={applying}
-          style={{...S.btn("blue"),width:"100%",padding:14,fontSize:15,fontWeight:800}}>
-          {applying?"⏳ מחיל...":"✅ החל "+rows.length+" פריטים כבסיס מלאי (לא ימחקו חתימות/שיוכים)"}
-        </button>
-      )}
-
-      {applied&&(
-        <div style={{marginTop:12,padding:12,background:"var(--color-success-subtle)",
-          borderRadius:8,color:"var(--color-success-fg)",fontWeight:700,textAlign:"center"}}>
-          ✅ המלאי הוחל בהצלחה!
-        </div>
-      )}
+        )}
+      </>)}
     </div>
   );
 }
