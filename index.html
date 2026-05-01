@@ -9365,6 +9365,12 @@ function InventoryBuilderTab({db, setDb, auth}){
   // === ניתוח 2-גיליונות ===
   const [analysisData, setAnalysisData] = React.useState(null); // {sheet1, sheet2, summary, conflicts, newMakats}
   const [importErr, setImportErr] = React.useState("");
+  // === החלה למלאי ===
+  const [applyView, setApplyView] = React.useState("none"); // none | preview | confirming | done
+  const [applyPin, setApplyPin] = React.useState("");
+  const [applyPreview, setApplyPreview] = React.useState(null);
+  const [applyErr, setApplyErr] = React.useState("");
+  const [applyDone, setApplyDone] = React.useState(null);
 
   // מקטים קיימים
   const makatToName = React.useMemo(()=>{
@@ -9487,6 +9493,206 @@ function InventoryBuilderTab({db, setDb, auth}){
     setSerialCheckMsg(""); setSerialList([]); setHasSerial(null);
     setEntryStep("input"); setErr("");
     setTimeout(()=>document.getElementById("inv-makat")?.focus(), 50);
+  }
+
+  // === שמירה אוטומטית של טיוטה ב-localStorage ===
+  React.useEffect(()=>{
+    try{
+      const saved = localStorage.getItem("inv_builder_draft");
+      if(saved){
+        const arr = JSON.parse(saved);
+        if(Array.isArray(arr) && arr.length>0){
+          setRows(arr);
+        }
+      }
+    }catch(e){}
+  },[]);
+  React.useEffect(()=>{
+    try{
+      if(rows.length>0) localStorage.setItem("inv_builder_draft", JSON.stringify(rows));
+      else localStorage.removeItem("inv_builder_draft");
+    }catch(e){}
+  },[rows]);
+  
+  // === הורדת גיבוי JSON של ה-DB הנוכחי ===
+  function downloadBackup(){
+    const data = {
+      timestamp: new Date().toISOString(),
+      armoryMaster: db.armoryMaster||{},
+      unitItems: db.unitItems||{},
+      assignments: db.assignments||{},
+      signatures: db.signatures||{},
+      exitForms: db.exitForms||{},
+      testCerts: db.testCerts||{},
+      inspections: db.inspections||{},
+      cabinets: db.cabinets||{},
+    };
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "armory_backup_"+new Date().toISOString().slice(0,19).replace(/[:.]/g,"-")+".json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  // === בניית תצוגה מקדימה של ההחלה ===
+  function buildApplyPreview(){
+    setApplyErr("");
+    if(rows.length===0){ setApplyErr("הרשימה ריקה"); return; }
+    
+    // === א. armoryMaster — מקטים חדשים מול קיימים ===
+    const newMakatsByMakat = {}; // makat → name
+    rows.forEach(r=>{
+      if(r.makat) newMakatsByMakat[r.makat] = r.name;
+    });
+    const existingMakats = new Set(Object.values(db.armoryMaster||{}).map(v=>String(v.makat||"")).filter(Boolean));
+    const newMakatsToAdd = Object.entries(newMakatsByMakat).filter(([m])=>!existingMakats.has(m));
+    
+    // === ב. צ חתומים אצל חיילים ===
+    const signedIds = new Set(Object.keys(db.signatures||{}));
+    const fbSignedSerials = {}; // serial → {soldierName, unit, itemName}
+    const fbAssignedSerials = {}; // serial → {soldierName, unit, itemName}  (לא חתום)
+    getSoldiers(db).forEach(sol=>{
+      Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
+        if(v && v!==1){
+          const srl = String(v);
+          const info = {soldierName:sol.name, unit:sol.unit||"גדודי", itemName:cleanItemName(k)};
+          if(signedIds.has(sol.id)) fbSignedSerials[srl] = info;
+          else fbAssignedSerials[srl] = info;
+        }
+      });
+    });
+    
+    // צ חתומים שלא הכנסת ברשימה → אזהרה
+    const rowsSerials = new Set(rows.filter(r=>r.serial).map(r=>r.serial));
+    const signedNotInRows = Object.entries(fbSignedSerials)
+      .filter(([s])=>!rowsSerials.has(s))
+      .map(([s,info])=>({serial:s, ...info}));
+    const assignedNotInRows = Object.entries(fbAssignedSerials)
+      .filter(([s])=>!rowsSerials.has(s))
+      .map(([s,info])=>({serial:s, ...info}));
+    
+    // === ג. unitItems שייכתבו ===
+    // נסנן: צ שחתום אצל חייל → לא ייכנס ל-unitItems
+    // צ שמשויך לחייל לא חתום → גם לא ייכנס (החייל עדיין מחזיק)
+    // השאר → ייכנסו ל-unitItems
+    const heldByOthers = new Set([...Object.keys(fbSignedSerials), ...Object.keys(fbAssignedSerials)]);
+    const willEnterUnitItems = rows.filter(r=>{
+      if(!r.serial) return true; // ללא צ — תמיד נכנס
+      return !heldByOthers.has(r.serial);
+    });
+    const heldNotEntering = rows.filter(r=>r.serial && heldByOthers.has(r.serial));
+    
+    // === ד. cabinets — מקטים שלא יהיו ב-armoryMaster החדש ===
+    const allFutureMakats = new Set();
+    Object.values(db.armoryMaster||{}).forEach(v=>{ if(v.makat) allFutureMakats.add(String(v.makat)); });
+    Object.keys(newMakatsByMakat).forEach(m=>allFutureMakats.add(m));
+    
+    const cabinetMakatsLost = [];
+    Object.entries(db.cabinets||{}).forEach(([cabName, items])=>{
+      if(Array.isArray(items)){
+        items.forEach(it=>{
+          const m = String(it.makat||"");
+          if(m && !allFutureMakats.has(m)){
+            cabinetMakatsLost.push({cabinet:cabName, makat:m, name:it.fullname||it.alias||""});
+          }
+        });
+      }
+    });
+    
+    // === ה. סיכום מצב נוכחי שלא נוגעים בו ===
+    const totalSignatures = Object.keys(db.signatures||{}).length;
+    const totalAssignments = Object.keys(db.assignments||{}).reduce((a,sid)=>{
+      return a + Object.values(db.assignments[sid]||{}).filter(v=>v && v!==1).length;
+    },0);
+    const totalExitForms = Object.keys(db.exitForms||{}).length;
+    const totalInspections = Object.keys(db.inspections||{}).length;
+    const totalTestCerts = Object.keys(db.testCerts||{}).length;
+    
+    // === ו. unitItems הקיימים שיימחקו ===
+    const currentUnitItemsCount = Object.keys(db.unitItems||{}).length;
+    
+    setApplyPreview({
+      newMakatsToAdd,
+      existingMakatsCount: rows.filter(r=>r.makat && existingMakats.has(r.makat)).length,
+      willEnterUnitItems,
+      heldNotEntering,
+      signedNotInRows,
+      assignedNotInRows,
+      cabinetMakatsLost,
+      totalSignatures, totalAssignments, totalExitForms, totalInspections, totalTestCerts,
+      currentUnitItemsCount,
+      rowsTotal: rows.length,
+    });
+    setApplyView("preview");
+    setApplyPin("");
+  }
+  
+  // === ביצוע ההחלה בפועל ===
+  async function executeApply(){
+    setApplyErr("");
+    if(applyPin!=="7680832"){ setApplyErr("סיסמה שגויה"); return; }
+    if(!applyPreview){ setApplyErr("לא נבנתה תצוגה מקדימה"); return; }
+    
+    setApplyView("confirming");
+    try {
+      // === בנה armoryMaster חדש ===
+      // שמור את הקיים, הוסף חדשים
+      const newArmoryMaster = {...(db.armoryMaster||{})};
+      applyPreview.newMakatsToAdd.forEach(([makat, name])=>{
+        // אם השם כבר קיים — נוסיף סיומת
+        let key = name;
+        if(newArmoryMaster[key]) key = name+" ("+makat+")";
+        newArmoryMaster[key] = {makat: makat, name: name};
+      });
+      
+      // === בנה unitItems חדש ===
+      const newUnitItems = {};
+      applyPreview.willEnterUnitItems.forEach((r,i)=>{
+        const uid = "ui_"+Date.now()+"_"+i+"_"+Math.random().toString(36).slice(2,8);
+        newUnitItems[uid] = {
+          n: r.name,
+          name: r.name,
+          s: r.serial||"",
+          serial: r.serial||"",
+          u: r.unit||"גדודי",
+          unit: r.unit||"גדודי",
+          makat: r.makat||"",
+          ts: Date.now()
+        };
+      });
+      
+      // === שלח ל-Firebase: רק unitItems ו-armoryMaster ===
+      // לא נוגעים בכלום אחר!
+      await fbSet("db/unitItems", newUnitItems);
+      await fbSet("db/armoryMaster", newArmoryMaster);
+      
+      // עדכן גם את ה-state המקומי כדי שהמסך יתעדכן מיד
+      setDb(prev=>({...prev, unitItems: newUnitItems, armoryMaster: newArmoryMaster}));
+      
+      // נקה רשימה מקומית וטיוטה
+      setRows([]);
+      try{ localStorage.removeItem("inv_builder_draft"); }catch(e){}
+      
+      setApplyDone({
+        newMakatsCount: applyPreview.newMakatsToAdd.length,
+        unitItemsCount: applyPreview.willEnterUnitItems.length,
+        timestamp: new Date().toISOString()
+      });
+      setApplyView("done");
+    } catch(err){
+      console.error(err);
+      setApplyErr("שגיאה בכתיבה ל-Firebase: "+err.message);
+      setApplyView("preview");
+    }
+  }
+  
+  function cancelApply(){
+    setApplyView("none");
+    setApplyPin("");
+    setApplyPreview(null);
+    setApplyErr("");
   }
 
   // legacy addRow — נשמר אבל לא בשימוש
@@ -10314,6 +10520,198 @@ function InventoryBuilderTab({db, setDb, auth}){
                   ))}
                 </tbody>
               </table>
+            </div>
+            {/* כפתורי החלה */}
+            <div style={{padding:"12px 14px",borderTop:"2px solid var(--color-border-default)",
+              display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",background:"var(--color-bg-subtle)"}}>
+              <button onClick={downloadBackup} style={{...S.btn("gray"),padding:"8px 14px"}}>
+                💾 הורד גיבוי JSON
+              </button>
+              <div style={{flex:1,fontSize:11,color:"var(--color-text-muted)"}}>
+                💡 הרשימה נשמרת אוטומטית — אפשר לסגור ולחזור
+              </div>
+              <button onClick={buildApplyPreview}
+                disabled={rows.length===0}
+                style={{...S.btn(rows.length>0?"green":"gray"),padding:"10px 20px",fontWeight:700}}>
+                🚀 החל למלאי ({rows.length})
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* === מסך תצוגה מקדימה לפני החלה === */}
+        {applyView==="preview" && applyPreview && (() => {
+          const p = applyPreview;
+          const Section = ({title, color, children}) => (
+            <div style={{...S.card,marginBottom:10,borderRight:"4px solid "+color}}>
+              <div style={{fontWeight:700,fontSize:13,color,marginBottom:6}}>{title}</div>
+              {children}
+            </div>
+          );
+          return (
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,
+              display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+              <div style={{background:"var(--color-bg-default)",borderRadius:10,maxWidth:760,width:"100%",
+                maxHeight:"95vh",overflowY:"auto",padding:18,direction:"rtl"}}>
+                <div style={{fontWeight:800,fontSize:18,marginBottom:4}}>🚀 תצוגה מקדימה — החלה למלאי</div>
+                <div style={{fontSize:12,color:"var(--color-text-muted)",marginBottom:14}}>
+                  זוהי הצגה בלבד. שום דבר לא נכתב עדיין.
+                </div>
+                
+                <Section title="📚 armoryMaster — קטלוג מקטים" color="var(--color-accent-fg)">
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    • <b>{p.newMakatsToAdd.length}</b> מקטים חדשים יתווספו<br/>
+                    • <b>{p.existingMakatsCount}</b> שורות מהרשימה משתמשות במקטים קיימים (לא נוגעים)<br/>
+                  </div>
+                  {p.newMakatsToAdd.length>0&&(
+                    <details style={{marginTop:6}}>
+                      <summary style={{cursor:"pointer",fontSize:11,fontWeight:600}}>הצג רשימת מקטים חדשים ({p.newMakatsToAdd.length})</summary>
+                      <div style={{maxHeight:180,overflowY:"auto",fontSize:11,fontFamily:"monospace",marginTop:6}}>
+                        {p.newMakatsToAdd.map(([m,n],i)=>(
+                          <div key={i} style={{padding:"3px 8px",background:i%2?"var(--color-bg-subtle)":"transparent"}}>
+                            <b>{m}</b> — {n}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </Section>
+                
+                <Section title="📦 unitItems — מלאי פיזי" color="var(--color-warning-fg)">
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    • יימחק: <b>{p.currentUnitItemsCount}</b> פריטים קיימים<br/>
+                    • ייכתב מחדש: <b>{p.willEnterUnitItems.length}</b> פריטים מהרשימה שלך<br/>
+                    {p.heldNotEntering.length>0&&(
+                      <span>• <b>{p.heldNotEntering.length}</b> צ ברשימה לא ייכנסו ל-unitItems כי הם מוחזקים אצל חיילים (החתימה/השיוך נשמרים)<br/></span>
+                    )}
+                  </div>
+                </Section>
+                
+                {(p.signedNotInRows.length>0 || p.assignedNotInRows.length>0) && (
+                  <Section title="⚠️ אזהרה — צ אצל חיילים שלא ברשימה החדשה" color="var(--color-danger-fg)">
+                    <div style={{fontSize:12,lineHeight:1.6,marginBottom:6}}>
+                      <b>זה לא אמור לקרות</b> — אמרת שכל צ חתום אמור להיות ברשימה.
+                    </div>
+                    {p.signedNotInRows.length>0&&(
+                      <details style={{marginTop:4}}>
+                        <summary style={{cursor:"pointer",fontSize:11,fontWeight:600,color:"var(--color-danger-fg)"}}>
+                          ✅ חתומים אצל חיילים אבל אין ברשימה ({p.signedNotInRows.length})
+                        </summary>
+                        <div style={{maxHeight:160,overflowY:"auto",fontSize:11,marginTop:6}}>
+                          {p.signedNotInRows.map((v,i)=>(
+                            <div key={i} style={{padding:"3px 8px",background:i%2?"var(--color-bg-subtle)":"transparent",fontFamily:"monospace"}}>
+                              <b>{v.serial}</b> — {v.itemName} | {v.soldierName} ({v.unit})
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    {p.assignedNotInRows.length>0&&(
+                      <details style={{marginTop:4}}>
+                        <summary style={{cursor:"pointer",fontSize:11,fontWeight:600,color:"var(--color-warning-fg)"}}>
+                          ⏳ מוקצים לא חתומים שאין ברשימה ({p.assignedNotInRows.length})
+                        </summary>
+                        <div style={{maxHeight:160,overflowY:"auto",fontSize:11,marginTop:6}}>
+                          {p.assignedNotInRows.map((v,i)=>(
+                            <div key={i} style={{padding:"3px 8px",background:i%2?"var(--color-bg-subtle)":"transparent",fontFamily:"monospace"}}>
+                              <b>{v.serial}</b> — {v.itemName} | {v.soldierName} ({v.unit})
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:8,padding:"6px 10px",background:"var(--color-warning-subtle)",borderRadius:4}}>
+                      ⚠️ הצ-ים האלה ימשיכו להיות חתומים/משויכים — אבל לא יהיו במלאי הפיזי. מומלץ לחזור ולהוסיף אותם לרשימה.
+                    </div>
+                  </Section>
+                )}
+                
+                {p.cabinetMakatsLost.length>0 && (
+                  <Section title="⚠️ ארונות — מקטים שיהיו ללא קטלוג" color="var(--color-warning-fg)">
+                    <div style={{fontSize:12,marginBottom:6}}>
+                      <b>{p.cabinetMakatsLost.length}</b> מקטים מופיעים ב-CABINETS_DATA אבל לא יהיו ב-armoryMaster החדש.
+                      <br/>הארונות ימשיכו להציג אותם, אבל ללא שם פריט.
+                    </div>
+                    <details>
+                      <summary style={{cursor:"pointer",fontSize:11,fontWeight:600}}>הצג רשימה</summary>
+                      <div style={{maxHeight:140,overflowY:"auto",fontSize:11,fontFamily:"monospace",marginTop:6}}>
+                        {p.cabinetMakatsLost.map((v,i)=>(
+                          <div key={i} style={{padding:"3px 8px",background:i%2?"var(--color-bg-subtle)":"transparent"}}>
+                            <b>{v.makat}</b> — {v.name} | ארון: {v.cabinet}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </Section>
+                )}
+                
+                <Section title="✅ נשמר ללא שינוי" color="var(--color-success-fg)">
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    • <b>{p.totalSignatures}</b> חתימות חיילים<br/>
+                    • <b>{p.totalAssignments}</b> שיוכי ציוד לחיילים<br/>
+                    • <b>{p.totalExitForms}</b> טפסי יציאה<br/>
+                    • <b>{p.totalInspections}</b> בוחנים<br/>
+                    • <b>{p.totalTestCerts}</b> אישורי בוחן<br/>
+                    • היסטוריית פעולות, ערבים, הרשאות, ארונות — לא נוגעים
+                  </div>
+                </Section>
+                
+                {/* PIN + פעולות */}
+                <div style={{...S.card,background:"var(--color-warning-subtle)",marginTop:14}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>
+                    🔐 אישור החלה
+                  </div>
+                  <div style={{fontSize:11,color:"var(--color-text-muted)",marginBottom:8}}>
+                    הקלד את הסיסמה האישית שלך (7680832) כדי לאשר את ההחלה
+                  </div>
+                  <input type="password" value={applyPin}
+                    onChange={e=>setApplyPin(e.target.value)}
+                    placeholder="סיסמה..."
+                    style={{...S.input,marginBottom:8,direction:"ltr",textAlign:"center",letterSpacing:4,fontSize:16}}
+                    onKeyDown={e=>{if(e.key==="Enter") executeApply();}}/>
+                  {applyErr&&<div style={{color:"var(--color-danger-fg)",fontSize:12,marginBottom:8}}>{applyErr}</div>}
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={cancelApply} style={{...S.btn("gray"),flex:1,padding:"10px"}}>
+                      ❌ ביטול
+                    </button>
+                    <button onClick={executeApply} style={{...S.btn("green"),flex:2,padding:"10px",fontWeight:700}}>
+                      ✅ אשר ובצע החלה
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        
+        {/* === מסך טוען === */}
+        {applyView==="confirming" && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{background:"var(--color-bg-default)",borderRadius:10,padding:30,textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+              <div style={{fontWeight:700}}>מעדכן מלאי ב-Firebase...</div>
+              <div style={{fontSize:11,color:"var(--color-text-muted)",marginTop:4}}>אל תסגור את הדף</div>
+            </div>
+          </div>
+        )}
+        
+        {/* === מסך הצלחה === */}
+        {applyView==="done" && applyDone && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,
+            display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"var(--color-bg-default)",borderRadius:10,padding:24,maxWidth:480,direction:"rtl"}}>
+              <div style={{fontSize:36,textAlign:"center",marginBottom:8}}>✅</div>
+              <div style={{fontWeight:800,fontSize:18,textAlign:"center",marginBottom:14}}>המלאי הוחל בהצלחה!</div>
+              <div style={{fontSize:13,lineHeight:1.8,padding:"10px 14px",background:"var(--color-success-subtle)",borderRadius:6}}>
+                • <b>{applyDone.newMakatsCount}</b> מקטים חדשים נוספו ל-armoryMaster<br/>
+                • <b>{applyDone.unitItemsCount}</b> פריטים נכתבו ל-unitItems<br/>
+                • חתימות, שיוכים, יציאות, בוחנים — נשארו ללא שינוי
+              </div>
+              <button onClick={()=>{setApplyView("none"); setApplyDone(null);}} 
+                style={{...S.btn("blue"),width:"100%",marginTop:14,padding:"10px"}}>
+                סיים
+              </button>
             </div>
           </div>
         )}
