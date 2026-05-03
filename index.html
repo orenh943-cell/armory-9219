@@ -9386,25 +9386,38 @@ function InventoryBuilderTab({db, setDb, auth}){
   },[makat]);
 
   // === helper: זיהוי צ ===
-  function lookupSerial(srl, currentRows){
+  // currentMakat: המקט הנוכחי שמוכנס. dup רק אם אותו (מקט+צ) כבר ברשימה.
+  function lookupSerial(srl, currentRows, currentMakat){
     if(!srl) return null;
-    const dup = currentRows.find(r=>r.serial===srl);
-    if(dup) return {status:"dup", statusLabel:"⚠️ כבר ברשימה: "+dup.name, unit:dup.unit, foundName:dup.name};
+    const cm = (currentMakat||"").trim();
+    const dup = currentRows.find(r=>r.serial===srl && (r.makat||"")===cm);
+    if(dup) return {status:"dup", statusLabel:"⚠️ כבר ברשימה: "+dup.name+" (אותו מקט+צ)", unit:dup.unit, foundName:dup.name};
     const signedIds = new Set(Object.keys(db.signatures||{}));
-    let foundUnit="", foundSoldier="", foundName="", foundSigned=false;
+    // map: שם פריט (נקי) → מקט. כך נדע אם השיוך הקיים ב-assignments הוא לאותו מקט
+    const nameToMakat = {};
+    Object.entries(db.armoryMaster||{}).forEach(([n,v])=>{ if(v.makat) nameToMakat[cleanItemName(n)] = String(v.makat); });
+    
+    let foundUnit="", foundSoldier="", foundName="", foundSigned=false, foundMakat="";
     getSoldiers(db).forEach(sol=>{
       Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
         if(String(v)===srl){
+          // אם יש cm (מקט נוכחי) — בדוק שגם המקט תואם
+          const itemMakat = nameToMakat[cleanItemName(k)] || "";
+          if(cm && itemMakat && itemMakat!==cm) return; // צ זהה אבל מקט שונה — לא רלוונטי
           foundUnit=sol.unit; foundSoldier=sol.name;
           foundName=cleanItemName(k); foundSigned=signedIds.has(sol.id);
+          foundMakat = itemMakat;
         }
       });
     });
     if(!foundUnit){
       Object.values(db.unitItems||{}).forEach(v=>{
         if(String(v.s||v.serial||"")===srl){
+          const itemMakat = String(v.makat||"");
+          if(cm && itemMakat && itemMakat!==cm) return; // צ זהה אבל מקט שונה
           foundUnit=v.u||v.unit||"גדודי";
           foundName=cleanItemName(v.n||v.name||"");
+          foundMakat = itemMakat;
         }
       });
     }
@@ -9457,15 +9470,16 @@ function InventoryBuilderTab({db, setDb, auth}){
   
   function updateSerialAtIdx(i, val){
     const v = val.trim();
+    const cm = makat.trim();
     setSerialList(prev=>{
       const next=[...prev];
-      // מנע כפילות בתוך הרשימה הנוכחית עצמה
+      // מנע כפילות בתוך הרשימה הנוכחית — תמיד אותו מקט (כי מילוי צ לאותו פריט)
       const localDup = v && next.findIndex((s,j)=>j!==i && s.value===v)>=0;
       if(localDup){
-        next[i]={value:v, status:"dup", statusLabel:"⚠️ צ זהה כבר ברשימה הנוכחית", unit:"", foundName:""};
+        next[i]={value:v, status:"dup", statusLabel:"⚠️ צ זהה כבר ברשימה הנוכחית (אותו מקט)", unit:"", foundName:""};
         return next;
       }
-      const info = lookupSerial(v, rows);
+      const info = lookupSerial(v, rows, cm);
       if(!info){ next[i]={value:v, status:"", statusLabel:"", unit:"", foundName:""}; }
       else next[i]={value:v, ...info};
       return next;
@@ -9595,40 +9609,48 @@ function InventoryBuilderTab({db, setDb, auth}){
     const existingMakats = new Set(Object.values(db.armoryMaster||{}).map(v=>String(v.makat||"")).filter(Boolean));
     const newMakatsToAdd = Object.entries(newMakatsByMakat).filter(([m])=>!existingMakats.has(m));
     
-    // === ב. צ חתומים אצל חיילים ===
+    // === ב. צ אצל חיילים — מפתח: makat|serial (ולא רק serial!) ===
+    // כי אותו צ יכול להופיע במקטים שונים (לדוגמה: רחפן + שלט עם אותו צ)
     const signedIds = new Set(Object.keys(db.signatures||{}));
-    const fbSignedSerials = {}; // serial → {soldierName, unit, itemName}
-    const fbAssignedSerials = {}; // serial → {soldierName, unit, itemName}  (לא חתום)
+    const nameToMakat = {};
+    Object.entries(db.armoryMaster||{}).forEach(([n,v])=>{ if(v.makat) nameToMakat[cleanItemName(n)] = String(v.makat); });
+    
+    const makeKey = (m,s)=>String(m||"")+"|"+String(s||"");
+    const fbSignedByKey = {}; // makat|serial → {soldierName, unit, itemName, serial, makat}
+    const fbAssignedByKey = {};
     getSoldiers(db).forEach(sol=>{
       Object.entries(db.assignments?.[sol.id]||{}).forEach(([k,v])=>{
         if(v && v!==1){
           const srl = String(v);
-          const info = {soldierName:sol.name, unit:sol.unit||"גדודי", itemName:cleanItemName(k)};
-          if(signedIds.has(sol.id)) fbSignedSerials[srl] = info;
-          else fbAssignedSerials[srl] = info;
+          const cleanName = cleanItemName(k);
+          const itemMakat = nameToMakat[cleanName] || "";
+          const info = {soldierName:sol.name, unit:sol.unit||"גדודי", itemName:cleanName, serial:srl, makat:itemMakat};
+          const key = makeKey(itemMakat, srl);
+          if(signedIds.has(sol.id)) fbSignedByKey[key] = info;
+          else fbAssignedByKey[key] = info;
         }
       });
     });
     
+    // המפתחות מהרשימה שלך
+    const rowsKeys = new Set(rows.filter(r=>r.serial).map(r=>makeKey(r.makat, r.serial)));
+    
     // צ חתומים שלא הכנסת ברשימה → אזהרה
-    const rowsSerials = new Set(rows.filter(r=>r.serial).map(r=>r.serial));
-    const signedNotInRows = Object.entries(fbSignedSerials)
-      .filter(([s])=>!rowsSerials.has(s))
-      .map(([s,info])=>({serial:s, ...info}));
-    const assignedNotInRows = Object.entries(fbAssignedSerials)
-      .filter(([s])=>!rowsSerials.has(s))
-      .map(([s,info])=>({serial:s, ...info}));
+    const signedNotInRows = Object.entries(fbSignedByKey)
+      .filter(([k])=>!rowsKeys.has(k))
+      .map(([k,info])=>info);
+    const assignedNotInRows = Object.entries(fbAssignedByKey)
+      .filter(([k])=>!rowsKeys.has(k))
+      .map(([k,info])=>info);
     
     // === ג. unitItems שייכתבו ===
-    // נסנן: צ שחתום אצל חייל → לא ייכנס ל-unitItems
-    // צ שמשויך לחייל לא חתום → גם לא ייכנס (החייל עדיין מחזיק)
-    // השאר → ייכנסו ל-unitItems
-    const heldByOthers = new Set([...Object.keys(fbSignedSerials), ...Object.keys(fbAssignedSerials)]);
+    // צ שמופיע ברשימה ויש לו אותו (מקט+צ) אצל חייל → לא ייכנס ל-unitItems
+    const heldKeys = new Set([...Object.keys(fbSignedByKey), ...Object.keys(fbAssignedByKey)]);
     const willEnterUnitItems = rows.filter(r=>{
       if(!r.serial) return true; // ללא צ — תמיד נכנס
-      return !heldByOthers.has(r.serial);
+      return !heldKeys.has(makeKey(r.makat, r.serial));
     });
-    const heldNotEntering = rows.filter(r=>r.serial && heldByOthers.has(r.serial));
+    const heldNotEntering = rows.filter(r=>r.serial && heldKeys.has(makeKey(r.makat, r.serial)));
     
     // === ד. cabinets — מקטים שלא יהיו ב-armoryMaster החדש ===
     const allFutureMakats = new Set();
@@ -9746,7 +9768,7 @@ function InventoryBuilderTab({db, setDb, auth}){
     setErr("");
     if(!name.trim()){setErr("נדרש שם פריט");return;}
     const srl = serial.trim();
-    if(srl && rows.find(r=>r.serial===srl)){ setErr("צ "+srl+" כבר ברשימה!"); return; }
+    if(srl && rows.find(r=>r.serial===srl && (r.makat||"")===makat.trim())){ setErr("צ "+srl+" כבר ברשימה עם אותו מקט!"); return; }
     const q = parseInt(qty)||1;
     const finalUnit = unit||"גדודי";
     if(srl){
