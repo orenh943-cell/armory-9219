@@ -9707,12 +9707,26 @@ function InventoryBuilderTab({db, setDb, auth}){
     try {
       // === בנה armoryMaster חדש ===
       // שמור את הקיים, הוסף חדשים
-      const newArmoryMaster = {...(db.armoryMaster||{})};
+      // Firebase לא מקבל . # $ / [ ] בשמות מפתחות — צריך לנקות
+      const sanitizeKey = (s)=>String(s||"").replace(/[.#$/\[\]]/g, "_").trim();
+      // נקה גם את המפתחות הקיימים (אולי בעבר נכנסו לכלוכים)
+      const newArmoryMaster = {};
+      Object.entries(db.armoryMaster||{}).forEach(([k,v])=>{
+        let cleanK = sanitizeKey(k);
+        if(!cleanK) cleanK = "פריט_"+(v.makat||"x");
+        if(newArmoryMaster[cleanK] && cleanK!==k){
+          // התנגשות אחרי ניקוי — הוסף סיומת
+          cleanK = cleanK+" ("+(v.makat||"")+")";
+        }
+        newArmoryMaster[cleanK] = v;
+      });
       applyPreview.newMakatsToAdd.forEach(([makat, name])=>{
+        let key = sanitizeKey(name);
+        if(!key) key = "פריט_"+makat;
         // אם השם כבר קיים — נוסיף סיומת
-        let key = name;
-        if(newArmoryMaster[key]) key = name+" ("+makat+")";
-        newArmoryMaster[key] = {makat: makat, name: name};
+        if(newArmoryMaster[key]) key = key+" ("+makat+")";
+        // השם המוצג נשאר עם התווים המקוריים, רק המפתח מנוקה
+        newArmoryMaster[key] = {makat: String(makat), name: name};
       });
       
       // === בנה unitItems חדש ===
