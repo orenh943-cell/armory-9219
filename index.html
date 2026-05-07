@@ -990,19 +990,20 @@ function KitsTab({db,setDb,soldiers,auth}){
         ? /*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)",fontSize:"var(--text-sm)",border:"1px dashed var(--color-border-muted)",borderRadius:8}},"אין ערכות בארמון. לחץ '➕ צור ערכה חדשה' כדי להתחיל.")
         : /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},/*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-sm)"}},
             /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
-              ["שם","146743702","146743708","סטטוס","מיקום","פעולות"].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h))
+              ["שם","מק\"טים בערכה","צ-ים","סטטוס","מיקום","פעולות"].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h))
             )),
             /*#__PURE__*/React.createElement("tbody",null,kits.map(k=>{
-              const s702=(k.serials||{})["146743702"]||[];
-              const s708=(k.serials||{})["146743708"]||[];
+              const serialEntries=Object.entries(k.serials||{});
               const cab=_kitGetCabName(k,db);
               const stColor=k.status==="assigned"?"var(--color-warning-fg)":k.status==="partial"?"var(--color-purple-fg)":"var(--color-success-fg)";
               const stLabel=k.status==="assigned"?"📤 משויכת":k.status==="partial"?"⚠️ חלקית":"✅ במלאי";
               const assignee=k.assignedTo?(getSoldiers(db).find(s=>s.id===k.assignedTo)?.name||k.assignedTo):"";
+              const makatList=serialEntries.map(([mk])=>mk).join(", ");
+              const allSerials=serialEntries.map(([mk,arr])=>(arr||[]).join(",")).filter(Boolean).join(" | ");
               return /*#__PURE__*/React.createElement("tr",{key:k.kitId,style:{borderBottom:"1px solid var(--color-border-muted)"}},
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontWeight:700}},k.name||"—"),
-                /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontFamily:"monospace",fontSize:11}},s702.join(" · ")||"—"),
-                /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontFamily:"monospace",fontSize:11}},s708.join(" · ")||"—"),
+                /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontFamily:"monospace",fontSize:10,color:"var(--color-text-secondary)"}},makatList||"—"),
+                /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontFamily:"monospace",fontSize:11}},allSerials||"—"),
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",color:stColor,fontWeight:600}},stLabel,assignee?/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-secondary)",fontWeight:400}},"→ "+assignee):null),
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontSize:11,color:"var(--color-text-secondary)"}},cab||"—"),
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4}},
@@ -1065,55 +1066,90 @@ function KitTemplateEditor({db,setDb,auth,onClose}){
 
 // === KIT CREATE / VIEW / ASSIGN / RETURN MODALS ===
 function KitCreateModal({db,setDb,auth,onClose}){
-  const tpl=_kitGetTemplate(db);
   const [name,setName]=React.useState("");
-  const [serialInputs,setSerialInputs]=React.useState(()=>{const m={};tpl.serialMakats.forEach(sm=>{m[sm.makat]=Array(sm.count).fill("");});return m;});
+  // dynamic list of {makat, count, serials:[]}
+  const [makats,setMakats]=React.useState([]);
+  // picker state
+  const [showPicker,setShowPicker]=React.useState(false);
+  const [pickerMakat,setPickerMakat]=React.useState("");
+  const [pickerCount,setPickerCount]=React.useState(1);
   const [error,setError]=React.useState("");
   const [creating,setCreating]=React.useState(false);
-  // build dropdown of available serials per makat
-  const availableByMakat=React.useMemo(()=>{
+  // build map: makat -> array of free serials in גדודי, not in another kit
+  const freeSerialsByMakat=React.useMemo(()=>{
     const map={};
-    tpl.serialMakats.forEach(sm=>{
-      const items=db.unitItems||{};
-      const list=[];
-      Object.entries(items).forEach(([uid,v])=>{
-        const m=String(v.makat||"");
-        const s=String(v.s||v.serial||"").trim();
-        const u=v.u||v.unit||"גדודי";
-        const t=v.t||v.assignedType||"unit";
-        const sid=v.si||v.assignedSoldierId;
-        if(m===sm.makat&&u==="גדודי"&&t==="unit"&&!sid&&s){
-          // exclude if already in another kit
-          if(!_kitSerialInOtherKit(db,sm.makat,s,null))list.push(s);
-        }
-      });
-      map[sm.makat]=Array.from(new Set(list)).sort();
+    const items=db.unitItems||{};
+    Object.entries(items).forEach(([uid,v])=>{
+      const m=String(v.makat||"");
+      const s=String(v.s||v.serial||"").trim();
+      const u=v.u||v.unit||"גדודי";
+      const t=v.t||v.assignedType||"unit";
+      const sid=v.si||v.assignedSoldierId;
+      if(!m||!s||u!=="גדודי"||t!=="unit"||sid)return;
+      if(_kitSerialInOtherKit(db,m,s,null))return;
+      if(!map[m])map[m]=new Set();
+      map[m].add(s);
     });
-    return map;
-  },[db.unitItems,db.kits,tpl]);
-  function setSer(makat,idx,val){setSerialInputs(p=>{const arr=[...(p[makat]||[])];arr[idx]=val;return{...p,[makat]:arr};});}
+    const out={};
+    Object.keys(map).forEach(m=>{out[m]=Array.from(map[m]).sort();});
+    return out;
+  },[db.unitItems,db.kits]);
+  // availableMakats — all makats with at least 1 free serial, NOT yet added to current kit
+  const availableMakats=React.useMemo(()=>{
+    const used=new Set(makats.map(x=>String(x.makat)));
+    return Object.keys(freeSerialsByMakat).filter(m=>!used.has(m)).sort();
+  },[freeSerialsByMakat,makats]);
+  // serials available for a specific makat row, EXCLUDING serials already picked in OTHER rows of the same makat (no-op since each makat row holds its own)
+  function getAvailableSerialsFor(makat,currentRowIdx,currentSerialIdx){
+    const all=freeSerialsByMakat[makat]||[];
+    // exclude serials chosen in OTHER serial-positions of the SAME row (same makat row); cross-row not possible since user can't add same makat twice (filtered out of availableMakats)
+    const row=makats[currentRowIdx];
+    if(!row)return all;
+    const taken=new Set(row.serials.filter((s,i)=>i!==currentSerialIdx&&s).map(s=>String(s).trim()));
+    return all.filter(s=>!taken.has(s));
+  }
+  function addMakat(){
+    setError("");
+    const m=String(pickerMakat||"").trim();
+    if(!m){setError("בחר מק\"ט");return;}
+    const c=Math.max(1,Math.min(10,parseInt(pickerCount)||1));
+    if((freeSerialsByMakat[m]||[]).length<c){setError("יש רק "+(freeSerialsByMakat[m]||[]).length+" צ-ים זמינים למק\"ט "+m);return;}
+    if(makats.some(x=>String(x.makat)===m)){setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
+    setMakats(p=>[...p,{makat:m,count:c,serials:Array(c).fill("")}]);
+    setPickerMakat("");setPickerCount(1);setShowPicker(false);setError("");
+  }
+  function removeMakat(idx){setMakats(p=>p.filter((_,i)=>i!==idx));}
+  function setSerial(rowIdx,serialIdx,val){setMakats(p=>{const next=p.map((row,i)=>i===rowIdx?{...row,serials:row.serials.map((s,j)=>j===serialIdx?val:s)}:row);return next;});}
+  // validation: enable Create only if all conditions met
+  const canCreate=React.useMemo(()=>{
+    if(!String(name||"").trim())return false;
+    if(makats.length===0)return false;
+    for(const row of makats){
+      if(!row.serials||row.serials.length!==row.count)return false;
+      if(row.serials.some(s=>!String(s||"").trim()))return false;
+    }
+    return true;
+  },[name,makats]);
   function create(){
     setError("");
     const trimmedName=name.trim();
     if(!trimmedName){setError("חסר שם ערכה");return;}
-    // unique name?
+    if(makats.length===0){setError("הוסף לפחות מק\"ט אחד לערכה");return;}
     const kits=db.kits||{};
     if(Object.values(kits).some(k=>k.name===trimmedName)){setError("ערכה בשם '"+trimmedName+"' כבר קיימת");return;}
-    // collect serials per makat
     const serials={};
-    for(const sm of tpl.serialMakats){
-      const arr=(serialInputs[sm.makat]||[]).map(s=>String(s||"").trim()).filter(Boolean);
-      if(arr.length!==sm.count){setError("חסרים צ-ים עבור מק\"ט "+sm.makat+" (נדרש "+sm.count+")");return;}
-      // duplicates inside the same makat?
-      if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+sm.makat);return;}
-      // each serial must exist in unitItems with correct makat, in גדודי, unassigned
+    for(const row of makats){
+      const m=String(row.makat).trim();
+      const arr=(row.serials||[]).map(s=>String(s||"").trim()).filter(Boolean);
+      if(arr.length!==row.count){setError("חסרים צ-ים עבור מק\"ט "+m+" (נדרש "+row.count+")");return;}
+      if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+m);return;}
       for(const s of arr){
-        const found=_kitFindFreeUnitItemBySerial(db,sm.makat,s);
-        if(!found){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+sm.makat+", או שהוא משויך לחייל");return;}
-        const otherKit=_kitSerialInOtherKit(db,sm.makat,s,null);
+        const found=_kitFindFreeUnitItemBySerial(db,m,s);
+        if(!found){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");return;}
+        const otherKit=_kitSerialInOtherKit(db,m,s,null);
         if(otherKit){setError("צ "+s+" כבר משוייך לערכה אחרת");return;}
       }
-      serials[sm.makat]=arr;
+      serials[m]=arr;
     }
     setCreating(true);
     const kitId=_kitGenId();
@@ -1125,24 +1161,55 @@ function KitCreateModal({db,setDb,auth,onClose}){
     }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);});
   }
   return /*#__PURE__*/React.createElement("div",{style:S.overlay,onClick:onClose},
-    /*#__PURE__*/React.createElement("div",{style:{...S.card,maxWidth:560,width:"100%",maxHeight:"90vh",overflowY:"auto",padding:20},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div",{style:{...S.card,maxWidth:600,width:"100%",maxHeight:"92vh",overflowY:"auto",padding:20},onClick:e=>e.stopPropagation()},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-lg)",marginBottom:14,color:"var(--color-accent-fg)"}},"➕ צור ערכה חדשה"),
       /*#__PURE__*/React.createElement("div",{style:{marginBottom:14}},
         /*#__PURE__*/React.createElement("label",{style:{...S.label,fontWeight:700}},"שם הערכה"),
         /*#__PURE__*/React.createElement("input",{value:name,onChange:e=>setName(e.target.value),placeholder:"לדוגמה: ערכה 22",style:{...S.input,fontSize:"var(--text-base)"}})
       ),
-      tpl.serialMakats.map(sm=>/*#__PURE__*/React.createElement("div",{key:sm.makat,style:{marginBottom:14,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},
-        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},sm.makat),/*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:"var(--color-text-secondary)",fontWeight:400,marginRight:6}},_kitMakatName(sm.makat,db))),
-        Array.from({length:sm.count},(_,i)=>/*#__PURE__*/React.createElement("div",{key:i,style:{display:"flex",gap:6,alignItems:"center",marginBottom:4}},
-          /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",minWidth:50}},"צ "+(i+1)+":"),
-          /*#__PURE__*/React.createElement("input",{value:(serialInputs[sm.makat]||[])[i]||"",onChange:e=>setSer(sm.makat,i,e.target.value),placeholder:"בחר/הקלד צ",list:"kit_avail_"+sm.makat,style:{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace"}}),
-          /*#__PURE__*/React.createElement("datalist",{id:"kit_avail_"+sm.makat},(availableByMakat[sm.makat]||[]).map(s=>/*#__PURE__*/React.createElement("option",{key:s,value:s})))
-        )),
-        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-muted)",marginTop:4}},"זמינים: "+(availableByMakat[sm.makat]||[]).length)
-      )),
+      // List of added makats
+      makats.length>0&&/*#__PURE__*/React.createElement("div",{style:{marginBottom:12}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"מק\"טים בערכה (",makats.length,"):"),
+        makats.map((row,rowIdx)=>/*#__PURE__*/React.createElement("div",{key:rowIdx,style:{marginBottom:10,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},
+          /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:6}},
+            /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:0}},
+              /*#__PURE__*/React.createElement("span",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},"מק\"ט "),
+              /*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace",fontWeight:700}},row.makat),
+              /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:"var(--color-text-secondary)",marginRight:6}},_kitMakatName(row.makat,db)),
+              /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:"var(--color-accent-fg)",marginRight:6,fontWeight:600}},"· "+row.count+" צ-ים")
+            ),
+            /*#__PURE__*/React.createElement("button",{onClick:()=>removeMakat(rowIdx),title:"הסר מק\"ט מהערכה",style:{...S.btn("red","xs")}},"❌ הסר")
+          ),
+          // serial dropdowns
+          Array.from({length:row.count},(_,i)=>/*#__PURE__*/React.createElement("div",{key:i,style:{display:"flex",gap:6,alignItems:"center",marginBottom:4}},
+            /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",minWidth:42}},"צ "+(i+1)+":"),
+            /*#__PURE__*/React.createElement("input",{value:row.serials[i]||"",onChange:e=>setSerial(rowIdx,i,e.target.value),list:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i,placeholder:"בחר/הקלד צ",style:{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}}),
+            /*#__PURE__*/React.createElement("datalist",{id:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i},getAvailableSerialsFor(row.makat,rowIdx,i).map(s=>/*#__PURE__*/React.createElement("option",{key:s,value:s})))
+          )),
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-muted)",marginTop:4}},"זמינים במלאי: "+((freeSerialsByMakat[row.makat]||[]).length))
+        ))
+      ),
+      // Add-makat picker / button
+      showPicker
+        ? /*#__PURE__*/React.createElement("div",{style:{marginBottom:12,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px dashed var(--color-accent-fg)"}},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"בחר מק\"ט להוספה:"),
+            /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center",marginBottom:8}},
+              /*#__PURE__*/React.createElement("select",{value:pickerMakat,onChange:e=>setPickerMakat(e.target.value),style:{...S.input,marginBottom:0,flex:2,fontSize:"var(--text-sm)"}},
+                /*#__PURE__*/React.createElement("option",{value:""},"-- בחר מק\"ט --"),
+                availableMakats.map(m=>/*#__PURE__*/React.createElement("option",{key:m,value:m},m+" — "+_kitMakatName(m,db)+" ("+(freeSerialsByMakat[m]||[]).length+" זמינים)"))
+              ),
+              /*#__PURE__*/React.createElement("input",{type:"number",value:pickerCount,onChange:e=>setPickerCount(parseInt(e.target.value)||1),min:1,max:10,style:{...S.input,marginBottom:0,width:64,textAlign:"center",fontSize:"var(--text-sm)"},title:"כמות צ-ים מהמק\"ט"})
+            ),
+            /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6}},
+              /*#__PURE__*/React.createElement("button",{onClick:addMakat,style:{...S.btn("green","sm"),flex:1}},"✅ הוסף לרשימה"),
+              /*#__PURE__*/React.createElement("button",{onClick:()=>{setShowPicker(false);setPickerMakat("");setPickerCount(1);setError("");},style:{...S.btn("neutral","sm"),flex:1}},"ביטול")
+            ),
+            availableMakats.length===0&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-warning-fg)",marginTop:6}},"⚠️ אין מק\"טים זמינים נוספים (כל המק\"טים עם צ-ים פנויים כבר נבחרו או שאין צ-ים פנויים)")
+          )
+        : /*#__PURE__*/React.createElement("button",{onClick:()=>setShowPicker(true),disabled:availableMakats.length===0,style:{...S.btn("blue","md"),width:"100%",marginBottom:12,opacity:availableMakats.length===0?0.5:1}},"➕ הוסף מק\"ט לערכה"),
       error&&/*#__PURE__*/React.createElement("div",{style:{padding:8,background:"var(--color-danger-bg)",color:"var(--color-danger-fg)",borderRadius:6,marginBottom:10,fontSize:"var(--text-sm)"}},"⚠️ "+error),
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},
-        /*#__PURE__*/React.createElement("button",{onClick:create,disabled:creating,style:{...S.btn("green","md"),flex:1}},creating?"יוצר...":"✅ צור ערכה"),
+        /*#__PURE__*/React.createElement("button",{onClick:create,disabled:creating||!canCreate,title:!canCreate?"מלא שם ערכה + הוסף לפחות מק\"ט אחד עם כל הצ-ים":"",style:{...S.btn("green","md"),flex:1,opacity:!canCreate?0.5:1,cursor:!canCreate?"not-allowed":"pointer"}},creating?"יוצר...":"✅ צור ערכה"),
         /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("neutral","md"),flex:1}},"❌ ביטול")
       )
     )
@@ -1168,16 +1235,16 @@ function KitViewModal({kitId,db,setDb,soldiers,auth,onClose}){
         /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)"}},"חייל"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13}},assignee?.name||"—")),
         /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)"}},"מיקום ארון"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13}},cab||"—"))
       ),
-      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"📋 פריטים בערכה (",(tpl.items.length+tpl.serialMakats.length)," שורות):"),
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"📋 פריטים בערכה (",(tpl.items.length+Object.keys(kit.serials||{}).length)," שורות):"),
       /*#__PURE__*/React.createElement("div",{style:{border:"1px solid var(--color-border-muted)",borderRadius:8,overflow:"hidden",marginBottom:14}},
         /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)"}},
           /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
             ["מק\"ט","שם","כמות / צ-ים"].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:{...S.th,fontSize:11,padding:"4px 8px"}},h))
           )),
           /*#__PURE__*/React.createElement("tbody",null,
-            tpl.serialMakats.map(sm=>{const arr=(kit.serials||{})[sm.makat]||[];return /*#__PURE__*/React.createElement("tr",{key:"s_"+sm.makat,style:{borderBottom:"1px solid var(--color-border-muted)",background:"var(--color-bg-canvas)"}},
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace"}},sm.makat),
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},_kitMakatName(sm.makat,db)),
+            Object.entries(kit.serials||{}).map(([mk,arr])=>{return /*#__PURE__*/React.createElement("tr",{key:"s_"+mk,style:{borderBottom:"1px solid var(--color-border-muted)",background:"var(--color-bg-canvas)"}},
+              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace"}},mk),
+              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},_kitMakatName(mk,db)),
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace",color:"var(--color-accent-fg)",fontWeight:600}},arr.join(" · "))
             );}),
             tpl.items.map(it=>/*#__PURE__*/React.createElement("tr",{key:"q_"+it.makat,style:{borderBottom:"1px solid var(--color-border-muted)"}},
@@ -1232,7 +1299,7 @@ function KitAssignModal({soldier,db,setDb,auth,onClose}){
   const [selKitId,setSelKitId]=React.useState(availableKits[0]?.kitId||"");
   const selKit=db.kits?.[selKitId];
   // build 14 lines
-  const lines=React.useMemo(()=>{if(!selKit)return[];const ll=[];tpl.serialMakats.forEach(sm=>{ll.push({type:"serial",makat:sm.makat,name:_kitMakatName(sm.makat,db),serials:(selKit.serials||{})[sm.makat]||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[selKitId,tpl,db.kits]);
+  const lines=React.useMemo(()=>{if(!selKit)return[];const ll=[];Object.entries(selKit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[selKitId,tpl,db.kits]);
   const [checked,setChecked]=React.useState({});
   React.useEffect(()=>{const c={};lines.forEach((l,i)=>{c[i]=true;});setChecked(c);},[lines.length,selKitId]);
   const [working,setWorking]=React.useState(false);
@@ -1335,7 +1402,7 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
   const kit=db.kits?.[kitId];
   if(!kit)return null;
   const tpl=_kitGetTemplate(db);
-  const lines=React.useMemo(()=>{const ll=[];tpl.serialMakats.forEach(sm=>{ll.push({type:"serial",makat:sm.makat,name:_kitMakatName(sm.makat,db),serials:(kit.serials||{})[sm.makat]||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[tpl,kit]);
+  const lines=React.useMemo(()=>{const ll=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[tpl,kit]);
   const [checked,setChecked]=React.useState(()=>{const c={};lines.forEach((l,i)=>{c[i]=true;});return c;});
   const [working,setWorking]=React.useState(false);
   const [err,setErr]=React.useState("");
