@@ -802,7 +802,7 @@ const merged={};// 1. RAW_SOLDIERS כבסיס
 RAW_SOLDIERS.forEach(s=>{if(s.id&&!deleted[s.id])merged[s.id]=s;});// 2. customSoldiers מעל
 Object.entries(db.customSoldiers||{}).forEach(([id,s])=>{if(!deleted[id])merged[id]=s;});// 3. db.soldiers (Firebase) — מעדכן / מוסיף
 Object.entries(db.soldiers||{}).forEach(([id,s])=>{if(!deleted[id])merged[id]={...merged[id],...s,id};});// סנן חסרי שם
-const seen=new Set();return Object.values(merged).filter(s=>{if(!s.id||!s.name||seen.has(s.id))return false;seen.add(s.id);return true;});}// getSerials: returns Firebase serials if available, else falls back to ALL_SERIALS
+const seen=new Set();const _fix=v=>(typeof fixEncodedHebrewText==="function")?fixEncodedHebrewText(v):v;return Object.values(merged).map(s=>{if(!s)return s;const out={...s};["name","unit","squad","phone"].forEach(f=>{if(typeof out[f]==="string")out[f]=_fix(out[f]);});return out;}).filter(s=>{if(!s.id||!s.name||seen.has(s.id))return false;seen.add(s.id);return true;});}// getSerials: returns Firebase serials if available, else falls back to ALL_SERIALS
 function getSerials(db){// בנה רשימת סידוריים מ-unitItems (המקור העיקרי)
 const fromUnits=Object.values(db.unitItems||{}).filter(v=>v.s||v.serial).map(v=>({name:cleanItemName(v.n||v.name||""),serial:String(v.s||v.serial),unit:v.u||v.unit||"גדודי"}));// בנה מ-assignments
 const fromAssign=[];try{Object.entries(db.assignments||{}).forEach(([solId,items])=>{Object.entries(items||{}).forEach(([name,val])=>{if(val&&val!==1&&typeof val==="string"&&val.length>3){fromAssign.push({name:cleanItemName(name),serial:String(val)});}});});}catch(e){}// מיזוג: unitItems + assignments + db.serials הישן
@@ -1200,116 +1200,47 @@ function AppTopBar({auth,db}){
 // הסיבה: encodeURIComponent() על נתיב Firebase יצר מפתחות "%D7%A4..." במקום עברית פשוטה.
 // תוצאה: כל rename גרם לכפילות (מפתח ישן בעברית + מפתח חדש מקודד) + שמות לא נשמרו.
 // פתרון: fbPathKey שמחליף רק תווים אסורים ב-RTDB (. # $ [ ] /), ובמיגרציה ה-keys המקודדים מפוענחים בחזרה.
-function fixEncodedHebrewText(text){if(!text||typeof text!=="string")return text;if(!/%[0-9A-F]{2}/i.test(text))return text;try{return decodeURIComponent(text);}catch(e){return text;}}function fbPathKey(s){return String(s||"").replace(/[.#$\[\]\/]/g,"_");}
-function _decodeUrlEncodedKeysOnce(setDb,authName){return _runFullDecodeMigration(setDb,authName);}
+function fixEncodedHebrewText(text){if(!text||typeof text!=="string")return text;let cur=text;let changed=true;let passes=0;while(changed&&passes<3){changed=false;passes++;if(/%[0-9A-F]{2}/i.test(cur)){try{const dec=decodeURIComponent(cur);if(dec&&dec!==cur){cur=dec;changed=true;continue;}}catch(e){}}if(/\\u[0-9A-Fa-f]{4}/.test(cur)){try{const dec=cur.replace(/\\u([0-9A-Fa-f]{4})/g,(m,h)=>String.fromCharCode(parseInt(h,16)));if(dec&&dec!==cur){cur=dec;changed=true;continue;}}catch(e){}}}return cur;}function fbPathKey(s){return String(s||"").replace(/[.#$\[\]\/]/g,"_");}
+// Recursive walker — fixes all string keys + values
+function _deepFixEncoded(obj,statRef,pathStr){
+  if(typeof obj==="string"){const fixed=fixEncodedHebrewText(obj);if(fixed!==obj){statRef.fixed++;if(statRef.examples.length<25)statRef.examples.push(pathStr+" : "+obj.slice(0,40)+" → "+fixed.slice(0,40));}return fixed;}
+  if(Array.isArray(obj))return obj.map((v,i)=>_deepFixEncoded(v,statRef,pathStr+"["+i+"]"));
+  if(obj&&typeof obj==="object"){const out={};for(const[k,v]of Object.entries(obj)){const newK=typeof k==="string"?fixEncodedHebrewText(k):k;if(newK!==k){statRef.keysFixed++;if(statRef.examples.length<25)statRef.examples.push(pathStr+" key: "+k.slice(0,30)+" → "+newK.slice(0,30));}out[newK]=_deepFixEncoded(v,statRef,pathStr+"."+newK);}return out;}
+  return obj;
+}
+function _deepEqualJSON(a,b){try{return JSON.stringify(a)===JSON.stringify(b);}catch(e){return false;}}
+async function _decodeUrlEncodedKeysOnce(setDb,authName){return _runFullDecodeMigration(setDb,authName);}
 async function _runFullDecodeMigration(setDb,authName){
-  if(window._decodeMigrationV2Ran)return;
-  window._decodeMigrationV2Ran=true;
-  const stats={armoryMaster:0,cabinets:0,unitItemsValues:0,kitsValues:0,soldiersValues:0,assignmentsKeys:0,total:0};
-  const fixedExamples=[];
-  const isEnc=s=>typeof s==="string"&&/%[0-9A-F]{2}/i.test(s);
-  const dec=s=>{try{return decodeURIComponent(s);}catch(e){return s;}};
-  try{
-    // 1. armoryMaster — top-level keys (existing logic)
-    const am=(await fbGet("db/armoryMaster"))||{};
-    const mergedAm={...am};
-    Object.entries(am).forEach(([key,val])=>{
-      if(!/^%[0-9A-F]{2}/i.test(key))return;
-      const decoded=dec(key);
-      if(!decoded||decoded===key)return;
-      const existing=mergedAm[decoded];
-      if(existing){mergedAm[decoded]={...existing,...val,total:Math.max(existing.total||0,val.total||0),makat:existing.makat||val.makat,serials:[...(existing.serials||[]),...(val.serials||[])]};}else{mergedAm[decoded]=val;}
-      delete mergedAm[key];
-      stats.armoryMaster++;
-      if(fixedExamples.length<3)fixedExamples.push("armoryMaster: "+key+" → "+decoded);
-    });
-    if(stats.armoryMaster>0){await fbSet("db/armoryMaster",sanitizeForFirebase(mergedAm));setDb(prev=>({...prev,armoryMaster:mergedAm}));}
-    // 2. cabinets — top-level keys
-    const cabs=(await fbGet("db/cabinets"))||{};
-    const mergedCabs={...cabs};
-    Object.entries(cabs).forEach(([key,val])=>{
-      if(!/^%[0-9A-F]{2}/i.test(key))return;
-      const decoded=dec(key);
-      if(!decoded||decoded===key)return;
-      const existing=mergedCabs[decoded];
-      if(existing&&Array.isArray(val)&&Array.isArray(existing)){mergedCabs[decoded]=[...existing,...val];}else if(!existing){mergedCabs[decoded]=val;}
-      delete mergedCabs[key];
-      stats.cabinets++;
-      if(fixedExamples.length<6)fixedExamples.push("cabinets: "+key+" → "+decoded);
-    });
-    if(stats.cabinets>0){await fbSet("db/cabinets",sanitizeForFirebase(mergedCabs));setDb(prev=>({...prev,cabinets:mergedCabs}));}
-    // 3. unitItems — VALUES (n, name, sn, returnedFrom, cabName, etc.)
-    const ui=(await fbGet("db/unitItems"))||{};
-    const newUI={...ui};
-    let uiChanged=false;
-    Object.entries(ui).forEach(([uid,v])=>{
-      if(!v||typeof v!=="object")return;
-      const updated={...v};
-      let touched=false;
-      ["n","name","sn","assignedSoldierName","returnedFrom","cabName","fromUnit"].forEach(field=>{
-        if(isEnc(updated[field])){const d=dec(updated[field]);if(d!==updated[field]){updated[field]=d;touched=true;}}
-      });
-      if(touched){newUI[uid]=updated;uiChanged=true;stats.unitItemsValues++;if(fixedExamples.length<9)fixedExamples.push("unitItems."+uid+".n: "+v.n+" → "+updated.n);}
-    });
-    if(uiChanged){await fbSet("db/unitItems",sanitizeForFirebase(newUI));setDb(prev=>({...prev,unitItems:newUI}));}
-    // 4. kits — VALUES (name)
-    const kits=(await fbGet("db/kits"))||{};
-    const newKits={...kits};
-    let kitsChanged=false;
-    Object.entries(kits).forEach(([kid,v])=>{
-      if(!v||typeof v!=="object")return;
-      if(isEnc(v.name)){const d=dec(v.name);if(d!==v.name){newKits[kid]={...v,name:d};kitsChanged=true;stats.kitsValues++;if(fixedExamples.length<12)fixedExamples.push("kits."+kid+".name: "+v.name+" → "+d);}}
-    });
-    if(kitsChanged){await fbSet("db/kits",sanitizeForFirebase(newKits));setDb(prev=>({...prev,kits:newKits}));}
-    // 5. soldiers — VALUES (name, unit, squad)
-    const sols=(await fbGet("db/soldiers"))||{};
-    const newSols={...sols};
-    let solsChanged=false;
-    Object.entries(sols).forEach(([sid,v])=>{
-      if(!v||typeof v!=="object")return;
-      const updated={...v};
-      let touched=false;
-      ["name","unit","squad","phone"].forEach(field=>{
-        if(isEnc(updated[field])){const d=dec(updated[field]);if(d!==updated[field]){updated[field]=d;touched=true;}}
-      });
-      if(touched){newSols[sid]=updated;solsChanged=true;stats.soldiersValues++;if(fixedExamples.length<15)fixedExamples.push("soldiers."+sid+".name: "+v.name+" → "+updated.name);}
-    });
-    if(solsChanged){await fbSet("db/soldiers",sanitizeForFirebase(newSols));setDb(prev=>({...prev,soldiers:newSols}));}
-    // Same for customSoldiers
-    const cs=(await fbGet("db/customSoldiers"))||{};
-    const newCS={...cs};
-    let csChanged=false;
-    Object.entries(cs).forEach(([sid,v])=>{
-      if(!v||typeof v!=="object")return;
-      const updated={...v};
-      let touched=false;
-      ["name","unit","squad","phone"].forEach(field=>{
-        if(isEnc(updated[field])){const d=dec(updated[field]);if(d!==updated[field]){updated[field]=d;touched=true;}}
-      });
-      if(touched){newCS[sid]=updated;csChanged=true;stats.soldiersValues++;}
-    });
-    if(csChanged){await fbSet("db/customSoldiers",sanitizeForFirebase(newCS));setDb(prev=>({...prev,customSoldiers:newCS}));}
-    // 6. assignments — sub-keys (item names) per soldier
-    const asgnAll=(await fbGet("db/assignments"))||{};
-    const newAsgn={...asgnAll};
-    let asgnChanged=false;
-    Object.entries(asgnAll).forEach(([sid,asgn])=>{
-      if(!asgn||typeof asgn!=="object")return;
-      const newSidAsgn={};
-      let touchedThis=false;
-      Object.entries(asgn).forEach(([k,v])=>{
-        if(isEnc(k)){const dk=dec(k);if(dk!==k){if(newSidAsgn[dk]===undefined)newSidAsgn[dk]=v;touchedThis=true;stats.assignmentsKeys++;if(fixedExamples.length<18)fixedExamples.push("assignments."+sid+"."+k+" → "+dk);return;}}
-        newSidAsgn[k]=v;
-      });
-      if(touchedThis){newAsgn[sid]=newSidAsgn;asgnChanged=true;}
-    });
-    if(asgnChanged){await fbSet("db/assignments",sanitizeForFirebase(newAsgn));setDb(prev=>({...prev,assignments:newAsgn}));}
-    stats.total=stats.armoryMaster+stats.cabinets+stats.unitItemsValues+stats.kitsValues+stats.soldiersValues+stats.assignmentsKeys;
-    if(stats.total>0){
-      try{logAction("migration_decode_keys_v2","פוענחו טקסטים מקודדים: armoryMaster="+stats.armoryMaster+", cabinets="+stats.cabinets+", unitItemsValues="+stats.unitItemsValues+", kitsValues="+stats.kitsValues+", soldiersValues="+stats.soldiersValues+", assignmentsKeys="+stats.assignmentsKeys+(fixedExamples.length>0?" | דוגמאות: "+fixedExamples.slice(0,5).join("; "):""),authName||"מערכת");}catch(_){}
-      console.log("[migration v2] decoded:",stats);
-    }
-  }catch(e){console.warn("[decode-migration v2]",e);}
+  if(window._decodeMigrationV3Ran)return;
+  window._decodeMigrationV3Ran=true;
+  const stats={fixed:0,keysFixed:0,paths:{},examples:[]};
+  // Paths to scan deeply
+  const paths=["db/armoryMaster","db/cabinets","db/unitItems","db/kits","db/soldiers","db/customSoldiers","db/assignments","db/assignmentMeta","db/sigHistory","db/dailyForms","db/cabinetNames","db/nameMakat","db/dailyExtraItems","db/dailyNotes","db/exitForms","db/inspections","db/brokenItems"];
+  for(const path of paths){
+    try{
+      const data=await fbGet(path);
+      if(!data)continue;
+      const localStat={fixed:0,keysFixed:0,examples:stats.examples};
+      const fixed=_deepFixEncoded(data,localStat,path);
+      if(localStat.fixed>0||localStat.keysFixed>0){
+        if(!_deepEqualJSON(data,fixed)){
+          await fbSet(path,sanitizeForFirebase(fixed));
+          stats.paths[path]={values:localStat.fixed,keys:localStat.keysFixed};
+          stats.fixed+=localStat.fixed;
+          stats.keysFixed+=localStat.keysFixed;
+          // Update local state for known top-level slots
+          const slot=path.replace("db/","");
+          setDb(prev=>({...prev,[slot]:fixed}));
+        }
+      }
+    }catch(e){console.warn("[migration v3]",path,e);}
+  }
+  if(stats.fixed>0||stats.keysFixed>0){
+    try{logAction("migration_decode_keys_v3","פוענחו טקסטים מקודדים בעומק: "+stats.fixed+" values + "+stats.keysFixed+" keys ב-"+Object.keys(stats.paths).length+" נתיבים | דוגמאות: "+stats.examples.slice(0,5).join("; "),authName||"מערכת");}catch(_){}
+    console.log("[migration v3]",stats);
+  }else{
+    console.log("[migration v3] no encoded text found");
+  }
 }
 // === END FIX #0 ===
 
