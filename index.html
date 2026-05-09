@@ -1151,7 +1151,7 @@ function ReportsTab({db,setDb,soldiers,auth}){
   const subs=[
     {id:"endofday",label:"הדפס סוף יום",icon:"📅",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(EndOfDayLauncher,{db,auth})},{id:"partialsigners",label:"רשימת חתומים חלקית",icon:"✍️",show:true,render:()=>React.createElement(PartialSignersList,{db,soldiers,auth})},{id:"actlog",label:"לוג תנועות",icon:"📋",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(ActivityLogTab,{db})},
     {id:"loginlog",label:"כניסות",icon:"🚪",show:isAdmin,render:()=>React.createElement(LoginLogTab,{db})},
-    {id:"greeneyes",label:"ירוק בעיניים",icon:"🟢",show:isAdmin,render:()=>React.createElement(GreenEyesTab,{db,setDb,soldiers,auth})},
+    {id:"greeneyes",label:"ירוק בעיניים",icon:"🟢",show:isAdmin,render:()=>React.createElement(GreenEyesTab,{db,setDb,soldiers,auth})},{id:"getracking",label:"מעקב ירוק בעיניים",icon:"📊",show:isAdmin,render:()=>React.createElement(GreenEyesTrackingTab,{db,setDb,soldiers,auth})},
     {id:"invcount",label:"ספירת מלאי",icon:"📦",show:isAdmin||auth?.username==="מתן"||auth?.username==="יעקב",render:()=>React.createElement(InventoryCountTab,{db,setDb,soldiers,auth})},
     {id:"poll",label:"סקר נוכחות",icon:"📊",show:isAdmin,render:()=>React.createElement(PollTab,{db,setDb,soldiers,auth})}
   ].filter(s=>s.show);
@@ -2728,6 +2728,211 @@ function GreenEyesDetailedReportModal({tokenForms,onClose,authName}){
         /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("neutral","md"),flex:1}},"❌ ביטול")
       )
     )
+  );
+}
+
+// === GreenEyes Tracking Dashboard (מעקב צ-ים, ניהול דוחות, חתימות) ===
+function _geGetAllSerialsWithStatus(db,tokenForms){
+  const map={};
+  // Pass 1: scan all submitted forms — each soldier+serial → most recent form coverage
+  Object.entries(tokenForms||{}).forEach(([token,f])=>{
+    if(!f||!f.submittedAt)return;
+    (f.soldiers||[]).forEach(sol=>{
+      const sIt=(f.items||{})[sol.id]||{};
+      (sol.items||[]).forEach(it=>{
+        if(!it.serial||!isSerial(it.serial))return;
+        const key=sol.id+":"+it.serial;
+        const safe=safePathKey(it.key||it.name);
+        const m=sIt[safe];
+        const existing=map[key];
+        if(!existing||(f.submittedAt||0)>(existing.submittedAt||0)){
+          map[key]={
+            unit:fixEncodedHebrewText(sol.unit||f.unitName||""),
+            sid:sol.id,
+            solName:fixEncodedHebrewText(sol.name||""),
+            itemKey:fixEncodedHebrewText(cleanItemName(it.key||it.name||"")),
+            serial:String(it.serial),
+            status:m?.status||null,
+            note:fixEncodedHebrewText(m?.note||""),
+            formToken:token,
+            unitName:fixEncodedHebrewText(f.unitName||""),
+            signature:f.signature||null,
+            submittedAt:f.submittedAt||null,
+            createdAt:f.createdAt||null,
+            sentToName:fixEncodedHebrewText(f.sentToName||""),
+            covered:true
+          };
+        }
+      });
+    });
+  });
+  // Pass 2: include serials in db.assignments not yet covered
+  const allSols=getSoldiers(db);
+  allSols.forEach(s=>{
+    const asgn=db.assignments?.[s.id]||{};
+    Object.entries(asgn).forEach(([k,v])=>{
+      if(!isSerial(v))return;
+      const key=s.id+":"+String(v);
+      if(map[key])return;
+      map[key]={
+        unit:fixEncodedHebrewText(s.unit||""),
+        sid:s.id,
+        solName:fixEncodedHebrewText(s.name||""),
+        itemKey:fixEncodedHebrewText(cleanItemName(k)),
+        serial:String(v),
+        status:null,note:"",formToken:null,unitName:"",signature:null,submittedAt:null,createdAt:null,sentToName:"",covered:false
+      };
+    });
+  });
+  return Object.values(map);
+}
+function GreenEyesSerialDetailModal({row,onClose}){
+  const sg=row.signature||{};
+  const signerName=fixEncodedHebrewText(((sg.firstName||"")+" "+(sg.lastName||"")).trim());
+  const statusLabel=row.status==="ok"||row.status==="checked"?"✅ תקין":(row.status==="missing"?"❌ חסר/בעיה":"□ לא סומן בטופס");
+  const statusColor=row.status==="ok"||row.status==="checked"?"var(--color-success-fg)":(row.status==="missing"?"var(--color-danger-fg)":"var(--color-text-muted)");
+  return /*#__PURE__*/React.createElement("div",{style:S.overlay,onClick:onClose},
+    /*#__PURE__*/React.createElement("div",{style:{...S.card,maxWidth:540,width:"100%",padding:18,maxHeight:"90vh",overflowY:"auto"},onClick:e=>e.stopPropagation()},
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-accent-fg)"}},"📋 פרטי דוח לצ"),
+        /*#__PURE__*/React.createElement("button",{onClick:onClose,title:"סגור",style:{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"var(--color-text-secondary)"}},"✕")
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:6,marginBottom:12,fontSize:"var(--text-sm)"}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)",marginBottom:4}},row.itemKey," ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace",color:"var(--color-accent-fg)"}},"צ "+row.serial)),
+        /*#__PURE__*/React.createElement("div",{style:{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}},"חייל: ",/*#__PURE__*/React.createElement("b",null,row.solName)," (",row.sid,") · פלוגה ",row.unit||"—")
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:6,marginBottom:12,fontSize:"var(--text-sm)"}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:4}},"סטטוס: ",/*#__PURE__*/React.createElement("span",{style:{color:statusColor}},statusLabel)),
+        row.note?/*#__PURE__*/React.createElement("div",{style:{padding:6,background:"var(--color-warning-bg)",color:"var(--color-warning-fg)",borderRadius:4,fontSize:"var(--text-xs)",marginTop:6}},"💬 הערה: ",row.note):null
+      ),
+      row.covered?/*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:6,fontSize:"var(--text-sm)"}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:6}},"✍️ חתימת אחראי הטופס"),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:6}},
+          "שם: ",/*#__PURE__*/React.createElement("b",{style:{color:"var(--color-text-primary)"}},signerName||"—"),
+          sg.rank?" · דרגה: "+fixEncodedHebrewText(sg.rank):"",
+          sg.role?" · תפקיד: "+fixEncodedHebrewText(sg.role):"",
+          sg.soldierId?" · מ.א: "+sg.soldierId:""
+        ),
+        sg.sigDataUrl?/*#__PURE__*/React.createElement("img",{src:sg.sigDataUrl,style:{maxHeight:80,border:"1px solid var(--color-border-muted)",borderRadius:4,background:"#fff"},alt:"חתימה"}):/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",fontStyle:"italic"}},"אין תמונת חתימה"),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:8}},"📅 הוגש: ",row.submittedAt?new Date(row.submittedAt).toLocaleString("he-IL"):"—",row.createdAt?" · נוצר: "+new Date(row.createdAt).toLocaleDateString("he-IL"):"")
+      ):/*#__PURE__*/React.createElement("div",{style:{padding:14,textAlign:"center",background:"var(--color-warning-bg)",color:"var(--color-warning-fg)",borderRadius:6,fontSize:"var(--text-sm)",fontWeight:700}},"⚠️ צ זה לא נכלל בשום טופס שהוגש עדיין")
+    )
+  );
+}
+function GreenEyesTrackingTab({db,setDb,soldiers,auth}){
+  const [tokenForms,setTokenForms]=React.useState({});
+  const [view,setView]=React.useState("serials"); // serials | forms
+  const [filterUnit,setFilterUnit]=React.useState("הכל");
+  const [filterCov,setFilterCov]=React.useState("all"); // all | covered | uncovered
+  const [search,setSearch]=React.useState("");
+  const [detail,setDetail]=React.useState(null);
+  const reload=React.useCallback(()=>{fbGet("db/greenEyesForms").then(d=>setTokenForms(d||{})).catch(e=>console.warn("[fb-err]",e));},[]);
+  React.useEffect(()=>{reload();},[reload]);
+  const allRows=React.useMemo(()=>_geGetAllSerialsWithStatus(db,tokenForms),[db,tokenForms]);
+  const UNITS=React.useMemo(()=>{const set=new Set();allRows.forEach(r=>{if(r.unit)set.add(r.unit);});return ["הכל",...Array.from(set).sort((a,b)=>a.localeCompare(b,"he"))];},[allRows]);
+  const filtered=React.useMemo(()=>{
+    return allRows.filter(r=>{
+      if(filterUnit!=="הכל"&&r.unit!==filterUnit)return false;
+      if(filterCov==="covered"&&!r.covered)return false;
+      if(filterCov==="uncovered"&&r.covered)return false;
+      if(search.trim()){const q=search.trim();return (r.solName&&r.solName.includes(q))||(r.serial&&r.serial.includes(q))||(r.itemKey&&r.itemKey.includes(q))||(r.sid&&r.sid.includes(q));}
+      return true;
+    });
+  },[allRows,filterUnit,filterCov,search]);
+  const grouped=React.useMemo(()=>{const g={};filtered.forEach(r=>{const u=r.unit||"לא משויכת";if(!g[u])g[u]={covered:0,uncovered:0,rows:[]};g[u].rows.push(r);if(r.covered)g[u].covered++;else g[u].uncovered++;});return g;},[filtered]);
+  const totalCov=allRows.filter(r=>r.covered).length;
+  const totalUncov=allRows.length-totalCov;
+  function deleteForm(token,unitName){
+    if(!window.confirm("למחוק דוח של פלוגה "+unitName+"?\nהפעולה לא ניתנת לשחזור."))return;
+    fbDelete("db/greenEyesForms/"+token).then(()=>{
+      try{logAction("ירוק_בעיניים_מחיקת_דוח","נמחק דוח של פלוגה "+unitName,auth?.name||"מערכת");}catch(_){}
+      reload();
+    }).catch(e=>{console.warn("[fb-err]",e);alert("שגיאה במחיקה");});
+  }
+  function exportSummary(){if(typeof _geExportSummaryExcel==="function")_geExportSummaryExcel(tokenForms,auth?.name||"");}
+  function printSummary(){if(typeof _gePrintSummary==="function")_gePrintSummary(tokenForms);}
+  function openDetailedReport(){if(typeof _geOpenDetailedReport==="function")_geOpenDetailedReport(tokenForms,"battalion",auth?.name||"");}
+  return /*#__PURE__*/React.createElement("div",{style:{padding:"4px"}},
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}},
+      /*#__PURE__*/React.createElement("h2",{style:{margin:0,fontSize:"var(--text-xl)",fontWeight:800}},"📊 מעקב ירוק בעיניים"),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+        /*#__PURE__*/React.createElement("button",{onClick:exportSummary,style:{...S.btn("blue","sm")},title:"סיכום פלוגתי + חסרים"},"📊 הורד סיכום Excel"),
+        /*#__PURE__*/React.createElement("button",{onClick:openDetailedReport,style:{...S.btn("orange","sm")},title:"דוח מפורט עם חתימות"},"📋 דוח מסכם מפורט"),
+        /*#__PURE__*/React.createElement("button",{onClick:printSummary,style:{...S.btn("purple","sm")},title:"הדפס סיכום"},"🖨️ הדפס")
+      )
+    ),
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}},
+      [{id:"serials",label:"🔢 דוח צ-ים"},{id:"forms",label:"🗂️ ניהול דוחות"}].map(b=>/*#__PURE__*/React.createElement("button",{key:b.id,onClick:()=>setView(b.id),style:{padding:"7px 14px",borderRadius:"var(--radius-md)",border:"1px solid "+(view===b.id?"var(--color-accent-fg)":"var(--color-border-muted)"),background:view===b.id?"var(--color-accent-fg)":"var(--color-bg-default)",color:view===b.id?"var(--color-text-on-accent)":"var(--color-text-primary)",cursor:"pointer",fontWeight:view===b.id?700:500,fontSize:"var(--text-sm)",fontFamily:"inherit"}},b.label))
+    ),
+    view==="serials"?/*#__PURE__*/React.createElement(React.Fragment,null,
+      /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:12,marginBottom:12,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}},
+        /*#__PURE__*/React.createElement("div",{style:{padding:8,background:"var(--color-success-bg)",borderRadius:6,textAlign:"center"}},
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-2xl)",fontWeight:800,color:"var(--color-success-fg)"}},totalCov),
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"✅ צ-ים בדוח")
+        ),
+        /*#__PURE__*/React.createElement("div",{style:{padding:8,background:"var(--color-warning-bg)",borderRadius:6,textAlign:"center"}},
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-2xl)",fontWeight:800,color:"var(--color-warning-fg)"}},totalUncov),
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"❌ צ-ים ללא דוח")
+        ),
+        /*#__PURE__*/React.createElement("div",{style:{padding:8,background:"var(--color-bg-canvas)",borderRadius:6,textAlign:"center"}},
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-2xl)",fontWeight:800,color:"var(--color-text-primary)"}},allRows.length),
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"סהכ צ-ים בגדוד")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
+        /*#__PURE__*/React.createElement("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"🔍 חיפוש שם / מ.א / צ / פריט",style:{...S.input,marginBottom:0,flex:1,minWidth:180,fontSize:"var(--text-sm)"}}),
+        /*#__PURE__*/React.createElement("select",{value:filterUnit,onChange:e=>setFilterUnit(e.target.value),style:{...S.input,marginBottom:0,width:"auto",fontSize:"var(--text-sm)"}},UNITS.map(u=>/*#__PURE__*/React.createElement("option",{key:u,value:u},u==="הכל"?"כל הפלוגות":"פלוגה "+u))),
+        /*#__PURE__*/React.createElement("select",{value:filterCov,onChange:e=>setFilterCov(e.target.value),style:{...S.input,marginBottom:0,width:"auto",fontSize:"var(--text-sm)"}},
+          /*#__PURE__*/React.createElement("option",{value:"all"},"הכל"),
+          /*#__PURE__*/React.createElement("option",{value:"covered"},"✅ עם דוח"),
+          /*#__PURE__*/React.createElement("option",{value:"uncovered"},"❌ ללא דוח")
+        )
+      ),
+      Object.keys(grouped).length===0?/*#__PURE__*/React.createElement("div",{style:{...S.card,textAlign:"center",padding:30,color:"var(--color-text-muted)"}},"אין צ-ים בטווח הסינון"):
+        Object.entries(grouped).sort((a,b)=>a[0].localeCompare(b[0],"he")).map(([unit,g])=>/*#__PURE__*/React.createElement("div",{key:unit,style:{...S.card,padding:0,marginBottom:10,overflow:"hidden"}},
+          /*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",background:"var(--color-bg-canvas)",borderBottom:"1px solid var(--color-border-muted)",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)"}},"🟦 פלוגה ",unit),
+            /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",display:"flex",gap:8}},
+              /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-success-fg)",fontWeight:700}},"✅ "+g.covered),
+              /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-warning-fg)",fontWeight:700}},"❌ "+g.uncovered)
+            )
+          ),
+          /*#__PURE__*/React.createElement("div",{style:{maxHeight:340,overflowY:"auto"}},
+            g.rows.sort((a,b)=>(b.covered?1:0)-(a.covered?1:0)||a.solName.localeCompare(b.solName,"he")).map((r,i)=>/*#__PURE__*/React.createElement("div",{key:r.sid+":"+r.serial+":"+i,onClick:r.covered?()=>setDetail(r):null,style:{padding:"6px 12px",borderBottom:"1px solid var(--color-border-muted)",display:"flex",alignItems:"center",gap:8,cursor:r.covered?"pointer":"default",background:i%2===0?"var(--color-bg-default)":"var(--color-bg-subtle)"}},
+              /*#__PURE__*/React.createElement("span",{style:{fontSize:18,fontWeight:700,color:r.covered?"var(--color-success-fg)":"var(--color-warning-fg)",minWidth:24}},r.covered?"✅":"❌"),
+              /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:0,fontSize:"var(--text-sm)"}},
+                /*#__PURE__*/React.createElement("div",{style:{fontWeight:600}},r.itemKey," ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace",color:"var(--color-accent-fg)",fontSize:11}},"צ "+r.serial)),
+                /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"👤 ",r.solName," · ",r.sid,r.covered?(" · "+(r.status==="missing"?"⚠️ דווח חסר":r.status==="ok"||r.status==="checked"?"✓ תקין":"□ נכלל בטופס")):"")
+              ),
+              r.covered?/*#__PURE__*/React.createElement("button",{onClick:e=>{e.stopPropagation();setDetail(r);},style:{...S.btn("neutral","xs")},title:"הצג חתימה ופרטי דוח"},"👁️"):null
+            ))
+          )
+        ))
+    ):/*#__PURE__*/React.createElement(React.Fragment,null,
+      // Forms management view
+      /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:12}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}},"🗂️ ניהול דוחות שנשלחו (",Object.keys(tokenForms||{}).length,")"),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:10}},"מחיקה היא סופית — אם נדרש לסגור דוח שנשלח בטעות, מחק כאן ושלח דוח חדש מטאב 'ירוק בעיניים'."),
+        Object.keys(tokenForms||{}).length===0?/*#__PURE__*/React.createElement("div",{style:{padding:20,textAlign:"center",color:"var(--color-text-muted)"}},"אין דוחות"):/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+          Object.entries(tokenForms||{}).sort((a,b)=>(b[1]?.createdAt||0)-(a[1]?.createdAt||0)).map(([tk,f])=>{
+            const submitted=!!f?.submittedAt;
+            const xCount=Object.values(f?.items||{}).reduce((c,sIt)=>c+Object.values(sIt||{}).filter(it=>it?.status==="missing").length,0);
+            return /*#__PURE__*/React.createElement("div",{key:tk,style:{padding:"8px 12px",background:"var(--color-bg-canvas)",borderRadius:6,border:"1px solid "+(submitted?(xCount>0?"var(--color-danger-fg)":"var(--color-success-fg)"):"var(--color-warning-fg)"),display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}},
+              /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:200}},
+                /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},"🟦 פלוגה ",fixEncodedHebrewText(f?.unitName||"—")," · נשלח ל",fixEncodedHebrewText(f?.sentToName||"—")),
+                /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)",marginTop:2}},
+                  "נוצר: ",f?.createdAt?new Date(f.createdAt).toLocaleString("he-IL"):"—",
+                  submitted?/*#__PURE__*/React.createElement("span",{style:{marginRight:8,color:"var(--color-success-fg)",fontWeight:700}}," · ✅ הוגש: "+new Date(f.submittedAt).toLocaleString("he-IL")):/*#__PURE__*/React.createElement("span",{style:{marginRight:8,color:"var(--color-warning-fg)",fontWeight:700}}," · ⏳ ממתין"),
+                  xCount>0?/*#__PURE__*/React.createElement("span",{style:{marginRight:8,color:"var(--color-danger-fg)",fontWeight:700}}," · ⚠️ "+xCount+" חסרים"):null
+                )
+              ),
+              /*#__PURE__*/React.createElement("button",{onClick:()=>deleteForm(tk,f?.unitName||"—"),style:{...S.btn("red","xs")},title:"מחק דוח זה"},"🗑️ מחק")
+            );
+          })
+        )
+      )
+    ),
+    detail&&/*#__PURE__*/React.createElement(GreenEyesSerialDetailModal,{row:detail,onClose:()=>setDetail(null)})
   );
 }
 
