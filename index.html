@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.2.3";
+const APP_VERSION = "2.2.4";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){}
 
 // פונקציות Firebase
@@ -4382,6 +4382,7 @@ async function _bulkDeleteUnitItemDupesWithMatchingAssignment(db,setDb,authName)
   alert("✅ תוקנו "+ok+" כפילויות"+(fail>0?"\n⚠️ "+fail+" נכשלו (ראה קונסול)":""));
 }
 function DuplicateScannerModal({db,setDb,auth,onClose}){
+  React.useEffect(()=>{try{console.log("[DuplicateScannerModal mounted] v"+APP_VERSION);}catch(_){}},[]);
   const [scanResult,setScanResult]=React.useState(()=>_scanDuplicateSerials(db));
   const [busyKey,setBusyKey]=React.useState(null);
   const [hidden,setHidden]=React.useState(()=>new Set()); // pair keys the user marked as "OK / different items"
