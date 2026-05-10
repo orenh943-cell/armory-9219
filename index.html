@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.1.1";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){}
 
 // פונקציות Firebase
@@ -2507,26 +2507,24 @@ function buildGeFormPayload(db,unitName,sentToSol,createdBy,opts){
     armoryItems.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"));
     armoryUnassignedCount=armoryItems.length;
     if(armoryItems.length>0){soldiers.push({id:"_armory",name:"📦 ציוד בארמון - לא חתום",unit:"ארמון",items:armoryItems,isArmoryGroup:true,armoryCategory:"unassigned"});}
-    // PART B: items assigned to UNsigned soldiers (battalion-full only — to avoid noise on per-unit forms)
-    if(isBattalionFull){
-      const unsignedItems=[];
-      const includedSidItems=new Set();
-      // Collect ids of unsigned soldiers already added as soldiers array entries (battalion mode)
-      soldiers.forEach(s=>{if(s.isUnsigned&&!s.isArmoryGroup)includedSidItems.add(s.id);});
-      Object.entries(db.assignments||{}).forEach(([sid,asgn])=>{
-        if(signedIds.has(sid))return;
-        if(includedSidItems.has(sid))return; // already in battalion soldiers list — don't double-count
-        const sol=allSols.find(s=>s.id===sid);
-        Object.entries(asgn||{}).forEach(([k,v])=>{
-          if(!v||v===1||v===true)return;
-          const nm=cleanItemName(k);
-          unsignedItems.push({key:nm+"#"+sid+"_"+v,name:nm,serial:String(v),originalSoldierId:sid,originalSoldierName:sol?.name||sid,originalSoldierUnit:sol?.unit||""});
-        });
+    // PART B: items assigned to UNsigned soldiers — included whenever armory is requested (not only battalion).
+    // For battalion-full, dedupe vs unsigned soldiers already in the soldiers array (to avoid double-counting).
+    const unsignedItems=[];
+    const includedSidItems=new Set();
+    soldiers.forEach(s=>{if(s.isUnsigned&&!s.isArmoryGroup)includedSidItems.add(s.id);});
+    Object.entries(db.assignments||{}).forEach(([sid,asgn])=>{
+      if(signedIds.has(sid))return;
+      if(includedSidItems.has(sid))return; // already represented as their own row (battalion mode)
+      const sol=allSols.find(s=>s.id===sid);
+      Object.entries(asgn||{}).forEach(([k,v])=>{
+        if(!v||v===1||v===true)return;
+        const nm=cleanItemName(k);
+        unsignedItems.push({key:nm+"#"+sid+"_"+v,name:nm,serial:String(v),originalSoldierId:sid,originalSoldierName:sol?.name||sid,originalSoldierUnit:sol?.unit||""});
       });
-      unsignedItems.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"));
-      armoryUnsignedCount=unsignedItems.length;
-      if(unsignedItems.length>0){soldiers.push({id:"_armory_unsigned",name:"🔓 משויך אבל לא חתום",unit:"לא חתום",items:unsignedItems,isArmoryGroup:true,armoryCategory:"unsigned"});}
-    }
+    });
+    unsignedItems.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"));
+    armoryUnsignedCount=unsignedItems.length;
+    if(unsignedItems.length>0){soldiers.push({id:"_armory_unsigned",name:"🔓 משויך אבל לא חתום",unit:"לא חתום",items:unsignedItems,isArmoryGroup:true,armoryCategory:"unsigned"});}
   }
   try{console.log("[GreenEyes buildGeFormPayload]",{unitName,isBattalionFull,includeArmory,signedSoldiers:signedIds.size,soldiersInForm:soldiers.filter(s=>!s.isArmoryGroup).length,armoryUnassigned:armoryUnassignedCount,armoryUnsigned:armoryUnsignedCount,totalItems:soldiers.reduce((c,s)=>c+(s.items?.length||0),0),allSolsLen:allSols.length});}catch(_){}
   return{unitName,isBattalionFull,includesArmory:includeArmory,createdAt:Date.now(),createdBy:createdBy||null,sentToSoldierId:sentToSol?.id||null,sentToName:sentToSol?.name||null,sentToPhone:sentToSol?.phone||null,soldiers,items:{},personal:{},signature:null,submittedAt:null};
