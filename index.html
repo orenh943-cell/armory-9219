@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.1.6";
+const APP_VERSION = "2.1.7";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){}
 
 // פונקציות Firebase
@@ -4379,7 +4379,7 @@ function DuplicateScannerModal({db,setDb,auth,onClose}){
           /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},"נמצאו ",scanResult.length," קבוצות כפולות · ",pairs.length," להצגה")
         ),
         /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6}},
-          /*#__PURE__*/React.createElement("button",{onClick:refresh,style:{...S.btn("neutral","sm")},title:"סרוק שוב"},"🔄 רענן"),
+          /*#__PURE__*/React.createElement("button",{onClick:refresh,style:{...S.btn("blue","sm")},title:"סרוק שוב"},"🔄 רענן"),
           /*#__PURE__*/React.createElement("button",{onClick:onClose,title:"סגור",style:{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"var(--color-text-secondary)"}},"✕")
         )
       ),
@@ -4393,7 +4393,7 @@ function DuplicateScannerModal({db,setDb,auth,onClose}){
               /*#__PURE__*/React.createElement("span",{style:{marginInlineStart:8,fontFamily:"monospace",fontSize:"var(--text-sm)",color:"var(--color-accent-fg)",fontWeight:700}},"צ ",d.serial),
               /*#__PURE__*/React.createElement("span",{style:{marginInlineStart:8,fontSize:11,color:"var(--color-text-secondary)"}},"(",d.locations.length," מקומות)")
             ),
-            /*#__PURE__*/React.createElement("button",{onClick:()=>{const ns=new Set(hidden);ns.add(pairKey);setHidden(ns);},style:{...S.btn("neutral","xs")},title:"סמן את הזוג כתקין (לא מוחק)"},"✓ אישרתי כתקין")
+            /*#__PURE__*/React.createElement("button",{onClick:()=>{const ns=new Set(hidden);ns.add(pairKey);setHidden(ns);},style:{...S.btn("green","sm"),fontSize:12},title:"סמן את הזוג כתקין (לא מוחק)"},"✓ אישרתי כתקין")
           ),
           /*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr",gap:6}},
             d.locations.map((loc,li)=>{
@@ -4407,7 +4407,7 @@ function DuplicateScannerModal({db,setDb,auth,onClose}){
                   loc.uid?/*#__PURE__*/React.createElement("div",{style:{fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}},"uid: ",loc.uid):null,
                   loc.assignmentKey?/*#__PURE__*/React.createElement("div",{style:{fontFamily:"monospace",fontSize:10,color:"var(--color-text-muted)"}},"key: ",loc.assignmentKey):null
                 ),
-                /*#__PURE__*/React.createElement("button",{onClick:()=>handleDeleteLoc(pairKey,loc),disabled:busy,style:{...S.btn("danger","xs"),opacity:busy?0.5:1},title:"מחק את הרישום הזה — דורש אישור"},busy?"⏳ מוחק...":"🗑️ מחק זה")
+                /*#__PURE__*/React.createElement("button",{onClick:()=>handleDeleteLoc(pairKey,loc),disabled:busy,style:{...S.btn("red","sm"),opacity:busy?0.5:1,fontSize:13,fontWeight:700,minWidth:110},title:"מחק את הרישום הזה — דורש אישור"},busy?"⏳ מוחק...":"🗑️ מחק זה")
               );
             })
           )
