@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.1";
+const APP_VERSION = "2.3.2";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1156,92 +1156,116 @@ async function _generateComprehensiveInventoryReport(db,authName){
     const soldiers=getSoldiers(db);
     const assignments=db.assignments||{};
     const unitItems=db.unitItems||{};
+    const signatures=db.signatures||{};
     const UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ"];
     const unitGroups={};
     UNITS.forEach(u=>{unitGroups[u]=soldiers.filter(s=>s.unit===u);});
 
-    function getUnitInventory(unitName){
+    function isItemSignedForSoldier(sid,rawItemKey){
+      const sig=signatures[sid];
+      if(!sig)return false;
+      if(!sig.partial)return true;
+      if(Array.isArray(sig.items)){
+        if(sig.items.includes(rawItemKey))return true;
+        if(sig.items.includes(cleanItemName(rawItemKey)))return true;
+      }
+      return false;
+    }
+
+    function getItemAnalysis(unitName){
       const unitSoldiers=unitGroups[unitName]||[];
-      const inventory={};
-      // 1) items assigned to soldiers of this unit
+      const itemsData={};
+      /* 1) items assigned to soldiers — bucketed by signed vs assigned-not-signed */
       unitSoldiers.forEach(soldier=>{
         const sAsgn=assignments[soldier.id]||{};
         Object.entries(sAsgn).forEach(([itemName,serial])=>{
           if(!serial||serial===1||serial===true)return; /* qty-only — skip */
           const cleanName=cleanItemName(itemName);
-          if(!inventory[cleanName])inventory[cleanName]={totalAssigned:0,inArmory:0,holders:[],assignedSerials:new Set(),armorySerials:new Set()};
-          inventory[cleanName].totalAssigned++;
-          inventory[cleanName].holders.push(soldier.name+" (צ "+serial+")");
-          inventory[cleanName].assignedSerials.add(String(serial));
+          if(!itemsData[cleanName])itemsData[cleanName]={totalAssigned:0,signed:0,assignedNotSigned:0,inArmory:0,signedHolders:[],unsignedHolders:[],armorySerials:[],assignedSerials:new Set()};
+          itemsData[cleanName].totalAssigned++;
+          itemsData[cleanName].assignedSerials.add(String(serial));
+          if(isItemSignedForSoldier(soldier.id,itemName)){
+            itemsData[cleanName].signed++;
+            itemsData[cleanName].signedHolders.push(soldier.name+" (צ "+serial+")");
+          }else{
+            itemsData[cleanName].assignedNotSigned++;
+            itemsData[cleanName].unsignedHolders.push(soldier.name+" (צ "+serial+")");
+          }
         });
       });
-      // 2) items in this unit's armory (unitItems with u===unitName, type=unit, not assigned to anyone)
+      /* 2) items in this unit's armory (not assigned to any soldier of this unit) */
       Object.entries(unitItems).forEach(([uid,item])=>{
         const u=item.u||item.unit||"גדודי";
         if(u!==unitName)return;
         const t=item.t||item.assignedType||"unit";
         if(t!=="unit")return;
         const sid=item.si||item.assignedSoldierId;
-        if(sid)return; /* already linked to a soldier */
+        if(sid)return;
         const serial=String(item.s||item.serial||"");
         if(!serial)return;
         const cleanName=cleanItemName(item.n||item.name||"");
         if(!cleanName)return;
-        if(!inventory[cleanName])inventory[cleanName]={totalAssigned:0,inArmory:0,holders:[],assignedSerials:new Set(),armorySerials:new Set()};
-        /* skip if same serial already counted as assigned (would be a duplicate to soldier) */
-        if(inventory[cleanName].assignedSerials.has(serial))return;
-        inventory[cleanName].inArmory++;
-        inventory[cleanName].armorySerials.add(serial);
+        if(!itemsData[cleanName])itemsData[cleanName]={totalAssigned:0,signed:0,assignedNotSigned:0,inArmory:0,signedHolders:[],unsignedHolders:[],armorySerials:[],assignedSerials:new Set()};
+        if(itemsData[cleanName].assignedSerials.has(serial))return; /* avoid double-counting */
+        itemsData[cleanName].inArmory++;
+        itemsData[cleanName].armorySerials.push(serial);
       });
-      return inventory;
+      return itemsData;
     }
 
     const wb=new ExcelJS.Workbook();
     wb.creator="ארמון 9219";
     wb.created=new Date();
 
-    /* per-unit "items view" worksheet */
+    /* per-unit worksheet */
     UNITS.forEach(unitName=>{
       const unitSoldiers=unitGroups[unitName]||[];
       if(unitSoldiers.length===0)return;
-      const inventory=getUnitInventory(unitName);
+      const itemsData=getItemAnalysis(unitName);
       const ws=wb.addWorksheet(unitName+" - מלאי פריטים");
       ws.views=[{rightToLeft:true}];
-      const header=ws.addRow(['שם פריט','סה"כ','אצל חיילים','בארמון','רשימת מחזיקים','צ-ים בארמון']);
+      const header=ws.addRow(["שם פריט","כמות כוללת","חתומים","משויכים לא חתומים","בארמון","רשימת חתומים","רשימת לא חתומים"]);
       header.font={bold:true,color:{argb:"FFFFFFFF"}};
       header.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
-      const sortedItems=Object.entries(inventory).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"he"));
+      const sortedItems=Object.entries(itemsData).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"he"));
       sortedItems.forEach(([itemName,data])=>{
-        const total=data.totalAssigned+data.inArmory;
-        const holdersText=data.holders.slice(0,5).join(", ")+(data.holders.length>5?"... +"+(data.holders.length-5):"");
-        const armorySerialsText=Array.from(data.armorySerials).slice(0,15).join(", ");
-        ws.addRow([itemName,total,data.totalAssigned,data.inArmory,holdersText,armorySerialsText]);
+        const totalQuantity=data.signed+data.assignedNotSigned+data.inArmory;
+        const signedText=data.signedHolders.slice(0,5).join(", ")+(data.signedHolders.length>5?" +"+(data.signedHolders.length-5)+"...":"");
+        const unsignedText=data.unsignedHolders.slice(0,5).join(", ")+(data.unsignedHolders.length>5?" +"+(data.unsignedHolders.length-5)+"...":"");
+        const row=ws.addRow([itemName,totalQuantity,data.signed,data.assignedNotSigned,data.inArmory,signedText,unsignedText]);
+        /* visual hint: red cell for assignedNotSigned > 0 */
+        if(data.assignedNotSigned>0){
+          row.getCell(4).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFCE0E0"}};
+          row.getCell(4).font={color:{argb:"FFCF222E"},bold:true};
+        }
       });
-      ws.columns=[{width:24},{width:10},{width:14},{width:12},{width:50},{width:30}];
+      ws.columns=[{width:24},{width:12},{width:12},{width:20},{width:12},{width:48},{width:48}];
     });
 
-    /* battalion summary worksheet */
+    /* battalion summary */
     const sumWs=wb.addWorksheet("סיכום גדודי");
     sumWs.views=[{rightToLeft:true}];
-    const sumHeader=sumWs.addRow(["פלוגה",'סה"כ פריטים',"אצל חיילים","בארמון","אחוז ניצולת"]);
+    const sumHeader=sumWs.addRow(["פלוגה",'סה"כ פריטים',"חתומים","משויכים לא חתומים","בארמון","אחוז חתימה"]);
     sumHeader.font={bold:true,color:{argb:"FFFFFFFF"}};
     sumHeader.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
-    let gTotal=0,gAssigned=0,gArmory=0;
+    let gTotal=0,gSigned=0,gUnsigned=0,gArmory=0;
     UNITS.forEach(unitName=>{
       const unitSoldiers=unitGroups[unitName]||[];
       if(unitSoldiers.length===0)return;
-      const inv=getUnitInventory(unitName);
-      const totalItems=Object.values(inv).reduce((s,it)=>s+it.totalAssigned+it.inArmory,0);
-      const assignedItems=Object.values(inv).reduce((s,it)=>s+it.totalAssigned,0);
-      const armoryItems=Object.values(inv).reduce((s,it)=>s+it.inArmory,0);
-      const util=totalItems>0?Math.round(assignedItems*100/totalItems):0;
-      gTotal+=totalItems;gAssigned+=assignedItems;gArmory+=armoryItems;
-      sumWs.addRow([unitName,totalItems,assignedItems,armoryItems,util+"%"]);
+      const itemsData=getItemAnalysis(unitName);
+      const totalSigned=Object.values(itemsData).reduce((s,it)=>s+it.signed,0);
+      const totalAns=Object.values(itemsData).reduce((s,it)=>s+it.assignedNotSigned,0);
+      const totalArmory=Object.values(itemsData).reduce((s,it)=>s+it.inArmory,0);
+      const totalItems=totalSigned+totalAns+totalArmory;
+      const sigRate=(totalSigned+totalAns)>0?Math.round(totalSigned*100/(totalSigned+totalAns)):0;
+      gTotal+=totalItems;gSigned+=totalSigned;gUnsigned+=totalAns;gArmory+=totalArmory;
+      sumWs.addRow([unitName,totalItems,totalSigned,totalAns,totalArmory,sigRate+"%"]);
     });
-    const totalRow=sumWs.addRow(["סה\"כ גדודי",gTotal,gAssigned,gArmory,(gTotal>0?Math.round(gAssigned*100/gTotal):0)+"%"]);
+    const grandRate=(gSigned+gUnsigned)>0?Math.round(gSigned*100/(gSigned+gUnsigned)):0;
+    const totalRow=sumWs.addRow(["סה\"כ גדודי",gTotal,gSigned,gUnsigned,gArmory,grandRate+"%"]);
     totalRow.font={bold:true};
     totalRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE0E8F0"}};
-    sumWs.columns=[{width:16},{width:14},{width:14},{width:14},{width:14}];
+    sumWs.columns=[{width:16},{width:14},{width:12},{width:20},{width:12},{width:14}];
 
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
@@ -1249,17 +1273,16 @@ async function _generateComprehensiveInventoryReport(db,authName){
     const a=document.createElement("a");
     a.href=url;
     const todayIso=new Date().toISOString().slice(0,10);
-    a.download="מלאי_פלוגתי_כולל_"+todayIso+".xlsx";
+    a.download="מלאי_פלוגתי_מתוקן_"+todayIso+".xlsx";
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url),3000);
-    try{logAction("EXPORT_COMPREHENSIVE_INVENTORY","דוח מלאי פלוגתי כולל · "+UNITS.length+" פלוגות",authName||"מערכת");}catch(e){console.warn("[caught]",e);}
-    try{console.log("[ComprehensiveInventory] exported");}catch(e){console.warn("[caught]",e);}
+    try{logAction("EXPORT_COMPREHENSIVE_INVENTORY_FIXED","דוח מלאי פלוגתי מתוקן (לפי פריט · חתום/לא חתום) · "+UNITS.length+" פלוגות",authName||"מערכת");}catch(e){console.warn("[caught]",e);}
+    try{console.log("[ComprehensiveInventoryFixed] exported");}catch(e){console.warn("[caught]",e);}
   }catch(err){
-    console.error("[ComprehensiveInventory]",err);
+    console.error("[ComprehensiveInventoryFixed]",err);
     alert("שגיאה ביצירת הדוח: "+(err?.message||err));
   }
 }
-
 function ComprehensiveInventoryTab({db,auth}){
   const [busy,setBusy]=React.useState(false);
   return /*#__PURE__*/React.createElement("div",{style:{padding:24,maxWidth:560,margin:"0 auto",textAlign:"center"}},
