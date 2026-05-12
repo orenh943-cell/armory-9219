@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.23";
+const APP_VERSION = "2.3.24";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1788,6 +1788,8 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
   const [pickerMakat,setPickerMakat]=React.useState("");
   const [pickerCount,setPickerCount]=React.useState(1);
   const [makatSearch,setMakatSearch]=React.useState("");
+  const addInProgressRef=React.useRef(false);
+  const [lastAddTs,setLastAddTs]=React.useState(0);
   const [error,setError]=React.useState("");
   const [creating,setCreating]=React.useState(false);
   // build map: makat -> array of free serials in גדודי, not in another kit
@@ -1869,8 +1871,13 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
     return all.filter(s=>!taken.has(s));
   }
   function addMakat(makatOverride){
+    /* RE-ENTRY GUARD (v2.3.24): block synchronous double-invocations within 500ms */
+    if(addInProgressRef.current){try{console.warn("[KIT-ADD] re-entry blocked",makatOverride);}catch(e){}return;}
+    addInProgressRef.current=true;
+    setTimeout(()=>{addInProgressRef.current=false;},500);
     setError("");
     const m=String(makatOverride||pickerMakat||"").trim();
+    try{console.log("[KIT-ADD] start makat=",m,"count=",pickerCount,"timestamp=",Date.now());}catch(e){}
     if(!m){setError("בחר מק\"ט");return;}
     const c=Math.max(1,Math.min(10,parseInt(pickerCount)||1));
     const avail=freeSerialsByMakat[m]||[];
@@ -1887,7 +1894,9 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
       return [...prevMakats,{makat:m,count:c,serials:initialSerials,noSerial:allPseudo}];
     });
     /* setError is called after; in React 18 it batches with above */
-    if(wasDup){setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
+    if(wasDup){try{console.warn("[KIT-ADD] duplicate blocked inside setter:",m);}catch(e){}setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
+    setLastAddTs(Date.now());
+    try{console.log("[KIT-ADD] added makat=",m,"count=",c);}catch(e){}
     setPickerMakat("");setPickerCount(1);setShowPicker(false);setMakatSearch("");
   }
   function removeMakat(idx){setMakats(p=>p.filter((_,i)=>i!==idx));}
@@ -1994,7 +2003,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
                       /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-text-primary)"}},it.total),
                       /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:it.available>0?"var(--color-success-fg)":"var(--color-text-muted)",fontWeight:600}},"פנוי ",it.available)
                     ),
-                    /*#__PURE__*/React.createElement("button",{onClick:e=>{e.stopPropagation();const needed=Math.max(1,parseInt(pickerCount)||1);if((freeSerialsByMakat[it.makat]||[]).length<needed){setError("יש רק "+(freeSerialsByMakat[it.makat]||[]).length+" פריטים זמינים למק\"ט "+it.makat);return;}addMakat(it.makat);},disabled:it.available===0,style:{padding:"6px 14px",background:it.available>0?"#1a7f37":"#aaa",color:"#fff",border:"none",borderRadius:6,cursor:it.available>0?"pointer":"not-allowed",fontWeight:700,fontSize:13,minWidth:80},title:"הוסף לערכה"},"➕ הוסף")
+                    (()=>{const recentlyAdded=Date.now()-lastAddTs<500;const isDisabled=it.available===0||recentlyAdded;return /*#__PURE__*/React.createElement("button",{onClick:e=>{e.stopPropagation();if(recentlyAdded)return;const needed=Math.max(1,parseInt(pickerCount)||1);if((freeSerialsByMakat[it.makat]||[]).length<needed){setError("יש רק "+(freeSerialsByMakat[it.makat]||[]).length+" פריטים זמינים למק\"ט "+it.makat);return;}addMakat(it.makat);},disabled:isDisabled,style:{padding:"6px 14px",background:isDisabled?"#aaa":"#1a7f37",color:"#fff",border:"none",borderRadius:6,cursor:isDisabled?"not-allowed":"pointer",fontWeight:700,fontSize:13,minWidth:80,opacity:isDisabled?0.6:1},title:recentlyAdded?"המתן רגע...":"הוסף לערכה"},recentlyAdded?"⏳":"➕ הוסף");})()
                   )
                 ),
                 /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},it.makat),it.serialsPreview.length>0?" · "+(it.serialsPreview[0].startsWith("__nsr__")?"ללא צ ("+it.serialsPreview.length+(it.available>3?"+":"")+" פריטים)":"צ: "+it.serialsPreview.join(", ")+(it.available>3?"...":"")):"")
