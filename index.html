@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.19";
+const APP_VERSION = "2.3.20";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1706,7 +1706,7 @@ function KitsTab({db,setDb,soldiers,auth}){
               const stLabel=k.status==="assigned"?"📤 משויכת":k.status==="partial"?"⚠️ חלקית":"✅ במלאי";
               const assignee=k.assignedTo?(getSoldiers(db).find(s=>s.id===k.assignedTo)?.name||k.assignedTo):"";
               const makatList=serialEntries.map(([mk])=>mk).join(", ");
-              const allSerials=serialEntries.map(([mk,arr])=>(arr||[]).join(",")).filter(Boolean).join(" | ");
+              const allSerials=serialEntries.map(([mk,arr])=>{const list=(arr||[]).filter(Boolean);const hasReal=list.some(s=>!String(s).startsWith("__nsr__"));if(!hasReal&&list.length>0)return"× "+list.length+" ללא צ";return list.filter(s=>!String(s).startsWith("__nsr__")).join(",");}).filter(Boolean).join(" | ");
               return /*#__PURE__*/React.createElement("tr",{key:k.kitId,style:{borderBottom:"1px solid var(--color-border-muted)"}},
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontWeight:700}},k.name||"—"),
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px",fontFamily:"monospace",fontSize:10,color:"var(--color-text-secondary)"}},makatList||"—"),
@@ -1955,7 +1955,10 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
             ),
             /*#__PURE__*/React.createElement("button",{onClick:()=>removeMakat(rowIdx),title:"הסר מק\"ט מהערכה",style:{...S.btn("red","xs")}},"❌ הסר")
           ),
-          // serial dropdowns
+          /* if row is no-serial (all serials are pseudo) — show a single "כמות: N" line instead of N readonly inputs */
+          (row.noSerial||(row.serials||[]).every(s=>String(s||"").startsWith("__nsr__")))?
+            /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)",padding:"6px 10px",background:"var(--color-bg-subtle)",borderRadius:6,fontStyle:"italic"}},"כמות: ",row.count," (פריטים ללא מספר סידורי)"):
+          /* otherwise: standard per-serial inputs */
           Array.from({length:row.count},(_,i)=>/*#__PURE__*/React.createElement("div",{key:i,style:{display:"flex",gap:6,alignItems:"center",marginBottom:4}},
             /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",minWidth:42}},"צ "+(i+1)+":"),
             (()=>{const cur=row.serials[i]||"";const isPseudo=String(cur).startsWith("__nsr__");if(isPseudo){return /*#__PURE__*/React.createElement("input",{value:"ללא צ #"+(i+1),readOnly:true,title:"פריט ללא מספר סידורי — נוסף אוטומטית","data-pseudo":cur,style:{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontStyle:"italic",color:"var(--color-text-secondary)",background:"var(--color-bg-subtle)",flex:1}});}return /*#__PURE__*/React.createElement("input",{value:cur,onChange:e=>setSerial(rowIdx,i,e.target.value),list:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i,placeholder:"בחר/הקלד צ",style:{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}});})(),
@@ -2059,7 +2062,7 @@ function KitViewModal({kitId,db,setDb,soldiers,auth,onClose}){
             Object.entries(kit.serials||{}).map(([mk,arr])=>{return /*#__PURE__*/React.createElement("tr",{key:"s_"+mk,style:{borderBottom:"1px solid var(--color-border-muted)",background:"var(--color-bg-canvas)"}},
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace"}},mk),
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},_kitMakatName(mk,db)),
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace",color:"var(--color-accent-fg)",fontWeight:600}},arr.join(" · "))
+              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace",color:"var(--color-accent-fg)",fontWeight:600}},(()=>{const list=(arr||[]).filter(Boolean);const hasReal=list.some(s=>!String(s).startsWith("__nsr__"));if(!hasReal&&list.length>0)return"כמות: "+list.length;return list.filter(s=>!String(s).startsWith("__nsr__")).join(" · ");})())
             );}),
             tpl.items.map(it=>/*#__PURE__*/React.createElement("tr",{key:"q_"+it.makat,style:{borderBottom:"1px solid var(--color-border-muted)"}},
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace"}},it.makat),
