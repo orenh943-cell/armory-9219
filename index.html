@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.3";
+const APP_VERSION = "2.3.4";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1766,6 +1766,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
   const [showPicker,setShowPicker]=React.useState(false);
   const [pickerMakat,setPickerMakat]=React.useState("");
   const [pickerCount,setPickerCount]=React.useState(1);
+  const [makatSearch,setMakatSearch]=React.useState("");
   const [error,setError]=React.useState("");
   const [creating,setCreating]=React.useState(false);
   // build map: makat -> array of free serials in גדודי, not in another kit
@@ -1792,6 +1793,16 @@ function KitCreateModal({db,setDb,auth,onClose}){
     const used=new Set(makats.map(x=>String(x.makat)));
     return Object.keys(freeSerialsByMakat).filter(m=>!used.has(m)).sort();
   },[freeSerialsByMakat,makats]);
+  // filtered list — used by the picker. Search matches makat code OR item name.
+  const filteredAvailableMakats=React.useMemo(()=>{
+    const q=String(makatSearch||"").trim().toLowerCase();
+    if(!q)return availableMakats;
+    return availableMakats.filter(m=>{
+      if(String(m).toLowerCase().includes(q))return true;
+      const nm=String(_kitMakatName(m,db)||"").toLowerCase();
+      return nm.includes(q);
+    });
+  },[availableMakats,makatSearch,db]);
   // serials available for a specific makat row, EXCLUDING serials already picked in OTHER rows of the same makat (no-op since each makat row holds its own)
   function getAvailableSerialsFor(makat,currentRowIdx,currentSerialIdx){
     const all=freeSerialsByMakat[makat]||[];
@@ -1809,7 +1820,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
     if((freeSerialsByMakat[m]||[]).length<c){setError("יש רק "+(freeSerialsByMakat[m]||[]).length+" צ-ים זמינים למק\"ט "+m);return;}
     if(makats.some(x=>String(x.makat)===m)){setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
     setMakats(p=>[...p,{makat:m,count:c,serials:Array(c).fill("")}]);
-    setPickerMakat("");setPickerCount(1);setShowPicker(false);setError("");
+    setPickerMakat("");setPickerCount(1);setShowPicker(false);setError("");setMakatSearch("");
   }
   function removeMakat(idx){setMakats(p=>p.filter((_,i)=>i!==idx));}
   function setSerial(rowIdx,serialIdx,val){setMakats(p=>{const next=p.map((row,i)=>i===rowIdx?{...row,serials:row.serials.map((s,j)=>j===serialIdx?val:s)}:row);return next;});}
@@ -1886,16 +1897,18 @@ function KitCreateModal({db,setDb,auth,onClose}){
       showPicker
         ? /*#__PURE__*/React.createElement("div",{style:{marginBottom:12,padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px dashed var(--color-accent-fg)"}},
             /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"בחר מק\"ט להוספה:"),
+            /*#__PURE__*/React.createElement("input",{type:"text",value:makatSearch,onChange:e=>setMakatSearch(e.target.value),placeholder:"🔍 חפש לפי מק\"ט או שם פריט...",style:{...S.input,marginBottom:6,fontSize:"var(--text-sm)"}}),
+            (makatSearch&&filteredAvailableMakats.length<availableMakats.length)?/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)",marginBottom:6}},"מציג "+filteredAvailableMakats.length+" מתוך "+availableMakats.length+" מק\"טים"):null,
             /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center",marginBottom:8}},
-              /*#__PURE__*/React.createElement("select",{value:pickerMakat,onChange:e=>setPickerMakat(e.target.value),style:{...S.input,marginBottom:0,flex:2,fontSize:"var(--text-sm)"}},
+              /*#__PURE__*/React.createElement("select",{value:pickerMakat,onChange:e=>setPickerMakat(e.target.value),style:{...S.input,marginBottom:0,flex:2,fontSize:"var(--text-sm)"},size:filteredAvailableMakats.length>0&&filteredAvailableMakats.length<10?Math.min(filteredAvailableMakats.length+1,8):1},
                 /*#__PURE__*/React.createElement("option",{value:""},"-- בחר מק\"ט --"),
-                availableMakats.map(m=>/*#__PURE__*/React.createElement("option",{key:m,value:m},m+" — "+_kitMakatName(m,db)+" ("+(freeSerialsByMakat[m]||[]).length+" זמינים)"))
+                filteredAvailableMakats.map(m=>/*#__PURE__*/React.createElement("option",{key:m,value:m},m+" — "+_kitMakatName(m,db)+" ("+(freeSerialsByMakat[m]||[]).length+" זמינים)"))
               ),
               /*#__PURE__*/React.createElement("input",{type:"number",value:pickerCount,onChange:e=>setPickerCount(parseInt(e.target.value)||1),min:1,max:10,style:{...S.input,marginBottom:0,width:64,textAlign:"center",fontSize:"var(--text-sm)"},title:"כמות צ-ים מהמק\"ט"})
             ),
             /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6}},
               /*#__PURE__*/React.createElement("button",{onClick:addMakat,style:{...S.btn("green","sm"),flex:1}},"✅ הוסף לרשימה"),
-              /*#__PURE__*/React.createElement("button",{onClick:()=>{setShowPicker(false);setPickerMakat("");setPickerCount(1);setError("");},style:{...S.btn("neutral","sm"),flex:1}},"ביטול")
+              /*#__PURE__*/React.createElement("button",{onClick:()=>{setShowPicker(false);setPickerMakat("");setPickerCount(1);setError("");setMakatSearch("");},style:{...S.btn("neutral","sm"),flex:1}},"ביטול")
             ),
             availableMakats.length===0&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-warning-fg)",marginTop:6}},"⚠️ אין מק\"טים זמינים נוספים (כל המק\"טים עם צ-ים פנויים כבר נבחרו או שאין צ-ים פנויים)")
           )
