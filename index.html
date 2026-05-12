@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.7";
+const APP_VERSION = "2.3.8";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1817,7 +1817,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
       if(used.has(makat))return; /* already in current kit */
       const freeSerials=freeSerialsByMakat[makat]||[];
       if(freeSerials.length===0)return; /* no stock available */
-      items.push({name:itemName,makat,available:freeSerials.length,total:masterData?.total||0,serialsPreview:freeSerials.slice(0,3)});
+      let liveTotal=0;Object.values(db.unitItems||{}).forEach(v=>{if(String(v.makat||"")===makat)liveTotal++;});const totalCount=Math.max(masterData?.total||0,liveTotal,freeSerials.length);items.push({name:itemName,makat,available:freeSerials.length,total:totalCount,serialsPreview:freeSerials.slice(0,3)});
     });
     /* also include makats that exist in unitItems but not in armoryMaster (fallback) */
     Object.keys(freeSerialsByMakat).forEach(makat=>{
@@ -1826,7 +1826,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
       const free=freeSerialsByMakat[makat]||[];
       if(free.length===0)return;
       const name=_kitMakatName(makat,db)||"מק\"ט "+makat;
-      items.push({name,makat,available:free.length,total:free.length,serialsPreview:free.slice(0,3)});
+      let liveTotal2=0;Object.values(db.unitItems||{}).forEach(v=>{if(String(v.makat||"")===makat)liveTotal2++;});items.push({name,makat,available:free.length,total:Math.max(liveTotal2,free.length),serialsPreview:free.slice(0,3)});
       seenMakats.add(makat);
     });
     items.sort((a,b)=>String(a.name).localeCompare(String(b.name),"he"));
@@ -1939,9 +1939,12 @@ function KitCreateModal({db,setDb,auth,onClose}){
             /*#__PURE__*/React.createElement("div",{style:{maxHeight:320,overflowY:"auto",border:"1px solid var(--color-border-muted)",borderRadius:6,marginBottom:8}},
               filteredItems.length===0?/*#__PURE__*/React.createElement("div",{style:{padding:16,textAlign:"center",color:"var(--color-text-muted)",fontSize:"var(--text-sm)"}},makatSearch?"לא נמצאו פריטים תואמים":"אין פריטים זמינים"):
               filteredItems.map(it=>/*#__PURE__*/React.createElement("div",{key:it.makat,onClick:()=>{const needed=Math.max(1,parseInt(pickerCount)||1);if((freeSerialsByMakat[it.makat]||[]).length<needed){setError("יש רק "+(freeSerialsByMakat[it.makat]||[]).length+" צ-ים זמינים למק\"ט "+it.makat);return;}addMakat(it.makat);},style:{padding:"10px 12px",borderBottom:"1px solid var(--color-border-muted)",cursor:"pointer",background:"var(--color-bg-default)",transition:"background 0.1s"},onMouseEnter:e=>e.currentTarget.style.background="var(--color-bg-subtle)",onMouseLeave:e=>e.currentTarget.style.background="var(--color-bg-default)"},
-                /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}},
-                  /*#__PURE__*/React.createElement("span",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},it.name),
-                  /*#__PURE__*/React.createElement("span",{style:{fontSize:11,fontWeight:700,color:"var(--color-success-fg)"}},it.available," זמינים")
+                /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2,gap:8}},
+                  /*#__PURE__*/React.createElement("span",{style:{fontWeight:700,fontSize:"var(--text-sm)",flex:1,minWidth:0}},it.name),
+                  /*#__PURE__*/React.createElement("div",{style:{textAlign:"left",lineHeight:1.1}},
+                    /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-text-primary)"}},it.total),
+                    /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:it.available>0?"var(--color-success-fg)":"var(--color-text-muted)",fontWeight:600}},"פנוי ",it.available)
+                  )
                 ),
                 /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},it.makat),it.serialsPreview.length>0?" · צ: "+it.serialsPreview.join(", ")+(it.available>3?"...":""):"")
               ))
