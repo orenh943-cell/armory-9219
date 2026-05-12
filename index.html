@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.13";
+const APP_VERSION = "2.3.15";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1657,7 +1657,7 @@ const KIT_TEMPLATE_DEFAULT={items:[{makat:"146743715",qty:1},{makat:"146743711",
 function _kitGenId(){return "kit_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);}
 function _kitGetTemplate(db){const t=db.kitTemplate;if(t&&Array.isArray(t.items)&&Array.isArray(t.serialMakats))return t;return KIT_TEMPLATE_DEFAULT;}
 function _kitMakatName(makat,db){const m=String(makat||"");const master=db.armoryMaster||{};for(const[name,info]of Object.entries(master)){if(String(info?.makat||"")===m)return name;}const nm=db.nameMakat||{};for(const[name,mk]of Object.entries(nm)){if(String(mk||"")===m)return name;}return m;}
-function _kitFindFreeUnitItemBySerial(db,makat,serial){const items=db.unitItems||{};const sStr=String(serial).trim();const mStr=String(makat);for(const[uid,v]of Object.entries(items)){const m=String(v.makat||"");const s=String(v.s||v.serial||"").trim();const t=v.t||v.assignedType||"unit";if(m===mStr&&s===sStr&&t==="unit"&&!(v.si||v.assignedSoldierId))return{uid,item:v};}return null;}
+function _kitFindFreeUnitItemBySerial(db,makat,serial){const items=db.unitItems||{};const sStr=String(serial).trim();const mStr=String(makat);/* pseudo-serial for no-serial items: "__nsr__<uid>" — match by uid */if(sStr.startsWith("__nsr__")){const targetUid=sStr.slice(7);const v=items[targetUid];if(v){const m=String(v.makat||"");const t=v.t||v.assignedType||"unit";if(m===mStr&&t==="unit"&&!(v.si||v.assignedSoldierId))return{uid:targetUid,item:v};}return null;}for(const[uid,v]of Object.entries(items)){const m=String(v.makat||"");const s=String(v.s||v.serial||"").trim();const t=v.t||v.assignedType||"unit";if(m===mStr&&s===sStr&&t==="unit"&&!(v.si||v.assignedSoldierId))return{uid,item:v};}return null;}
 function _kitSerialInOtherKit(db,makat,serial,exceptKitId){const kits=db.kits||{};const sStr=String(serial).trim();const mStr=String(makat);for(const[kid,k]of Object.entries(kits)){if(kid===exceptKitId)continue;const arr=(k.serials||{})[mStr]||[];if(arr.some(s=>String(s).trim()===sStr))return kid;}return null;}
 function _kitFindFreeQtyItems(db,makat,qty){const items=db.unitItems||{};const found=[];const mStr=String(makat);for(const[uid,v]of Object.entries(items)){if(found.length>=qty)break;const m=String(v.makat||"");const t=v.t||v.assignedType||"unit";const sid=v.si||v.assignedSoldierId;if(m===mStr&&t==="unit"&&!sid)found.push({uid,item:v});}return found;}
 function _kitGetCabName(kit,db){if(kit?.cabName)return kit.cabName;// fallback: read from one of the serial-tagged unitItems
@@ -1784,11 +1784,12 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
     const items=db.unitItems||{};
     Object.entries(items).forEach(([uid,v])=>{
       const m=String(v.makat||"");
-      const s=String(v.s||v.serial||"").trim();
-      const u=v.u||v.unit||"גדודי";
+      const sRaw=String(v.s||v.serial||"").trim();
+      /* allow no-serial items: use pseudo-serial "__nsr__<uid>" so each physical item is still uniquely addressable */
+      const s=sRaw||("__nsr__"+uid);
       const t=v.t||v.assignedType||"unit";
       const sid=v.si||v.assignedSoldierId;
-      if(!m||!s||t!=="unit"||sid)return; /* kit-eligible: any unit, type=unit, not assigned to a soldier */
+      if(!m||t!=="unit"||sid)return; /* kit-eligible: any unit, type=unit, not assigned to a soldier */
       if(_kitSerialInOtherKit(db,m,s,editKitId||null))return;
       if(!map[m])map[m]=new Set();
       map[m].add(s);
@@ -1942,7 +1943,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
           Array.from({length:row.count},(_,i)=>/*#__PURE__*/React.createElement("div",{key:i,style:{display:"flex",gap:6,alignItems:"center",marginBottom:4}},
             /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",minWidth:42}},"צ "+(i+1)+":"),
             /*#__PURE__*/React.createElement("input",{value:row.serials[i]||"",onChange:e=>setSerial(rowIdx,i,e.target.value),list:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i,placeholder:"בחר/הקלד צ",style:{...S.input,marginBottom:0,fontSize:"var(--text-sm)",fontFamily:"monospace",flex:1}}),
-            /*#__PURE__*/React.createElement("datalist",{id:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i},getAvailableSerialsFor(row.makat,rowIdx,i).map(s=>/*#__PURE__*/React.createElement("option",{key:s,value:s})))
+            /*#__PURE__*/React.createElement("datalist",{id:"kit_serials_"+row.makat+"_"+rowIdx+"_"+i},getAvailableSerialsFor(row.makat,rowIdx,i).map((s,idx)=>/*#__PURE__*/React.createElement("option",{key:s,value:s},s.startsWith("__nsr__")?"ללא צ #"+(idx+1):"")))
           )),
           /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-muted)",marginTop:4}},"זמינים במלאי: "+((freeSerialsByMakat[row.makat]||[]).length))
         ))
@@ -1966,11 +1967,33 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
                     /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:it.available>0?"var(--color-success-fg)":"var(--color-text-muted)",fontWeight:600}},"פנוי ",it.available)
                   )
                 ),
-                /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},it.makat),it.serialsPreview.length>0?" · צ: "+it.serialsPreview.join(", ")+(it.available>3?"...":""):"")
+                /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},it.makat),it.serialsPreview.length>0?" · "+(it.serialsPreview[0].startsWith("__nsr__")?"ללא צ ("+it.serialsPreview.length+(it.available>3?"+":"")+" פריטים)":"צ: "+it.serialsPreview.join(", ")+(it.available>3?"...":"")):"")
               ))
             ),
             /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:8}},
-              /*#__PURE__*/React.createElement("button",{onClick:()=>{try{const probe=String(makatSearch||"").trim();console.group("[KitBuilder DEBUG] v"+APP_VERSION);console.log("== freeSerialsByMakat ==");console.log("keys ("+Object.keys(freeSerialsByMakat).length+"):",Object.keys(freeSerialsByMakat));if(probe)console.log("probe makat",JSON.stringify(probe),"→ free serials:",freeSerialsByMakat[probe]||"(none)");console.log("== armoryMaster ==");const am=Object.entries(db.armoryMaster||{}).map(([nm,d])=>({name:nm,makat:String(d?.makat||""),total:d?.total||0,resolvedMakat:String(d?.makat||(typeof getMakat==="function"?(getMakat(nm,db)||""):""))}));console.log("entries ("+am.length+"):",am);if(probe){const hits=am.filter(x=>x.makat===probe||x.resolvedMakat===probe||String(x.name).toLowerCase().includes(probe.toLowerCase()));console.log("probe matches in armoryMaster:",hits);}console.log("== unitItems matching probe ==");if(probe){const ui=Object.entries(db.unitItems||{}).filter(([,v])=>String(v.makat||"")===probe).map(([uid,v])=>({uid,n:v.n||v.name,s:v.s||v.serial,u:v.u||v.unit||"גדודי",t:v.t||v.assignedType||"unit",sid:v.si||v.assignedSoldierId||null}));console.log("matching unitItems ("+ui.length+"):",ui);const free=ui.filter(x=>x.u==="גדודי"&&x.t==="unit"&&!x.sid);console.log("of which qualify as unit+free (no גדודי filter post-2.3.7):",free.length);
+              /*#__PURE__*/React.createElement("button",{onClick:()=>{try{const probe=String(makatSearch||"").trim();console.group("[KitBuilder DEBUG] v"+APP_VERSION);console.log("== freeSerialsByMakat ==");console.log("keys ("+Object.keys(freeSerialsByMakat).length+"):",Object.keys(freeSerialsByMakat));if(probe)console.log("probe makat",JSON.stringify(probe),"→ free serials:",freeSerialsByMakat[probe]||"(none)");console.log("== armoryMaster ==");const am=Object.entries(db.armoryMaster||{}).map(([nm,d])=>({name:nm,makat:String(d?.makat||""),total:d?.total||0,resolvedMakat:String(d?.makat||(typeof getMakat==="function"?(getMakat(nm,db)||""):""))}));console.log("entries ("+am.length+"):",am);if(probe){const hits=am.filter(x=>x.makat===probe||x.resolvedMakat===probe||String(x.name).toLowerCase().includes(probe.toLowerCase()));console.log("probe matches in armoryMaster:",hits);}console.log("== unitItems matching probe ==");if(probe){
+  const allMatching=Object.entries(db.unitItems||{}).filter(([,v])=>String(v.makat||"")===probe).map(([uid,v])=>{
+    const sRaw=v.s||v.serial;const s=String(sRaw||"").trim();
+    const u=v.u||v.unit||"גדודי";const t=v.t||v.assignedType||"unit";const sid=v.si||v.assignedSoldierId||null;
+    return{uid,n:v.n||v.name||"(no name)",rawSerial:sRaw,serialStr:"["+s+"]",serialEmpty:!s,u,t,sid,_allKeys:Object.keys(v),_rawObject:v};
+  });
+  console.log("matching unitItems ("+allMatching.length+"):",allMatching);
+  console.log("== filter-by-filter analysis (using EXACT same logic as freeSerialsByMakat) ==");
+  const filterResults=allMatching.map(x=>{
+    const f1_hasMakat=!!probe;
+    const f2_hasSerial=!x.serialEmpty;
+    const f3_typeIsUnit=x.t==="unit";
+    const f4_notAssigned=!x.sid;
+    let f5_notInOtherKit=true;
+    try{f5_notInOtherKit=!_kitSerialInOtherKit(db,probe,x.serialStr.slice(1,-1),null);}catch(e){console.warn(e);}
+    const passesAll=f1_hasMakat&&f2_hasSerial&&f3_typeIsUnit&&f4_notAssigned&&f5_notInOtherKit;
+    return{uid:x.uid,serialStr:x.serialStr,f1_hasMakat,f2_hasSerial,f3_typeIsUnit,f4_notAssigned,f5_notInOtherKit,passesAll};
+  });
+  console.table(filterResults);
+  const passing=filterResults.filter(r=>r.passesAll);
+  console.log("✅ items that should be in freeSerialsByMakat["+probe+"]:",passing.length,passing);
+  console.log("Actual freeSerialsByMakat["+probe+"]:",freeSerialsByMakat[probe]||"(undefined — makat key not in map)");
+
 const inOtherKit=ui.filter(x=>{try{return !!_kitSerialInOtherKit(db,probe,x.s,null);}catch(e){return false;}});
 const inCurrentKit=ui.filter(x=>{try{return makats.some(r=>String(r.makat)===probe&&(r.serials||[]).includes(String(x.s)));}catch(e){return false;}});
 console.log("excluded by:",{notGdudi_NowAllowed:ui.filter(x=>x.u!=="גדודי").length,notUnitType:ui.filter(x=>x.t!=="unit").length,assignedToSoldier:ui.filter(x=>!!x.sid).length,inAnotherKit:inOtherKit.length,inCurrentDraft:inCurrentKit.length});
