@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.12";
+const APP_VERSION = "2.3.13";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1675,6 +1675,7 @@ function KitsTab({db,setDb,soldiers,auth}){
       /*#__PURE__*/React.createElement("h2",{style:{fontSize:"var(--text-xl)",fontWeight:800,margin:0}},"🎒 ערכות"),
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},
         isAdmin&&/*#__PURE__*/React.createElement("button",{onClick:()=>setShowTemplate(true),style:{...S.btn("neutral","md")},title:"תבנית ערכה"},"⚙️ תבנית"),
+        /*#__PURE__*/React.createElement("button",{onClick:()=>{try{const allKits=db.kits||{};console.group("[KitsTab DEBUG] v"+APP_VERSION);console.log("== db.kits raw ==");console.log(allKits);console.log("type of db.kits:",typeof db.kits,"| keys count:",Object.keys(allKits).length);const entries=Object.entries(allKits);console.log("== per-kit summary ==");entries.forEach(([kid,k])=>{const serialsMap=k?.serials||{};const totalSerials=Object.values(serialsMap).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);console.log("  kit "+kid+":",{name:k?.name,status:k?.status,assignedTo:k?.assignedTo||null,makats:Object.keys(serialsMap),totalSerials,createdAt:k?.createdAt?new Date(k.createdAt).toISOString():null,createdBy:k?.createdBy});});console.log("== kits-array used by table ==");console.log("count:",kits.length,kits);console.log("== React state ==");console.log({showCreate,viewKit,editKitId,showTemplate,isAdmin});console.log("== probe makat 146743715 ==");const probe="146743715";const blockingKits=entries.filter(([,k])=>{const arr=(k?.serials||{})[probe];return arr&&arr.length>0;});console.log("kits blocking makat "+probe+":",blockingKits.map(([kid,k])=>({kid,name:k.name,serials:k.serials[probe]})));console.groupEnd();alert("✅ Debug נכתב ב-Console.\n\nסה\"כ ערכות ב-db.kits: "+entries.length+"\nערכות חוסמות מק\"ט 146743715: "+blockingKits.length+"\n\nF12 → Console כדי לראות פירוט מלא.");}catch(e){console.error("[KitsTab DEBUG]",e);alert("שגיאה: "+e.message);}},style:{...S.btn("orange","md")},title:"דיבאג ערכות"},"🐛 Debug"),
         /*#__PURE__*/React.createElement("button",{onClick:()=>setShowCreate(true),style:{...S.btn("blue","md")},title:"צור ערכה חדשה"},"➕ צור ערכה חדשה")
       )
     ),
