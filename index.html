@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.22";
+const APP_VERSION = "2.3.23";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1875,12 +1875,20 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
     const c=Math.max(1,Math.min(10,parseInt(pickerCount)||1));
     const avail=freeSerialsByMakat[m]||[];
     if(avail.length<c){setError("יש רק "+avail.length+" פריטים זמינים למק\"ט "+m);return;}
-    if(makats.some(x=>String(x.makat)===m)){setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
-    /* auto-fill: if all available are pseudo-serials (no physical serial), pre-select the first N */
     const allPseudo=avail.length>0&&avail.every(s=>String(s).startsWith("__nsr__"));
     const initialSerials=allPseudo?avail.slice(0,c):Array(c).fill("");
-    setMakats(p=>[...p,{makat:m,count:c,serials:initialSerials,noSerial:allPseudo}]);
-    setPickerMakat("");setPickerCount(1);setShowPicker(false);setError("");setMakatSearch("");
+    /* IDEMPOTENT — dup check inside functional setter sees fresh state, prevents race-condition double-add (v2.3.23 fix) */
+    let wasDup=false;
+    setMakats(prevMakats=>{
+      if(prevMakats.some(x=>String(x.makat)===m)){
+        wasDup=true;
+        return prevMakats;
+      }
+      return [...prevMakats,{makat:m,count:c,serials:initialSerials,noSerial:allPseudo}];
+    });
+    /* setError is called after; in React 18 it batches with above */
+    if(wasDup){setError("מק\"ט "+m+" כבר נוסף לערכה");return;}
+    setPickerMakat("");setPickerCount(1);setShowPicker(false);setMakatSearch("");
   }
   function removeMakat(idx){setMakats(p=>p.filter((_,i)=>i!==idx));}
   function setSerial(rowIdx,serialIdx,val){setMakats(p=>{const next=p.map((row,i)=>i===rowIdx?{...row,serials:row.serials.map((s,j)=>j===serialIdx?val:s)}:row);return next;});}
