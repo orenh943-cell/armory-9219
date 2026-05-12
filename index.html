@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.17";
+const APP_VERSION = "2.3.18";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3095,6 +3095,8 @@ function GreenEyesDetailedReportModal({tokenForms,onClose,authName}){
 // === GreenEyes Tracking Dashboard (מעקב צ-ים, ניהול דוחות, חתימות) ===
 function _geGetAllSerialsWithStatus(db,tokenForms){
   const map={};
+  /* secondary index: cleanItemName+serial → list of map-keys, used at end to dedupe cross-soldier collisions */
+  const byNameSerial={};
   // Pass 1: scan all submitted forms — each soldier+serial → most recent form coverage
   Object.entries(tokenForms||{}).forEach(([token,f])=>{
     if(!f||!f.submittedAt)return;
@@ -3111,7 +3113,7 @@ function _geGetAllSerialsWithStatus(db,tokenForms){
             unit:fixEncodedHebrewText(sol.unit||f.unitName||""),
             sid:sol.id,
             solName:fixEncodedHebrewText(sol.name||""),
-            itemKey:fixEncodedHebrewText(cleanItemName(it.key||it.name||"")),
+            itemKey:fixEncodedHebrewText(cleanItemName(String(it.name||it.key||"").split("#")[0])),
             serial:String(it.serial),
             status:m?.status||null,
             note:fixEncodedHebrewText(m?.note||""),
@@ -3146,7 +3148,16 @@ function _geGetAllSerialsWithStatus(db,tokenForms){
       };
     });
   });
-  return Object.values(map);
+  /* GLOBAL DEDUP: when same (cleanItemName+serial) appears under multiple sol.ids, keep the most recent submittedAt only */
+  const finalMap={};
+  Object.entries(map).forEach(([k,v])=>{
+    const nameSerialKey=String(v.itemKey||"")+"||"+String(v.serial||"");
+    const exist=finalMap[nameSerialKey];
+    if(!exist||(v.submittedAt||0)>(exist.submittedAt||0)){
+      finalMap[nameSerialKey]=v;
+    }
+  });
+  return Object.values(finalMap);
 }
 function GreenEyesSerialDetailModal({row,onClose}){
   const sg=row.signature||{};
@@ -3339,6 +3350,32 @@ async function _geExportProfessionalExcel(db,tokenForms,authName){
   wsIss.addRow(["פלוגה","חייל","מ.א.","פריט","צ","הערה","חתם","תאריך"]);styleHeader(wsIss.getRow(3));
   issues.forEach(i=>{const t8=i.markedAt||i.submittedAt;wsIss.addRow([i.unit,i.solName,i.sid,i.itemKey,i.serial,i.note||"—",i.signer||"—",t8?new Date(t8).toLocaleString("he-IL"):""]);});
   wsIss.columns.forEach(c=>{c.width=18;});
+  /* === Sheet: פירוט מלא (NEW v2.3.18) === */
+  const wsFull=wb.addWorksheet("פירוט מלא");
+  wsFull.views=[{rightToLeft:true}];
+  wsFull.mergeCells("A1:G1");wsFull.getCell("A1").value="📋 פירוט מלא — כל הפריטים והבדיקות";wsFull.getCell("A1").font={bold:true,size:14};wsFull.getCell("A1").alignment={horizontal:"center"};
+  wsFull.addRow([]);
+  wsFull.addRow(["שם פריט","צ","פלוגה","חותם","זמן בדיקה","תקין/בעיה","הערות"]);styleHeader(wsFull.getRow(3));
+  let countM4=0;
+  allRows.sort((a,b)=>{const u=String(a.unit||"").localeCompare(String(b.unit||""),"he");return u!==0?u:String(a.itemKey||"").localeCompare(String(b.itemKey||""),"he");}).forEach(r=>{
+    if(String(r.itemKey||"").toLowerCase().includes("m4"))countM4++;
+    const sg=r.signature||{};
+    const signer=fixEncodedHebrewText(((sg.firstName||"")+" "+(sg.lastName||"")).trim())||"—";
+    const t=r.markedAt||r.submittedAt;
+    const timeStr=t?new Date(t).toLocaleString("he-IL"):"—";
+    const status=r.status==="ok"||r.status==="checked"?"✅ תקין":(r.status==="missing"?"❌ בעיה":(r.covered?"⚪ סומן":"⏳ לא נבדק"));
+    /* clean display: strip pseudo-serial prefix and #uid suffix */
+    let displaySerial=String(r.serial||"");
+    if(displaySerial.startsWith("__nsr__"))displaySerial="(ללא צ)";
+    let displayName=String(r.itemKey||"");
+    if(displayName.includes("#"))displayName=displayName.split("#")[0];
+    const row=wsFull.addRow([displayName,displaySerial,r.unit||"—",signer,timeStr,status,r.note||"—"]);
+    if(r.status==="missing"){row.getCell(6).font={color:{argb:"FFa40e26"},bold:true};row.getCell(6).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFCE0E0"}};}
+    else if(r.status==="ok"||r.status==="checked"){row.getCell(6).font={color:{argb:"FF1a7f37"},bold:true};}
+    else if(!r.covered){row.getCell(6).font={color:{argb:"FF888888"}};}
+  });
+  wsFull.columns=[{width:30},{width:16},{width:14},{width:24},{width:20},{width:14},{width:30}];
+  try{console.log("[GE Report v2.3.18] rows in פירוט מלא:",allRows.length,"· items including M4 substring:",countM4);}catch(e){console.warn("[caught]",e);}
   // === Save ===
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
@@ -3620,7 +3657,7 @@ function _geRenderArchivedCycleViewer({cycleData,onClose,authName}){
   if(!cycleData)return null;
   const meta=cycleData.meta||{};
   const forms=cycleData.forms||{};
-  const allRowsArchived=(()=>{const map={};Object.entries(forms).forEach(([token,f])=>{if(!f||!f.submittedAt)return;(f.soldiers||[]).forEach(sol=>{const sIt=(f.items||{})[sol.id]||{};(sol.items||[]).forEach(it=>{if(!it.serial||!isSerial(it.serial))return;const key=sol.id+":"+it.serial;const safe=safePathKey(it.key||it.name);const m=sIt[safe];map[key]={unit:fixEncodedHebrewText(sol.unit||f.unitName||""),sid:sol.id,solName:fixEncodedHebrewText(sol.name||""),itemKey:fixEncodedHebrewText(cleanItemName(it.key||it.name||"")),serial:String(it.serial),status:m?.status||null,note:fixEncodedHebrewText(m?.note||""),formToken:token,signature:f.signature||null,submittedAt:f.submittedAt,createdAt:f.createdAt,sentToName:fixEncodedHebrewText(f.sentToName||""),covered:true};});});});return Object.values(map);})();
+  const allRowsArchived=(()=>{const map={};Object.entries(forms).forEach(([token,f])=>{if(!f||!f.submittedAt)return;(f.soldiers||[]).forEach(sol=>{const sIt=(f.items||{})[sol.id]||{};(sol.items||[]).forEach(it=>{if(!it.serial||!isSerial(it.serial))return;const key=sol.id+":"+it.serial;const safe=safePathKey(it.key||it.name);const m=sIt[safe];map[key]={unit:fixEncodedHebrewText(sol.unit||f.unitName||""),sid:sol.id,solName:fixEncodedHebrewText(sol.name||""),itemKey:fixEncodedHebrewText(cleanItemName(String(it.name||it.key||"").split("#")[0])),serial:String(it.serial),status:m?.status||null,note:fixEncodedHebrewText(m?.note||""),formToken:token,signature:f.signature||null,submittedAt:f.submittedAt,createdAt:f.createdAt,sentToName:fixEncodedHebrewText(f.sentToName||""),covered:true};});});});return Object.values(map);})();
   function downloadExcel(){
     const fakeDb={armoryMaster:{},assignments:{},soldiers:{},customSoldiers:{}};
     // Use the professional excel exporter on archived data — pass forms as tokenForms
