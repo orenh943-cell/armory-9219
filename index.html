@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.8";
+const APP_VERSION = "2.3.9";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1817,7 +1817,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
       if(used.has(makat))return; /* already in current kit */
       const freeSerials=freeSerialsByMakat[makat]||[];
       if(freeSerials.length===0)return; /* no stock available */
-      let liveTotal=0;Object.values(db.unitItems||{}).forEach(v=>{if(String(v.makat||"")===makat)liveTotal++;});const totalCount=Math.max(masterData?.total||0,liveTotal,freeSerials.length);items.push({name:itemName,makat,available:freeSerials.length,total:totalCount,serialsPreview:freeSerials.slice(0,3)});
+      let liveTotal=0;try{liveTotal=getLiveCount(itemName,db);}catch(e){console.warn("[caught]",e);}const totalCount=Math.max(liveTotal,freeSerials.length);items.push({name:itemName,makat,available:freeSerials.length,total:totalCount,serialsPreview:freeSerials.slice(0,3)});
     });
     /* also include makats that exist in unitItems but not in armoryMaster (fallback) */
     Object.keys(freeSerialsByMakat).forEach(makat=>{
@@ -1826,7 +1826,7 @@ function KitCreateModal({db,setDb,auth,onClose}){
       const free=freeSerialsByMakat[makat]||[];
       if(free.length===0)return;
       const name=_kitMakatName(makat,db)||"מק\"ט "+makat;
-      let liveTotal2=0;Object.values(db.unitItems||{}).forEach(v=>{if(String(v.makat||"")===makat)liveTotal2++;});items.push({name,makat,available:free.length,total:Math.max(liveTotal2,free.length),serialsPreview:free.slice(0,3)});
+      let liveTotal2=0;try{liveTotal2=getLiveCount(name,db);}catch(e){console.warn("[caught]",e);}items.push({name,makat,available:free.length,total:Math.max(liveTotal2,free.length),serialsPreview:free.slice(0,3)});
       seenMakats.add(makat);
     });
     items.sort((a,b)=>String(a.name).localeCompare(String(b.name),"he"));
