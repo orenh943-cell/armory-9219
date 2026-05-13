@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.31";
+const APP_VERSION = "2.3.32";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1372,6 +1372,8 @@ function _deepEqualJSON(a,b){try{return JSON.stringify(a)===JSON.stringify(b);}c
 async function _decodeUrlEncodedKeysOnce(setDb,authName){return _runFullDecodeMigration(setDb,authName);}
 async function _runFullDecodeMigration(setDb,authName){
   if(window._decodeMigrationV3Ran)return;
+  /* v2.3.32: skip if last clean run was <24h ago — avoids 17 fbGets per page load when data is stable */
+  try{const last=parseInt(localStorage.getItem("decodeMigrationV3LastClean")||"0",10);if(last&&(Date.now()-last)<86400000){window._decodeMigrationV3Ran=true;console.log("[migration v3] skipped — clean within last 24h");return;}}catch(e){console.warn("[caught]",e);}
   window._decodeMigrationV3Ran=true;
   const stats={fixed:0,keysFixed:0,paths:{},examples:[]};
   // Paths to scan deeply
@@ -1400,11 +1402,15 @@ async function _runFullDecodeMigration(setDb,authName){
     console.log("[migration v3]",stats);
   }else{
     console.log("[migration v3] no encoded text found");
+    /* v2.3.32: remember clean run so we can skip the 17 fbGets on next load */
+    try{localStorage.setItem("decodeMigrationV3LastClean",String(Date.now()));}catch(e){console.warn("[caught]",e);}
   }
 }
 // === MIGRATION: rename "קנה לנגב 7.62" → "קנה לנגב 762" + scan for forbidden Firebase chars ===
 async function _runRenameAndForbiddenCharsMigration(setDb,authName){
   if(window._renameBarrelMigrationRan)return;
+  /* v2.3.32: same 24h-skip pattern as decode migration */
+  try{const last=parseInt(localStorage.getItem("renameBarrelMigrationLastClean")||"0",10);if(last&&(Date.now()-last)<86400000){window._renameBarrelMigrationRan=true;console.log("[migration rename-barrel] skipped — clean within last 24h");return;}}catch(e){console.warn("[caught]",e);}
   window._renameBarrelMigrationRan=true;
   const OLD_NAME="קנה לנגב 7.62";
   const NEW_NAME="קנה לנגב 762";
@@ -1450,6 +1456,8 @@ async function _runRenameAndForbiddenCharsMigration(setDb,authName){
     console.log("[migration rename-barrel]",stats);
   }else{
     console.log("[migration rename-barrel] no matches");
+    /* v2.3.32: remember clean run for 24h-skip */
+    try{localStorage.setItem("renameBarrelMigrationLastClean",String(Date.now()));}catch(e){console.warn("[caught]",e);}
   }
   if(stats.forbiddenWarnings.length>0){console.warn("[forbidden-keys] שמות עם תווים אסורים שעלולים לגרום לשגיאות Firebase:",stats.forbiddenWarnings);}
 }
@@ -5711,7 +5719,7 @@ const off10=fbOn("db/weaponLocations",locs=>{setDb(prev=>({...prev,weaponLocatio
 let offSigHist=()=>{};const t_sigh=setTimeout(()=>{offSigHist=fbOn("db/sigHistory",hist=>{const v=hist||{};setDb(prev=>({...prev,sigHistory:v}));idbSet("sigHistory",v).catch(e=>console.warn("[fb-err]",e));});},3000);const off11=fbOn("db/cabinets",cabs=>{setDb(prev=>({...prev,cabinets:cabs||{}}));});const offKits=fbOn("db/kits",k=>{setDb(prev=>({...prev,kits:k||{}}));});const offKitTpl=fbOn("db/kitTemplate",t=>{if(t)setDb(prev=>({...prev,kitTemplate:t}));});const offCabNames=fbOn("db/cabinetNames",names=>{if(names)setDb(prev=>({...prev,cabinetNames:names}));});/* exitForms (3MB) — defer 500ms */
 let off11b=()=>{};const t_ef=setTimeout(()=>{off11b=fbOn("db/exitForms",ef=>{const v=ef||{};setDb(prev=>({...prev,exitForms:v,_exitFormsLoaded:true}));idbSet("exitForms",v).catch(e=>console.warn("[fb-err]",e));});},500);const offAssignmentMeta=fbOn("db/assignmentMeta",meta=>{setDb(prev=>({...prev,assignmentMeta:meta||{}}));});const offVisutReq=fbOn("db/visutRequests",vr=>{setDb(prev=>({...prev,visutRequests:vr||{}}));});const offVisutUsers=fbOn("db/visutUsers",vu=>{setDb(prev=>({...prev,visutUsers:vu||{}}));});/* loginLog — defer 3000ms (rarely needed) */
 let off12=()=>{};const t_login=setTimeout(()=>{off12=fbOn("db/loginLog",log=>{const v=log||{};setDb(prev=>({...prev,loginLog:v}));idbSet("loginLog",v).catch(e=>console.warn("[fb-err]",e));});},3000);// actLog (1MB) — defer 2500ms (only needed for admin/history tabs)
-let off13=()=>{};const t_log=setTimeout(()=>{off13=fbOn("db/actLog",log=>{const v=log||{};setDb(prev=>({...prev,actLog:v}));idbSet("actLog",v).catch(e=>console.warn("[fb-err]",e));});},2500);const off14=fbOn("db/inspections",data=>{setDb(prev=>({...prev,inspections:data||{}}));});const off15=fbOn("db/inspectionFamilies",data=>{if(data)setDb(prev=>({...prev,inspectionFamilies:data}));setDb(prev=>({...prev,inspections:data||{}}));});return()=>{// Clear all pending timers
+let off13=()=>{};const t_log=setTimeout(()=>{off13=fbOn("db/actLog",log=>{const v=log||{};setDb(prev=>({...prev,actLog:v}));idbSet("actLog",v).catch(e=>console.warn("[fb-err]",e));});},2500);const off14=fbOn("db/inspections",data=>{setDb(prev=>({...prev,inspections:data||{}}));});/* v2.3.32 CRITICAL FIX: previous code wrote inspectionFamilies data into inspections, wiping all weapon-exam history on every page load. Replaced with a clean listener that only touches inspectionFamilies. */const off15=fbOn("db/inspectionFamilies",data=>{setDb(prev=>({...prev,inspectionFamilies:data||null}));});return()=>{// Clear all pending timers
 clearTimeout(t_sig);clearTimeout(t_test);clearTimeout(t_testHist);clearTimeout(t_ef);clearTimeout(t_log);clearTimeout(t_sigh);clearTimeout(t_login);// Detach listeners (some may not be attached yet, but ()=>{} is safe)
 off1();off2();off3();off4();off5();off6();off7();off8();off9();off10();off11();off11b();off12();off13();off14();off15();offPwd();offTest();if(offSigHist)offSigHist();if(offTestHist)offTestHist();if(offNameMakat)offNameMakat();if(offSerials)offSerials();if(offDeleted)offDeleted();if(offSoldiers)offSoldiers();if(offArmoryMaster)offArmoryMaster();if(offCabNames)offCabNames();if(offAssignmentMeta)offAssignmentMeta();if(offVisutReq)offVisutReq();if(offVisutUsers)offVisutUsers();if(offDailyNotes)offDailyNotes();if(offWaSent)offWaSent();if(offDailyForms)offDailyForms();if(offSigs)offSigs();if(offKits)offKits();if(offKitTpl)offKitTpl();};},[]);React.useEffect(()=>{if(!db.kits||!db.unitItems)return;const tpl=_kitGetTemplate(db);Object.entries(db.kits).forEach(([kitId,kit])=>{if(kit.status!=="available")return;const serialItems=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{(arr||[]).forEach(s=>{const f=_kitFindFreeUnitItemBySerial(db,mk,s);if(f)serialItems.push(f);});});if(serialItems.length===0)return;const cabs=Array.from(new Set(serialItems.map(f=>f.item.cabName||"")));if(cabs.length===1){const newCab=cabs[0];if((kit.cabName||"")!==newCab){fbSet("db/kits/"+kitId+"/cabName",newCab||"").catch(e=>console.warn("[fb-err]",e));}}else{const newCab=cabs.find(c=>c!==(kit.cabName||""));if(newCab!==undefined&&newCab!==null){const fullKit={...kit,kitId};updateKitCabinet(fullKit,newCab,db,setDb,{name:"system_auto"});}}});},[db.unitItems,db.kits]);React.useEffect(()=>{try{_runBarrelAutoLink(db,setDb,auth?.name||"");}catch(e){console.warn("[barrel-auto]",e);}},[db.assignments,db.unitItems]);const[search,setSearch]=useState("");const[filterUnit,setFilterUnit]=useState("הכל");const[sigSortDir,setSigSortDir]=useState("desc");/* desc=מוכן ביותר קודם */
 const[soldierSortDir,setSoldierSortDir]=useState("none");// none=ללא מיון, desc=מוכן קודם
