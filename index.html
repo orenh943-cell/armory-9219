@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.24";
+const APP_VERSION = "2.3.25";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1789,6 +1789,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
   const [pickerCount,setPickerCount]=React.useState(1);
   const [makatSearch,setMakatSearch]=React.useState("");
   const addInProgressRef=React.useRef(false);
+  const createInProgressRef=React.useRef(false);
   const [lastAddTs,setLastAddTs]=React.useState(0);
   const [error,setError]=React.useState("");
   const [creating,setCreating]=React.useState(false);
@@ -1912,36 +1913,48 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
     return true;
   },[name,makats]);
   function create(){
+    /* RE-ENTRY GUARD (v2.3.25): synchronous block prevents double-fire from rapid double-click on submit.
+       Root cause of the 14→26-28 duplication bug: setCreating(true) is async, so disabled prop on the
+       submit button does not update before a second click registers. Without this guard, two create()
+       invocations both pass _kitGenId() (random per call) and fbSet to different kit-IDs, producing
+       two kits each claiming the same 14 serials = 28 entries total (with variance from race timing). */
+    if(createInProgressRef.current){try{console.warn("[KIT-CREATE] re-entry blocked");}catch(e){}return;}
+    createInProgressRef.current=true;
     setError("");
     const trimmedName=name.trim();
-    if(!trimmedName){setError("חסר שם ערכה");return;}
-    if(makats.length===0){setError("הוסף לפחות מק\"ט אחד לערכה");return;}
+    if(!trimmedName){setError("חסר שם ערכה");createInProgressRef.current=false;return;}
+    if(makats.length===0){setError("הוסף לפחות מק\"ט אחד לערכה");createInProgressRef.current=false;return;}
     const kits=db.kits||{};
     /* edit mode: same-name allowed only if it is the same kit being edited */
     const nameConflict=Object.entries(kits).some(([kid,k])=>k.name===trimmedName&&kid!==editKitId);
-    if(nameConflict){setError("ערכה בשם '"+trimmedName+"' כבר קיימת");return;}
+    if(nameConflict){setError("ערכה בשם '"+trimmedName+"' כבר קיימת");createInProgressRef.current=false;return;}
     const serials={};
+    const seenMakats=new Set();
     for(const row of makats){
       const m=String(row.makat).trim();
+      /* defensive: makats state should already be unique-by-makat, but block here too */
+      if(seenMakats.has(m)){setError("מק\"ט "+m+" מופיע פעמיים בערכה");createInProgressRef.current=false;return;}
+      seenMakats.add(m);
       const arr=(row.serials||[]).map(s=>String(s||"").trim()).filter(Boolean);
-      if(arr.length!==row.count){setError("חסרים צ-ים עבור מק\"ט "+m+" (נדרש "+row.count+")");return;}
-      if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+m);return;}
+      if(arr.length!==row.count){setError("חסרים צ-ים עבור מק\"ט "+m+" (נדרש "+row.count+")");createInProgressRef.current=false;return;}
+      if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+m);createInProgressRef.current=false;return;}
       for(const s of arr){
         const found=_kitFindFreeUnitItemBySerial(db,m,s);
-        if(!found){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");return;}
+        if(!found){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");createInProgressRef.current=false;return;}
         const otherKit=_kitSerialInOtherKit(db,m,s,editKitId||null);
-        if(otherKit){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" כבר משוייך לערכה אחרת");return;}
+        if(otherKit){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
       }
       serials[m]=arr;
     }
     setCreating(true);
+    try{console.log("[KIT-CREATE] starting save isEditing=",isEditing,"name=",trimmedName,"makats=",Object.keys(serials).length,"totalSerials=",Object.values(serials).reduce((s,a)=>s+(a?.length||0),0));}catch(e){}
     if(isEditing){
       const updated={...existingKit,name:trimmedName,serials,history:[...(existingKit.history||[]),{ts:Date.now(),action:"edited",by:auth?.name||""}]};
       fbSet("db/kits/"+editKitId,updated).then(()=>{
         setDb(p=>({...p,kits:{...(p.kits||{}),[editKitId]:updated}}));
         const sanitizedSerials=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("עריכת_ערכה","ערכה "+trimmedName+" עודכנה ("+JSON.stringify(sanitizedSerials)+")",auth?.name||"מערכת");
         onClose();
-      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);});
+      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);createInProgressRef.current=false;});
     }else{
       const kitId=_kitGenId();
       const payload={kitId,name:trimmedName,createdAt:Date.now(),createdBy:auth?.name||auth?.username||"",serials,status:"available",history:[{ts:Date.now(),action:"created",by:auth?.name||""}]};
@@ -1949,7 +1962,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
         setDb(p=>({...p,kits:{...(p.kits||{}),[kitId]:payload}}));
         const sanitizedSerials2=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("יצירת_ערכה","ערכה "+trimmedName+" נוצרה ("+JSON.stringify(sanitizedSerials2)+")",auth?.name||"מערכת");
         onClose();
-      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);});
+      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);createInProgressRef.current=false;});
     }
   }
   return /*#__PURE__*/React.createElement("div",{style:S.overlay,onClick:onClose},
