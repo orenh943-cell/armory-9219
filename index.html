@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.66";
+const APP_VERSION = "2.3.67-hotfix1";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -823,7 +823,7 @@ const fbCabs=db.cabinetNames||{};const cabSrc={};UNIT_ORDER.forEach(u=>{// אם 
 // מיזוג: Firebase + ברירת מחדל (לא החלפה)
 const fbList=fbCabs[u]||[];const defList=UNIT_CABINETS_DEF[u]||[];const merged2=[...new Set([...fbList,...defList])];cabSrc[u]=merged2;});// סדר: פלוגת החייל קודם, שאר הפלוגות, גדודי אחרון
 const showAll=!soldierUnit||soldierUnit==="הכל";const sorted=showAll?UNIT_ORDER:[soldierUnit,...UNIT_ORDER.filter(u=>u!==soldierUnit&&u!=="גדודי"),"גדודי"];sorted.forEach(unit=>{const names=cabSrc[unit]||[];const label=unit==="גדודי"?"── ארמון גדודי ──":"── פלוגה "+unit+" ──";all.push({n:label,unit,divider:true});names.forEach(n=>{if(n&&!seen.has(n)){seen.add(n);all.push({n,unit,divider:false});}});});// ארונות שב-db.cabinets אבל לא ב-cabinetNames ולא ב-DEF
-Object.keys(db.cabinets||{}).forEach(cabName=>{let dec=cabName;try{dec=decodeURIComponent(cabName);}catch(e){dec=cabName;}if(!seen.has(dec)){seen.add(dec);let unit="גדודי";Object.entries(cabSrc).forEach(([u,names])=>{if((names||[]).includes(dec))unit=u;});all.push({n:dec,unit,divider:false});}});return all;}// ===== זמינות פריטים לפי פלוגה =====
+Object.keys(db.cabinets||{}).forEach(cabName=>{let dec=cabName;try{dec=decodeURIComponent(cabName);}catch(e){dec=cabName;}if(!seen.has(dec)){seen.add(dec);let unit="גדודי";Object.entries(cabSrc).forEach(([u,names])=>{if((names||[]).includes(dec))unit=u;});all.push({n:dec,unit,divider:false});}});/* v2.3.66-hotfix1: also include cabName values directly from db.unitItems — some cabs (e.g., "כנה כבדה") live only as item.cabName references without a top-level db.cabinets key. Attribute unit from the item's own u/unit field; fallback to cabSrc match; default גדודי. */ Object.values(db.unitItems||{}).forEach(it=>{const cn=it?.cabName;if(!cn)return;let dec=cn;try{dec=decodeURIComponent(cn);}catch(e){dec=cn;}if(seen.has(dec))return;seen.add(dec);let unit=it?.u||it?.unit||"";if(!unit||!UNIT_ORDER.includes(unit)){unit="גדודי";Object.entries(cabSrc).forEach(([u,names])=>{if((names||[]).includes(dec))unit=u;});}all.push({n:dec,unit,divider:false});});return all;}// ===== זמינות פריטים לפי פלוגה =====
 function getAvailableUnits(db,soldiers,itemName){// מחזיר: [{unit, free, unitItemKeys}]
 // free = כמה יחידות לא מוקצות לחייל ספציפי
 const UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];const result=[];UNITS.forEach(unit=>{// unitItems של הפלוגה עם assignedType=unit (לא משוייך לחייל)
@@ -1971,11 +1971,23 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
       const arr=(row.serials||[]).map(s=>String(s||"").trim()).filter(Boolean);
       if(arr.length!==row.count){setError("חסרים צ-ים עבור מק\"ט "+m+" (נדרש "+row.count+")");createInProgressRef.current=false;return;}
       if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+m);createInProgressRef.current=false;return;}
-      for(const s of arr){
+      /* v2.3.67: split validation — real serials need specific UID free AND not in another kit; __nsr__ items just need enough free stock of this makat (refresh stale UIDs to currently-free items). Fixes false-block when chosen __nsr__<uid> was reassigned to a soldier between modal open and submit. */
+      const _realSerials=arr.filter(s=>!String(s).startsWith("__nsr__"));
+      const _nsrCount=arr.length-_realSerials.length;
+      for(const s of _realSerials){
         const found=_kitFindFreeUnitItemBySerial(db,m,s);
-        if(!found){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");createInProgressRef.current=false;return;}
+        if(!found){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");createInProgressRef.current=false;return;}
         const otherKit=_kitSerialInOtherKit(db,m,s,editKitId||null);
-        if(otherKit){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;setError(sDisp+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
+        if(otherKit){setError("צ "+s+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
+      }
+      if(_nsrCount>0){
+        const _free=_kitFindFreeQtyItems(db,m,_nsrCount);
+        if((_free||[]).length<_nsrCount){setError("(פריט ללא צ) — נדרשים "+_nsrCount+" פריטים פנויים תחת מק\"ט "+m+", זמינים במלאי "+((_free||[]).length));createInProgressRef.current=false;return;}
+        /* refresh stale __nsr__<uid> entries with currently-free UIDs */
+        let _fi=0;
+        for(let _i=0;_i<arr.length;_i++){
+          if(String(arr[_i]).startsWith("__nsr__")){arr[_i]="__nsr__"+_free[_fi].uid;_fi++;}
+        }
       }
       serials[m]=arr;
     }
