@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix3";
+const APP_VERSION = "2.3.68-hotfix4";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1721,7 +1721,7 @@ function KitsTab({db,setDb,soldiers,auth}){
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
       /*#__PURE__*/React.createElement("h2",{style:{fontSize:"var(--text-xl)",fontWeight:800,margin:0}},"🎒 ערכות"),
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},
-        isAdmin&&/*#__PURE__*/React.createElement("button",{onClick:()=>setShowTemplate(true),style:{...S.btn("neutral","md")},title:"תבנית ערכה"},"⚙️ תבנית"),
+        /* v2.3.68-hotfix4: kit-template UI removed per request (db.kitTemplate preserved) */
         
         /*#__PURE__*/React.createElement("button",{onClick:()=>setShowCreate(true),style:{...S.btn("blue","md")},title:"צור ערכה חדשה"},"➕ צור ערכה חדשה")
       )
@@ -1764,7 +1764,7 @@ function KitsTab({db,setDb,soldiers,auth}){
     /* v2.3.68: duplicate flow — opens fresh modal with seeded makats */
     duplicateSeed&&/*#__PURE__*/React.createElement(KitCreateModal,{db,setDb,auth,duplicateSeed,onClose:()=>setDuplicateSeed(null)}),
     viewKit&&/*#__PURE__*/React.createElement(KitViewModal,{kitId:viewKit,db,setDb,soldiers,auth,onClose:()=>setViewKit(null)}),
-    showTemplate&&isAdmin&&/*#__PURE__*/React.createElement(KitTemplateEditor,{db,setDb,auth,onClose:()=>setShowTemplate(false)})
+    /* v2.3.68-hotfix4: KitTemplateEditor render removed (component kept in code, db.kitTemplate preserved) */null
   );
 }
 // === Component: KitTemplateEditor ===
@@ -2009,6 +2009,10 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
     /* edit mode: same-name allowed only if it is the same kit being edited */
     const nameConflict=Object.entries(kits).some(([kid,k])=>k.name===trimmedName&&kid!==editKitId);
     if(nameConflict){setError("ערכה בשם '"+trimmedName+"' כבר קיימת");createInProgressRef.current=false;return;}
+    /* v2.3.68-hotfix4: pre-compute heavy lookups ONCE — avoids O(N×M) cost inside loop on 55MB DB. getSerials() rebuilds 4 sources each call, was called per-serial. */
+    const _serialsCache=(()=>{try{return getSerials(db);}catch(_e){return[];}})();
+    const _serialsInOtherKitsSet=new Set();
+    Object.entries(kits).forEach(([kid,k])=>{if(kid===editKitId)return;Object.entries(k.serials||{}).forEach(([mk,arr])=>{(arr||[]).forEach(s=>_serialsInOtherKitsSet.add(String(mk)+"||"+String(s).trim()));});});
     const serials={};
     const seenMakats=new Set();
     for(const row of makats){
@@ -2037,11 +2041,10 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
         }
         if(!_exists){
           /* fallback: check by item name in getSerials() — covers db.serials + ALL_SERIALS + assignments */
-          try{_exists=getSerials(db).some(x=>cleanItemName(x.name||"")===_cleanName&&String(x.serial||"").trim()===s);}catch(e){console.warn("[caught]",e);}
+          try{_exists=_serialsCache.some(x=>cleanItemName(x.name||"")===_cleanName&&String(x.serial||"").trim()===s);}catch(e){console.warn("[caught]",e);}
         }
         if(!_exists){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m);createInProgressRef.current=false;return;}
-        const otherKit=_kitSerialInOtherKit(db,m,s,editKitId||null);
-        if(otherKit){setError("צ "+s+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
+        if(_serialsInOtherKitsSet.has(m+"||"+s)){setError("צ "+s+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
       }
       if(_nsrCount>0){
         /* count ALL pseudo items of this makat (free + assigned), refresh UIDs (free first) */
@@ -2065,19 +2068,19 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
 
     if(isEditing){
       const updated={...existingKit,name:trimmedName,serials,history:[...(existingKit.history||[]),{ts:Date.now(),action:"edited",by:auth?.name||""}]};
-      fbSet("db/kits/"+editKitId,updated).then(()=>{
-        setDb(p=>({...p,kits:{...(p.kits||{}),[editKitId]:updated}}));
-        const sanitizedSerials=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("עריכת_ערכה","ערכה "+trimmedName+" עודכנה ("+JSON.stringify(sanitizedSerials)+")",auth?.name||"מערכת");
-        onClose();
-      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);createInProgressRef.current=false;});
+      /* v2.3.68-hotfix4: optimistic UI — setDb+onClose immediately; Firebase write in background (saves 1-3s perceived wait on 55MB DB) */
+      setDb(p=>({...p,kits:{...(p.kits||{}),[editKitId]:updated}}));
+      try{const sanitizedSerials=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("עריכת_ערכה","ערכה "+trimmedName+" עודכנה ("+JSON.stringify(sanitizedSerials)+")",auth?.name||"מערכת");}catch(_e){console.warn("[caught]",_e);}
+      onClose();
+      fbSet("db/kits/"+editKitId,updated).catch(e=>{console.warn("[fb-err]",e);try{alert("⚠️ שגיאת שמירה ב-Firebase — רענן ונסה שוב");}catch(_){}});
     }else{
       const kitId=_kitGenId();
       const payload={kitId,name:trimmedName,createdAt:Date.now(),createdBy:auth?.name||auth?.username||"",serials,status:"available",history:[{ts:Date.now(),action:"created",by:auth?.name||""}]};
-      fbSet("db/kits/"+kitId,payload).then(()=>{
-        setDb(p=>({...p,kits:{...(p.kits||{}),[kitId]:payload}}));
-        const sanitizedSerials2=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("יצירת_ערכה","ערכה "+trimmedName+" נוצרה ("+JSON.stringify(sanitizedSerials2)+")",auth?.name||"מערכת");
-        onClose();
-      }).catch(e=>{console.warn("[fb-err]",e);setError("שגיאה בשמירה");setCreating(false);createInProgressRef.current=false;});
+      /* v2.3.68-hotfix4: optimistic UI — setDb+onClose immediately; Firebase write in background */
+      setDb(p=>({...p,kits:{...(p.kits||{}),[kitId]:payload}}));
+      try{const sanitizedSerials2=Object.fromEntries(Object.entries(serials).map(([mk,arr])=>{const real=(arr||[]).filter(s=>!String(s).startsWith("__nsr__"));return[mk,real.length===0?"× "+arr.length+" ללא צ":real];}));logAction("יצירת_ערכה","ערכה "+trimmedName+" נוצרה ("+JSON.stringify(sanitizedSerials2)+")",auth?.name||"מערכת");}catch(_e){console.warn("[caught]",_e);}
+      onClose();
+      fbSet("db/kits/"+kitId,payload).catch(e=>{console.warn("[fb-err]",e);try{alert("⚠️ שגיאת שמירה ב-Firebase — רענן ונסה שוב");}catch(_){}});
     }
   }
   return /*#__PURE__*/React.createElement("div",{style:S.overlay,onClick:onClose},
