@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix6";
+const APP_VERSION = "2.3.68-hotfix7";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2263,10 +2263,24 @@ function KitAssignModal({soldier,db,setDb,auth,onClose}){
         const _usedUids=new Set();
         for(const s of line.serials){
           let found=_kitFindFreeUnitItemBySerial(db,line.makat,s);
-          /* v2.3.68-hotfix6: unified fallback — for ANY serial (pseudo or real) that isn't found as a free unitItem, try to substitute with any free item of the same makat. Real serials may exist in db.serials/ALL_SERIALS catalog but not as free unitItem (e.g., previously assigned then reset). Assign-time picks a free substitute. Diagnostic distinguishes "doesn't exist" vs "all assigned" for clearer messaging. */
+          /* v2.3.68-hotfix6: unified fallback — for ANY serial (pseudo or real) that isn't found as a free unitItem, try to substitute with any free item of the same makat. */
           if(!found){
             const freeNow=_kitFindFreeQtyItems(db,line.makat,(line.serials||[]).length+5);
             for(const f of freeNow){if(!_usedUids.has(f.uid)){found=f;break;}}
+          }
+          /* v2.3.68-hotfix7: materialize a unitItem from catalog (db.serials / ALL_SERIALS) when no unitItem exists for this makat at all. Pre-check checkSerialDuplicate to avoid double-claiming a serial currently held by another soldier. */
+          if(!found&&!String(s).startsWith("__nsr__")){
+            let _catalogMatch=null;
+            try{_catalogMatch=getSerials(db).find(x=>String(x.serial||"").trim()===String(s).trim());}catch(_e){console.warn("[caught]",_e);}
+            if(_catalogMatch){
+              const _dupOther=checkSerialDuplicate(db,line.name,s,{excludeSoldierKey:soldier.id+"||"+line.name,allowUnitItem:true});
+              if(_dupOther){abortMsg="צ "+s+" כבר משויך ל-"+_dupOther+" — זכה ממנו קודם";break;}
+              const _newUid="ui_kit_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+              const _itemName=line.name||_catalogMatch.name||_kitMakatName(line.makat,db);
+              const _newItem={n:_itemName,name:_itemName,s:String(s),serial:String(s),makat:String(line.makat),u:soldier.unit||"גדודי",unit:soldier.unit||"גדודי",t:"unit",assignedType:"soldier",assignedSoldierId:soldier.id,cabName:null,createdAt:new Date().toISOString(),materializedFromCatalog:true,kitId:selKitId};
+              newUnitItems[_newUid]=_newItem;
+              found={uid:_newUid,item:_newItem};
+            }
           }
           if(!found){
             const _sIsNsr=String(s).startsWith("__nsr__");
