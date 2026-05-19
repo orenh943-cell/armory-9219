@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68";
+const APP_VERSION = "2.3.68-hotfix1";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1926,10 +1926,27 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
 
     if(!m){setError("בחר מק\"ט");return;}
     const c=Math.max(1,Math.min(10,parseInt(pickerCount)||1));
-    const avail=freeSerialsByMakat[m]||[];
-    if(avail.length<c){setError("יש רק "+avail.length+" פריטים זמינים למק\"ט "+m);return;}
-    const allPseudo=avail.length>0&&avail.every(s=>String(s).startsWith("__nsr__"));
-    const initialSerials=allPseudo?avail.slice(0,c):Array(c).fill("");
+    /* v2.3.68-hotfix1: build allowed regardless of free count. For pseudo (no-serial) makats: use ALL unitItems UIDs (free first, then assigned). For real-serial makats: keep empty placeholders for user to fill. Assignment step will verify freeness later. */
+    let initialSerials;
+    let allPseudo=false;
+    {
+      const _items=db.unitItems||{};
+      const _all=[];let _anyReal=false;
+      Object.entries(_items).forEach(([uid,v])=>{
+        if(String(v.makat||"")!==m)return;
+        const _sRaw=String(v.s||v.serial||"").trim();
+        if(_sRaw){_anyReal=true;return;}
+        _all.push({uid,assigned:!!(v.si||v.assignedSoldierId)});
+      });
+      allPseudo=_all.length>0&&!_anyReal;
+      if(allPseudo){
+        _all.sort((a,b)=>Number(a.assigned)-Number(b.assigned));
+        initialSerials=_all.slice(0,c).map(x=>"__nsr__"+x.uid);
+        while(initialSerials.length<c)initialSerials.push("");
+      }else{
+        initialSerials=Array(c).fill("");
+      }
+    }
     /* IDEMPOTENT — dup check inside functional setter sees fresh state, prevents race-condition double-add (v2.3.23 fix) */
     let wasDup=false;
     setMakats(prevMakats=>{
@@ -1983,22 +2000,35 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
       const arr=(row.serials||[]).map(s=>String(s||"").trim()).filter(Boolean);
       if(arr.length!==row.count){setError("חסרים צ-ים עבור מק\"ט "+m+" (נדרש "+row.count+")");createInProgressRef.current=false;return;}
       if(new Set(arr).size!==arr.length){setError("צ-ים חוזרים עבור מק\"ט "+m);createInProgressRef.current=false;return;}
-      /* v2.3.67: split validation — real serials need specific UID free AND not in another kit; __nsr__ items just need enough free stock of this makat (refresh stale UIDs to currently-free items). Fixes false-block when chosen __nsr__<uid> was reassigned to a soldier between modal open and submit. */
+      /* v2.3.68-hotfix1: build is independent of assignment — check EXISTENCE only (not freeness). Real serials must exist as unitItems (any status); __nsr__ items must have enough TOTAL stock in system. Refresh UIDs preferring free items. Assignment step (KitAssignModal) re-verifies freeness then. */
       const _realSerials=arr.filter(s=>!String(s).startsWith("__nsr__"));
       const _nsrCount=arr.length-_realSerials.length;
       for(const s of _realSerials){
-        const found=_kitFindFreeUnitItemBySerial(db,m,s);
-        if(!found){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m+", או שהוא משויך לחייל");createInProgressRef.current=false;return;}
+        /* existence check: any unitItem with this makat+serial, regardless of assignment */
+        let _exists=false;
+        const _items=db.unitItems||{};
+        for(const[uid,v]of Object.entries(_items)){
+          if(String(v.makat||"")!==m)continue;
+          if(String(v.s||v.serial||"").trim()===s){_exists=true;break;}
+        }
+        if(!_exists){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m);createInProgressRef.current=false;return;}
         const otherKit=_kitSerialInOtherKit(db,m,s,editKitId||null);
         if(otherKit){setError("צ "+s+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
       }
       if(_nsrCount>0){
-        const _free=_kitFindFreeQtyItems(db,m,_nsrCount);
-        if((_free||[]).length<_nsrCount){setError("(פריט ללא צ) — נדרשים "+_nsrCount+" פריטים פנויים תחת מק\"ט "+m+", זמינים במלאי "+((_free||[]).length));createInProgressRef.current=false;return;}
-        /* refresh stale __nsr__<uid> entries with currently-free UIDs */
+        /* count ALL pseudo items of this makat (free + assigned), refresh UIDs (free first) */
+        const _items=db.unitItems||{};
+        const _allPseudos=[];
+        Object.entries(_items).forEach(([uid,v])=>{
+          if(String(v.makat||"")!==m)return;
+          if(String(v.s||v.serial||"").trim())return;
+          _allPseudos.push({uid,assigned:!!(v.si||v.assignedSoldierId)});
+        });
+        if(_allPseudos.length<_nsrCount){setError("(פריט ללא צ) — נדרשים "+_nsrCount+" פריטים תחת מק\"ט "+m+", קיימים סה\"כ במערכת "+_allPseudos.length);createInProgressRef.current=false;return;}
+        _allPseudos.sort((a,b)=>Number(a.assigned)-Number(b.assigned));
         let _fi=0;
         for(let _i=0;_i<arr.length;_i++){
-          if(String(arr[_i]).startsWith("__nsr__")){arr[_i]="__nsr__"+_free[_fi].uid;_fi++;}
+          if(String(arr[_i]).startsWith("__nsr__")){arr[_i]="__nsr__"+_allPseudos[_fi].uid;_fi++;}
         }
       }
       serials[m]=arr;
@@ -2073,7 +2103,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
                       /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-lg)",color:"var(--color-text-primary)"}},it.total),
                       /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:it.available>0?"var(--color-success-fg)":"var(--color-text-muted)",fontWeight:600}},"פנוי ",it.available)
                     ),
-                    (()=>{const recentlyAdded=Date.now()-lastAddTs<500;const isDisabled=it.available===0||recentlyAdded;return /*#__PURE__*/React.createElement("button",{onClick:e=>{e.stopPropagation();if(recentlyAdded)return;const needed=Math.max(1,parseInt(pickerCount)||1);if((freeSerialsByMakat[it.makat]||[]).length<needed){setError("יש רק "+(freeSerialsByMakat[it.makat]||[]).length+" פריטים זמינים למק\"ט "+it.makat);return;}addMakat(it.makat);},disabled:isDisabled,style:{padding:"6px 14px",background:isDisabled?"#aaa":"#1a7f37",color:"#fff",border:"none",borderRadius:6,cursor:isDisabled?"not-allowed":"pointer",fontWeight:700,fontSize:13,minWidth:80,opacity:isDisabled?0.6:1},title:recentlyAdded?"המתן רגע...":"הוסף לערכה"},recentlyAdded?"⏳":"➕ הוסף");})()
+                    (()=>{/* v2.3.68-hotfix1: build is independent of assignment — button enabled even when available===0 (only re-entry guard blocks). Add-flow allowed for assigned items; assignment step (KitAssignModal) will verify freeness at that time. */ const recentlyAdded=Date.now()-lastAddTs<500;const isDisabled=recentlyAdded;return /*#__PURE__*/React.createElement("button",{onClick:e=>{e.stopPropagation();if(recentlyAdded)return;addMakat(it.makat);},disabled:isDisabled,style:{padding:"6px 14px",background:isDisabled?"#aaa":"#1a7f37",color:"#fff",border:"none",borderRadius:6,cursor:isDisabled?"not-allowed":"pointer",fontWeight:700,fontSize:13,minWidth:80,opacity:isDisabled?0.6:1},title:recentlyAdded?"המתן רגע...":"הוסף לערכה"},recentlyAdded?"⏳":"➕ הוסף");})()
                   )
                 ),
                 /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--color-text-secondary)"}},"מק\"ט ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace"}},it.makat),it.serialsPreview.length>0?" · "+(it.serialsPreview[0].startsWith("__nsr__")?"ללא צ ("+it.serialsPreview.length+(it.available>3?"+":"")+" פריטים)":"צ: "+it.serialsPreview.join(", ")+(it.available>3?"...":"")):"")
