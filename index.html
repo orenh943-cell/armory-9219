@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.67-hotfix1";
+const APP_VERSION = "2.3.68";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1712,6 +1712,8 @@ function KitsTab({db,setDb,soldiers,auth}){
   const [showCreate,setShowCreate]=React.useState(false);
   const [viewKit,setViewKit]=React.useState(null);
   const [editKitId,setEditKitId]=React.useState(null);
+  /* v2.3.68: duplicate-kit seed — when set, opens KitCreateModal preloaded with these makats (no serials) */
+  const [duplicateSeed,setDuplicateSeed]=React.useState(null);
   const [showTemplate,setShowTemplate]=React.useState(false);
   const isAdmin=auth?.role==="admin";
   const kits=React.useMemo(()=>{const k=db.kits||{};return Object.entries(k).map(([id,v])=>({...v,kitId:id})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));},[db.kits]);
@@ -1749,6 +1751,8 @@ function KitsTab({db,setDb,soldiers,auth}){
                 /*#__PURE__*/React.createElement("td",{style:{padding:"6px 8px"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4}},
                   /*#__PURE__*/React.createElement("button",{onClick:()=>setViewKit(k.kitId),title:"צפיה",style:{...S.btn("neutral","xs")}},"👁️"),
                   isAdmin&&k.status==="available"&&/*#__PURE__*/React.createElement("button",{onClick:()=>setEditKitId(k.kitId),title:"עריכת ערכה (אפשרי רק לערכות זמינות)",style:{...S.btn("blue","xs")}},"✏️"),
+                  /* v2.3.68: שכפל — copies makats+counts (NOT serials, NOT assignment) into a fresh KitCreateModal */
+                  isAdmin&&/*#__PURE__*/React.createElement("button",{onClick:()=>setDuplicateSeed({name:(k.name||"")+" - עותק",serials:k.serials||{}}),title:"שכפל ערכה — מעתיק מק\"טים וכמויות, אתה תמלא צ-ים מחדש",style:{...S.btn("purple","xs")}},"📋"),
                   isAdmin&&k.status==="available"&&/*#__PURE__*/React.createElement("button",{onClick:()=>{if(!window.confirm("למחוק את הערכה '"+k.name+"'? הפריטים נשארים במלאי הארמון."))return;fbDelete("db/kits/"+k.kitId).catch(e=>console.warn("[fb-err]",e));setDb(p=>{const nk={...(p.kits||{})};delete nk[k.kitId];return{...p,kits:nk};});logAction("מחיקת_ערכה","הערכה "+(k.name||k.kitId)+" נמחקה",auth?.name||"מערכת");},title:"מחיקה",style:{...S.btn("red","xs")}},"🗑️")
                 ))
               );
@@ -1757,6 +1761,8 @@ function KitsTab({db,setDb,soldiers,auth}){
     ),
     showCreate&&/*#__PURE__*/React.createElement(KitCreateModal,{db,setDb,auth,onClose:()=>setShowCreate(false)}),
     editKitId&&/*#__PURE__*/React.createElement(KitCreateModal,{db,setDb,auth,editKitId,onClose:()=>setEditKitId(null)}),
+    /* v2.3.68: duplicate flow — opens fresh modal with seeded makats */
+    duplicateSeed&&/*#__PURE__*/React.createElement(KitCreateModal,{db,setDb,auth,duplicateSeed,onClose:()=>setDuplicateSeed(null)}),
     viewKit&&/*#__PURE__*/React.createElement(KitViewModal,{kitId:viewKit,db,setDb,soldiers,auth,onClose:()=>setViewKit(null)}),
     showTemplate&&isAdmin&&/*#__PURE__*/React.createElement(KitTemplateEditor,{db,setDb,auth,onClose:()=>setShowTemplate(false)})
   );
@@ -1807,14 +1813,20 @@ function KitTemplateEditor({db,setDb,auth,onClose}){
 // === END KITS BLOCK 1 ===
 
 // === KIT CREATE / VIEW / ASSIGN / RETURN MODALS ===
-function KitCreateModal({db,setDb,auth,onClose,editKitId}){
+function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
   const existingKit=editKitId?(db.kits?.[editKitId]||null):null;
   const isEditing=!!existingKit;
-  const [name,setName]=React.useState(existingKit?.name||"");
-  // dynamic list of {makat, count, serials:[]} — pre-populate from existing kit if editing
+  /* v2.3.68: duplicateSeed = {name, serials:{makat:[serials]}} from "📋 שכפל" — preloads makats+counts but leaves serials empty for user to refill */
+  const [name,setName]=React.useState(existingKit?.name||duplicateSeed?.name||"");
+  // dynamic list of {makat, count, serials:[]} — pre-populate from existing kit if editing, or from duplicateSeed (with empty serials)
   const [makats,setMakats]=React.useState(()=>{
-    if(!existingKit||!existingKit.serials)return [];
-    return Object.entries(existingKit.serials).map(([makat,arr])=>({makat:String(makat),count:(arr||[]).length,serials:(arr||[]).map(s=>String(s))}));
+    if(existingKit&&existingKit.serials){
+      return Object.entries(existingKit.serials).map(([makat,arr])=>({makat:String(makat),count:(arr||[]).length,serials:(arr||[]).map(s=>String(s))}));
+    }
+    if(duplicateSeed&&duplicateSeed.serials){
+      return Object.entries(duplicateSeed.serials).map(([makat,arr])=>({makat:String(makat),count:(arr||[]).length,serials:(arr||[]).map(()=>"")}));
+    }
+    return [];
   });
   // picker state
   const [showPicker,setShowPicker]=React.useState(false);
@@ -1874,7 +1886,7 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId}){
       seenMakats.add(makat);
       if(used.has(makat))return; /* already in current kit */
       const freeSerials=freeSerialsByMakat[makat]||[];
-      if(freeSerials.length===0)return; /* no stock available */
+      /* v2.3.68: keep items even with 0 free stock — they appear in search but their "+ Add" button is auto-disabled (it.available===0 check at the button). Lets user discover makats that exist but have no free serials right now. */
       let liveTotal=0;try{liveTotal=getLiveCount(itemName,db);}catch(e){console.warn("[caught]",e);}const totalCount=Math.max(liveTotal,freeSerials.length);items.push({name:itemName,makat,available:freeSerials.length,total:totalCount,serialsPreview:freeSerials.slice(0,3)});
     });
     /* also include makats that exist in unitItems but not in armoryMaster (fallback) */
