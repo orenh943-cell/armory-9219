@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix2";
+const APP_VERSION = "2.3.68-hotfix3";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2257,24 +2257,34 @@ function KitAssignModal({soldier,db,setDb,auth,onClose}){
       const line=lines[i];
       if(!checked[i]){missing.push({makat:line.makat,qty:line.qty,serials:line.serials});skipped.push(line);continue;}
       if(line.type==="serial"){
+        /* v2.3.68-hotfix3: track UIDs used in THIS assignment to avoid double-use when falling back from stale __nsr__ refs */
+        const _usedUids=new Set();
         for(const s of line.serials){
-          const found=_kitFindFreeUnitItemBySerial(db,line.makat,s);
+          let found=_kitFindFreeUnitItemBySerial(db,line.makat,s);
+          /* v2.3.68-hotfix3: if __nsr__ ref is stale (UID now assigned to a different soldier or removed) — fall back to any currently-free item of same makat. Build-time can plant stale __nsr__ refs (hotfix1 allows building kits with assigned items); assign-time substitutes a real free one. Real serials don't fall back — exact match required for weapons. */
+          if(!found&&String(s).startsWith("__nsr__")){
+            const freeNow=_kitFindFreeQtyItems(db,line.makat,(line.serials||[]).length+5);
+            for(const f of freeNow){if(!_usedUids.has(f.uid)){found=f;break;}}
+          }
           if(!found){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;abortMsg=sDisp+" של מק\"ט "+line.makat+" כבר לא במלאי או משויך";break;}
-          // duplicate check
-          const dup=checkSerialDuplicate(db,line.name,s,{excludeSoldierKey:soldier.id+"||"+line.name,allowUnitItem:true});
+          _usedUids.add(found.uid);
+          /* v2.3.68-hotfix3: dup check by REAL serial of the found item (not the stale pseudo) */
+          const _realSerial=String(found.item.s||found.item.serial||"").trim()||s;
+          const dup=checkSerialDuplicate(db,line.name,_realSerial,{excludeSoldierKey:soldier.id+"||"+line.name,allowUnitItem:true});
           if(dup){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;abortMsg="כפילות: "+line.name+" "+sDisp+" ב-"+dup;break;}
           // determine target key
           const baseName=line.name;
           const existingKeys=Object.keys(newAssigned).filter(k=>cleanItemName(k)===baseName);
           let key=existingKeys.length===0?baseName:baseName+"__"+(existingKeys.length+1);
           while(newAssigned[key]!==undefined)key=baseName+"__"+(parseInt(key.split("__")[1]||"1")+1);
-          newAssigned[key]=s;
+          /* v2.3.68-hotfix3: store REAL serial (or 1 for no-serial items) — never the __nsr__ pseudo. Fixes basket showing "__nsr__<uid>" as serial value. */
+          newAssigned[key]=isSerial(found.item.s||found.item.serial)?String(found.item.s||found.item.serial):1;
           // assignmentMeta cabName
           const safeKey=cleanItemName(baseName).replace(/[.#$\[\]"]/g,"");
           if(found.item.cabName){newAssignmentMeta[soldier.id]={...(newAssignmentMeta[soldier.id]||{}),[safeKey]:{...((newAssignmentMeta[soldier.id]||{})[safeKey]||{}),cabName:found.item.cabName,fromUnit:"גדודי",kitId:selKitId}};}else{newAssignmentMeta[soldier.id]={...(newAssignmentMeta[soldier.id]||{}),[safeKey]:{...((newAssignmentMeta[soldier.id]||{})[safeKey]||{}),fromUnit:"גדודי",kitId:selKitId}};}
           /* v2.3.52: tag unitItem (do not delete) */
           newUnitItems[found.uid]={...found.item,assignedType:"soldier",assignedSoldierId:soldier.id};
-          transferred.push({uid:found.uid,name:line.name,serial:s});
+          transferred.push({uid:found.uid,name:line.name,serial:found.item.s||found.item.serial||null});
         }
         if(abortMsg)break;
       }else{
@@ -2365,17 +2375,30 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
       const line=lines[i];
       if(!checked[i]){stillMissing.push({makat:line.makat,qty:line.qty,serials:line.serials});continue;}
       if(line.type==="serial"){
+        /* v2.3.68-hotfix3: track claimed assignment keys to avoid double-return when multiple pseudo (__nsr__) refs match by name only */
+        const _claimedKeys=new Set();
         for(const s of line.serials){
-          // find the assigned key for this serial
-          const key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&String(asgn[k])===String(s));
+          const _sIsNsr=String(s).startsWith("__nsr__");
+          let key;
+          if(_sIsNsr){
+            /* pseudo refs: match any unclaimed assignment with this clean name (doAssign stores REAL serial or 1, not the pseudo) */
+            key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&!_claimedKeys.has(k));
+          }else{
+            /* real serial: strict match by name + serial value */
+            key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&String(asgn[k])===String(s)&&!_claimedKeys.has(k));
+          }
           if(!key){stillMissing.push({makat:line.makat,serial:s});continue;}
+          _claimedKeys.add(key);
           const safeKey=cleanItemName(line.name).replace(/[.#$\[\]"]/g,"");
           const cabName=meta?.[safeKey]?.cabName||null;
+          const _val=asgn[key];
           delete asgn[key];
-          // create back into unitItems
+          /* v2.3.68-hotfix3: derive real serial for unitItem reconstruction — for pseudo refs use the actual stored value (real serial or null if 1) */
+          const _isVal1=_val===1||_val===true;
+          const _realSer=_sIsNsr?(_isVal1?null:String(_val)):String(s);
           const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-          newUnitItems[uid]={n:line.name,name:line.name,s:String(s),serial:String(s),u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
-          returned.push({uid,name:line.name,serial:s});
+          newUnitItems[uid]={n:line.name,name:line.name,s:_realSer,serial:_realSer,u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+          returned.push({uid,name:line.name,serial:_realSer});
         }
       }else{
         // qty: find any keys with this base name (up to qty)
