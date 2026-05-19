@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix7";
+const APP_VERSION = "2.3.68-hotfix8";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1824,7 +1824,12 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
       return Object.entries(existingKit.serials).map(([makat,arr])=>({makat:String(makat),count:(arr||[]).length,serials:(arr||[]).map(s=>String(s))}));
     }
     if(duplicateSeed&&duplicateSeed.serials){
-      return Object.entries(duplicateSeed.serials).map(([makat,arr])=>({makat:String(makat),count:(arr||[]).length,serials:(arr||[]).map(()=>"")}));
+      /* v2.3.68-hotfix8: detect NSR makats (all original serials are __nsr__ pseudo) and preserve their structure — sets noSerial:true so render shows "כמות: N" instead of N empty serial inputs. Real-serial makats get empty strings for user to refill. */
+      return Object.entries(duplicateSeed.serials).map(([makat,arr])=>{
+        const _list=arr||[];
+        const _allPseudo=_list.length>0&&_list.every(s=>String(s||"").startsWith("__nsr__"));
+        return{makat:String(makat),count:_list.length,serials:_allPseudo?_list.map(s=>String(s)):_list.map(()=>""),noSerial:_allPseudo};
+      });
     }
     return [];
   });
