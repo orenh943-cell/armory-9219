@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix5";
+const APP_VERSION = "2.3.68-hotfix6";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2263,12 +2263,20 @@ function KitAssignModal({soldier,db,setDb,auth,onClose}){
         const _usedUids=new Set();
         for(const s of line.serials){
           let found=_kitFindFreeUnitItemBySerial(db,line.makat,s);
-          /* v2.3.68-hotfix3: if __nsr__ ref is stale (UID now assigned to a different soldier or removed) — fall back to any currently-free item of same makat. Build-time can plant stale __nsr__ refs (hotfix1 allows building kits with assigned items); assign-time substitutes a real free one. Real serials don't fall back — exact match required for weapons. */
-          if(!found&&String(s).startsWith("__nsr__")){
+          /* v2.3.68-hotfix6: unified fallback — for ANY serial (pseudo or real) that isn't found as a free unitItem, try to substitute with any free item of the same makat. Real serials may exist in db.serials/ALL_SERIALS catalog but not as free unitItem (e.g., previously assigned then reset). Assign-time picks a free substitute. Diagnostic distinguishes "doesn't exist" vs "all assigned" for clearer messaging. */
+          if(!found){
             const freeNow=_kitFindFreeQtyItems(db,line.makat,(line.serials||[]).length+5);
             for(const f of freeNow){if(!_usedUids.has(f.uid)){found=f;break;}}
           }
-          if(!found){const sDisp=String(s).startsWith("__nsr__")?"(פריט ללא צ)":"צ "+s;abortMsg=sDisp+" של מק\"ט "+line.makat+" כבר לא במלאי או משויך";break;}
+          if(!found){
+            const _sIsNsr=String(s).startsWith("__nsr__");
+            let _existsAnywhere=false;
+            if(!_sIsNsr){try{_existsAnywhere=getSerials(db).some(x=>String(x.serial||"").trim()===String(s).trim());}catch(_e){console.warn("[caught]",_e);}}
+            if(_sIsNsr){abortMsg="(פריט ללא צ) של מק\"ט "+line.makat+" — אין פריטים פנויים זמינים במלאי";}
+            else if(_existsAnywhere){abortMsg="צ "+s+" קיים במערכת אך כל הפריטים של מק\"ט "+line.makat+" משויכים — זכה פריט קודם";}
+            else{abortMsg="צ "+s+" לא קיים בDB תחת מק\"ט "+line.makat;}
+            break;
+          }
           _usedUids.add(found.uid);
           /* v2.3.68-hotfix3: dup check by REAL serial of the found item (not the stale pseudo) */
           const _realSerial=String(found.item.s||found.item.serial||"").trim()||s;
