@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix4";
+const APP_VERSION = "2.3.68-hotfix5";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2175,7 +2175,7 @@ function KitViewModal({kitId,db,setDb,soldiers,auth,onClose}){
         /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)"}},"חייל"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13}},assignee?.name||"—")),
         /*#__PURE__*/React.createElement("div",{style:{padding:10,background:"var(--color-bg-canvas)",borderRadius:8,border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)"}},"מיקום ארון"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13}},cab||"—"))
       ),
-      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"📋 פריטים בערכה (",(tpl.items.length+Object.keys(kit.serials||{}).length)," שורות):"),
+      /* v2.3.68-hotfix5: count only the kit's own serials (no template injection) */ /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:6}},"📋 פריטים בערכה (",Object.keys(kit.serials||{}).length," שורות):"),
       /*#__PURE__*/React.createElement("div",{style:{border:"1px solid var(--color-border-muted)",borderRadius:8,overflow:"hidden",marginBottom:14}},
         /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)"}},
           /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
@@ -2187,11 +2187,7 @@ function KitViewModal({kitId,db,setDb,soldiers,auth,onClose}){
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},_kitMakatName(mk,db)),
               /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace",color:"var(--color-accent-fg)",fontWeight:600}},(()=>{const list=(arr||[]).filter(Boolean);const hasReal=list.some(s=>!String(s).startsWith("__nsr__"));if(!hasReal&&list.length>0)return"כמות: "+list.length;return list.filter(s=>!String(s).startsWith("__nsr__")).join(" · ");})())
             );}),
-            tpl.items.map(it=>/*#__PURE__*/React.createElement("tr",{key:"q_"+it.makat,style:{borderBottom:"1px solid var(--color-border-muted)"}},
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px",fontFamily:"monospace"}},it.makat),
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},_kitMakatName(it.makat,db)),
-              /*#__PURE__*/React.createElement("td",{style:{padding:"5px 8px"}},it.qty+" יח׳")
-            ))
+            /* v2.3.68-hotfix5: removed tpl.items injection — kit shows ONLY its own serials, not global template's qty items */
           )
         )
       ),
@@ -2204,6 +2200,8 @@ function KitViewModal({kitId,db,setDb,soldiers,auth,onClose}){
         )
       ),
       isAdmin&&kit.status==="available"&&/*#__PURE__*/React.createElement("button",{onClick:()=>{const cab=window.prompt("מיקום ארון חדש לכל פריטי הערכה (השאר ריק לניקוי):",kit.cabName||"");if(cab===null)return;const trimmed=String(cab).trim();updateKitCabinet(kit,trimmed,db,setDb,auth);},style:{...S.btn("orange","md"),width:"100%",marginBottom:8}},"🗄️ עדכן מיקום ארון לכל הערכה"),
+      /* v2.3.68-hotfix5: emergency reset — force kit back to "available" + clear assignedTo. Works for ANY status (stuck kits may still have assignedTo set while showing "available"). Items in soldier's basket are NOT touched — admin must handle those separately via soldier profile. */
+      isAdmin&&/*#__PURE__*/React.createElement("button",{onClick:()=>{if(!window.confirm("🔄 איפוס ערכה ל-'במלאי':\n• ערכה תחזור לסטטוס 'זמינה'\n• הקישור לחייל ינוקה\n• היסטוריה תישמר + רישום 'איפוס_ידני'\n\n⚠️ אם החייל מחזיק עדיין פריטים מהערכה — הם נשארים בסל שלו. תצטרך לזכות אותם ידנית מפרופיל החייל.\n\nלהמשיך?"))return;const _resetKit={...kit,status:"available",assignedTo:null,assignedAt:null,missing:null,history:[...(kit.history||[]),{ts:Date.now(),action:"reset_by_admin",by:auth?.name||"",note:"איפוס ידני ע\"י אדמין (היה: "+kit.status+(kit.assignedTo?(" → "+(allSols.find(s=>s.id===kit.assignedTo)?.name||kit.assignedTo)):"")+")"}]};setDb(p=>({...p,kits:{...(p.kits||{}),[kit.kitId]:_resetKit}}));fbSet("db/kits/"+kit.kitId,_resetKit).catch(e=>console.warn("[fb-err]",e));try{logAction("איפוס_ערכה","ערכה "+(kit.name||kit.kitId)+" אופסה ידנית ע\"י אדמין",auth?.name||"מערכת");}catch(_e){console.warn("[caught]",_e);}onClose();},style:{...S.btn("purple","md"),width:"100%",marginBottom:8}},"🔄 איפוס ערכה ל-'במלאי' (לתקלות)"),
       isAdmin&&kit.status==="available"&&/*#__PURE__*/React.createElement("button",{onClick:()=>{if(!window.confirm("למחוק את הערכה? הפריטים נשארים במלאי הארמון."))return;fbDelete("db/kits/"+kit.kitId).catch(e=>console.warn("[fb-err]",e));setDb(p=>{const nk={...(p.kits||{})};delete nk[kit.kitId];return{...p,kits:nk};});logAction("מחיקת_ערכה","ערכה "+kit.name+" נמחקה",auth?.name||"מערכת");onClose();},style:{...S.btn("red","md"),width:"100%"}},"🗑️ מחק ערכה")
     )
   );
@@ -2239,7 +2237,8 @@ function KitAssignModal({soldier,db,setDb,auth,onClose}){
   const [selKitId,setSelKitId]=React.useState(availableKits[0]?.kitId||"");
   const selKit=db.kits?.[selKitId];
   // build 14 lines
-  const lines=React.useMemo(()=>{if(!selKit)return[];const ll=[];Object.entries(selKit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[selKitId,tpl,db.kits]);
+  /* v2.3.68-hotfix5: lines = only the kit's own serials (no global template injection — was causing phantom rows that couldn't be deleted) */
+  const lines=React.useMemo(()=>{if(!selKit)return[];const ll=[];Object.entries(selKit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});return ll;},[selKitId,db.kits]);
   const [checked,setChecked]=React.useState({});
   React.useEffect(()=>{const c={};lines.forEach((l,i)=>{c[i]=true;});setChecked(c);},[lines.length,selKitId]);
   const [working,setWorking]=React.useState(false);
@@ -2361,7 +2360,8 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
   const kit=db.kits?.[kitId];
   if(!kit)return null;
   const tpl=_kitGetTemplate(db);
-  const lines=React.useMemo(()=>{const ll=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});tpl.items.forEach(qi=>{ll.push({type:"qty",makat:qi.makat,name:_kitMakatName(qi.makat,db),qty:qi.qty});});return ll;},[tpl,kit]);
+  /* v2.3.68-hotfix5: lines = only the kit's own serials (no global template injection) */
+  const lines=React.useMemo(()=>{const ll=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{ll.push({type:"serial",makat:mk,name:_kitMakatName(mk,db),serials:arr||[]});});return ll;},[kit]);
   const [checked,setChecked]=React.useState(()=>{const c={};lines.forEach((l,i)=>{c[i]=true;});return c;});
   const [working,setWorking]=React.useState(false);
   const [err,setErr]=React.useState("");
