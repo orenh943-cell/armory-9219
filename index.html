@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix8";
+const APP_VERSION = "2.3.68-hotfix9";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1914,24 +1914,44 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
   },[allArmoryItems,makatSearch]);
   // serials available for a specific makat row, EXCLUDING serials already picked in OTHER rows of the same makat (no-op since each makat row holds its own)
   function getAvailableSerialsFor(makat,currentRowIdx,currentSerialIdx){
-    /* v2.3.68-hotfix2: union of ALL serial sources for this makat — unitItems (free) + getSerials() (includes assigned, db.serials master, ALL_SERIALS static). Build is independent of assignment, so user can pick any known serial. */
+    /* v2.3.68-hotfix9: comprehensive serial collection with smart filtering.
+       INCLUDES: (a) free unitItems, (b) unitItems for this makat (any assignment status), (c) assignments — INCLUDING short serials (getSerials's length>3 filter would miss "104"), (d) db.serials + ALL_SERIALS catalogs.
+       FILTER: hide serials held by a soldier with FULL signature (committed); KEEP serials held by soldiers with PARTIAL signature or no signature — admin needs to recover those stuck items. */
     const known=new Set(freeSerialsByMakat[makat]||[]);
     try{
       const _itemName=_kitMakatName(makat,db)||"";
       const _cleanName=cleanItemName(_itemName);
-      /* Add all unitItems serials with matching makat OR name (defensive — handles items missing makat field) */
+      /* Build owner map: serial -> soldier id (scan ALL assignments, no length filter) */
+      const _owner=new Map();
+      Object.entries(db.assignments||{}).forEach(([solId,items])=>{
+        Object.entries(items||{}).forEach(([name,val])=>{
+          if(cleanItemName(name)!==_cleanName)return;
+          if(!val||val===1||val===true)return;
+          const s=String(val).trim();
+          if(s)_owner.set(s,solId);
+        });
+      });
+      /* Filter: include serial if free OR held by soldier without full sig */
+      const _hasFullSig=solId=>{const sig=db.signatures?.[solId];if(!sig)return false;return !sig.partial;};
+      const _include=s=>{const o=_owner.get(s);if(!o)return true;return !_hasFullSig(o);};
+      /* Source A: unitItems matching makat OR clean name */
       Object.values(db.unitItems||{}).forEach(v=>{
         const _vserial=String(v.s||v.serial||"").trim();
         if(!_vserial)return;
         const _vmakat=String(v.makat||"");
         const _vname=cleanItemName(v.n||v.name||"");
-        if(_vmakat===makat||(_cleanName&&_vname===_cleanName))known.add(_vserial);
+        if(_vmakat!==makat&&(!_cleanName||_vname!==_cleanName))return;
+        if(_include(_vserial))known.add(_vserial);
       });
-      /* Add serials from getSerials() — covers db.serials master + ALL_SERIALS static + assignments */
-      getSerials(db).forEach(x=>{
-        if(cleanItemName(x.name||"")!==_cleanName)return;
-        const s=String(x.serial||"").trim();
-        if(s)known.add(s);
+      /* Source B: assignments — covers short serials excluded by getSerials's length>3 filter */
+      _owner.forEach((solId,s)=>{if(_include(s))known.add(s);});
+      /* Source C: catalog (db.serials + ALL_SERIALS) — direct scan, includes short serials */
+      const _catalog=[...(Array.isArray(db.serials)?db.serials:[]),...(Array.isArray(ALL_SERIALS)?ALL_SERIALS:[])];
+      _catalog.forEach(x=>{
+        if(cleanItemName(x?.name||"")!==_cleanName)return;
+        const s=String(x?.serial||"").trim();
+        if(!s)return;
+        if(_include(s))known.add(s);
       });
     }catch(e){console.warn("[kit-serials-collect]",e);}
     const all=Array.from(known).sort();
@@ -2045,8 +2065,24 @@ function KitCreateModal({db,setDb,auth,onClose,editKitId,duplicateSeed}){
           if(_vmakat===m||(_cleanName&&_vname===_cleanName)){_exists=true;break;}
         }
         if(!_exists){
-          /* fallback: check by item name in getSerials() — covers db.serials + ALL_SERIALS + assignments */
+          /* v2.3.68-hotfix9: fallback chain — _serialsCache uses getSerials() which filters length>3 (misses short serials like "104"). Add direct scans: catalog (db.serials + ALL_SERIALS) and assignments. */
           try{_exists=_serialsCache.some(x=>cleanItemName(x.name||"")===_cleanName&&String(x.serial||"").trim()===s);}catch(e){console.warn("[caught]",e);}
+          if(!_exists){
+            try{
+              const _cat=[...(Array.isArray(db.serials)?db.serials:[]),...(Array.isArray(ALL_SERIALS)?ALL_SERIALS:[])];
+              _exists=_cat.some(x=>cleanItemName(x?.name||"")===_cleanName&&String(x?.serial||"").trim()===s);
+            }catch(e){console.warn("[caught]",e);}
+          }
+          if(!_exists){
+            try{
+              outer:for(const items of Object.values(db.assignments||{})){
+                for(const[name,val]of Object.entries(items||{})){
+                  if(cleanItemName(name)!==_cleanName)continue;
+                  if(String(val).trim()===s){_exists=true;break outer;}
+                }
+              }
+            }catch(e){console.warn("[caught]",e);}
+          }
         }
         if(!_exists){setError("צ "+s+" לא נמצא במלאי הארמון תחת מק\"ט "+m);createInProgressRef.current=false;return;}
         if(_serialsInOtherKitsSet.has(m+"||"+s)){setError("צ "+s+" כבר משוייך לערכה אחרת");createInProgressRef.current=false;return;}
