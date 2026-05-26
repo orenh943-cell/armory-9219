@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.69-hotfix12";
+const APP_VERSION = "2.3.71-hotfix14";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -4692,14 +4692,16 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   const allEvents=[];
   Object.values(db.actLog||{}).forEach(dayMap=>{
     Object.entries(dayMap||{}).forEach(([k,e])=>{
-      if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי_חתימה"))return;
+      /* v2.3.70-hotfix13: added זיכוי (doReturn signoff), זיכוי_ערכה (doReturnKit), זיכוי_כלי (future). זיכוי_חתימה kept for legacy/forward compat. */
+      if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
       if(_eodNormHe(e.date)!==targetHeNorm)return;
       allEvents.push([k,e]);
     });
   });
   allEvents.sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));
   const fullEvents=allEvents.filter(([,e])=>{
-    if(e.type==="זיכוי_חתימה")return true;
+    /* v2.3.70-hotfix13: all credit types pass unconditionally; only ביטול_שיוך needs the "soldier empty now" check */
+    if(e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי")return true;
     const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);
     if(!m)return false;
     const sid=m[2];
@@ -4709,9 +4711,25 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   const page1Rows=fullEvents.map(([,e])=>{
     let name="",sid="",typeLabel="";
     if(e.type==="זיכוי_חתימה"){
-      typeLabel="🟢 זיכוי";
+      typeLabel="🟢 זיכוי חתימה";
       const m=e.details&&e.details.match(/של (.+?)\s*\((\d+)\)/);
       if(m){name=m[1];sid=m[2];}
+    }else if(e.type==="זיכוי"){
+      /* v2.3.70-hotfix13: doReturn main signoff. details: "זוכה {name} ({sid}) · ..." */
+      typeLabel="🟢 זיכוי כלים";
+      const m=e.details&&e.details.match(/זוכה (.+?)\s*\((\d+)\)/);
+      if(m){name=m[1];sid=m[2];}
+    }else if(e.type==="זיכוי_ערכה"){
+      /* v2.3.70-hotfix13: doReturnKit. details: "ערכה X הוחזרה מ{name} (N פריטים)" — no sid in details, lookup by name */
+      typeLabel="🟣 זיכוי ערכה";
+      const m=e.details&&e.details.match(/מ(.+?)\s*\(\d+\s*פריטים?\)/);
+      if(m){name=m[1].trim();const sol=allSols2.find(s=>s.name===name);if(sol)sid=sol.id;}
+    }else if(e.type==="זיכוי_כלי"){
+      /* v2.3.70-hotfix13: future writer placeholder — try standard "מ{name} ({sid})" then fallback */
+      typeLabel="🟡 זיכוי כלי";
+      const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);
+      if(m){name=m[1];sid=m[2];}
+      else{const m2=e.details&&e.details.match(/מ(.+?)\s*\(/);if(m2){name=m2[1].trim();const sol=allSols2.find(s=>s.name===name);if(sol)sid=sol.id;}}
     }else{
       typeLabel="🔴 ביטול שיוך מלא";
       const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);
@@ -4737,10 +4755,28 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   }).join("");
   const headStyleMatch=signedToday.length>0?(buildSignatureFormHtml(signedToday[0].sol,signedToday[0].sig,{}).match(/<style[\s\S]*?<\/style>/i)||[""])[0]:"";
   const noActivity=fullEvents.length===0&&signedToday.length===0;
+  /* v2.3.70-hotfix13: numeric summary block (פער b) — counts per type + unique soldiers */
+  const _eodCnt={bitulim:0,zkChatima:0,zkKli:0,zkErka:0,zkKliFuture:0};
+  const _eodUniqSids=new Set();
+  fullEvents.forEach(([,e])=>{
+    let sid=null;
+    if(e.type==="ביטול_שיוך"){_eodCnt.bitulim++;const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
+    else if(e.type==="זיכוי_חתימה"){_eodCnt.zkChatima++;const m=e.details&&e.details.match(/של (.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
+    else if(e.type==="זיכוי"){_eodCnt.zkKli++;const m=e.details&&e.details.match(/זוכה (.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
+    else if(e.type==="זיכוי_ערכה"){_eodCnt.zkErka++;const m=e.details&&e.details.match(/מ(.+?)\s*\(\d+\s*פריטים?\)/);if(m){const sol=allSols2.find(s=>s.name===m[1].trim());if(sol)sid=sol.id;}}
+    else if(e.type==="זיכוי_כלי"){_eodCnt.zkKliFuture++;const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
+    if(sid)_eodUniqSids.add(sid);
+  });
+  signedToday.forEach(({sol})=>_eodUniqSids.add(sol.id));
+  const summaryHtml=noActivity?"":"<div class='eod-summary' style='page-break-after:always'><div style='margin:0 0 12px;padding:14px;border:2px solid #000;background:#f4f6fa;border-radius:6px'><h2 style='margin:0 0 10px;text-align:center;font-size:16px;letter-spacing:1px'>📊 סיכום יום — "+escHtml(targetHeNorm)+"</h2><table style='width:100%;border-collapse:collapse;font-size:13px'><tr><td style='padding:6px 10px;border:1px solid #888'>סה\"כ חיילים (ייחודיים)</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+_eodUniqSids.size+"</td><td style='padding:6px 10px;border:1px solid #888'>חתימות חדשות היום</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+signedToday.length+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🔴 ביטולי שיוך מלא</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.bitulim+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי כלים</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+(_eodCnt.zkKli+_eodCnt.zkKliFuture)+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🟣 זיכויי ערכות</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkErka+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי חתימה</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkChatima+"</td></tr></table></div></div>";
+  /* v2.3.70-hotfix13: final approval block (פער c) — page-break-inside:avoid so signatures don't split */
+  const _eodAuthName=auth?.name||"";
+  const _eodPrintDate=new Date().toLocaleDateString("he-IL");
+  const adminSigHtml=noActivity?"":"<div class='eod-summary' style='page-break-before:always'><div style='margin-top:0;padding:18px 14px;border-top:3px double #000;page-break-inside:avoid'><h2 style='margin:0 0 14px;text-align:center;font-size:17px;letter-spacing:1px'>אישור סופי</h2><div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px'><div style='border:1px solid #000;padding:12px 14px;background:#fafafa'><div style='font-weight:700;font-size:12px;text-align:center;border-bottom:1px solid #888;padding-bottom:5px;margin-bottom:10px'>חתימת ממ\"מ</div><div style='font-size:11px;line-height:1.9'><div>שם: <span style='display:inline-block;border-bottom:1px solid #777;min-width:170px;min-height:18px'>&nbsp;</span></div><div>מ.א.: <span style='display:inline-block;border-bottom:1px solid #777;min-width:170px;min-height:18px'>&nbsp;</span></div><div>תאריך: "+escHtml(_eodPrintDate)+"</div><div style='margin-top:8px'>חתימה: <div style='border:1px solid #555;height:54px;margin-top:3px'></div></div></div></div><div style='border:1px solid #000;padding:12px 14px;background:#fafafa'><div style='font-weight:700;font-size:12px;text-align:center;border-bottom:1px solid #888;padding-bottom:5px;margin-bottom:10px'>חתימת מנהל ארמון</div><div style='font-size:11px;line-height:1.9'><div>שם: <span style='display:inline-block;border-bottom:1px solid #777;min-width:170px;min-height:18px;padding:0 4px'>"+escHtml(_eodAuthName)+"</span></div><div>מ.א.: <span style='display:inline-block;border-bottom:1px solid #777;min-width:170px;min-height:18px'>&nbsp;</span></div><div>תאריך: "+escHtml(_eodPrintDate)+"</div><div style='margin-top:8px'>חתימה: <div style='border:1px solid #555;height:54px;margin-top:3px'></div></div></div></div></div><div style='margin-top:18px;text-align:center;font-size:10px;color:#666'>דוח זה אינו מהווה תחליף לטופס 1008 הצבאי הרשמי. נוצר ע\"י מערכת ארמון 9219 בתאריך "+escHtml(_eodPrintDate)+"</div></div></div>";
   const baseStyles="<style>@media print{@page{size:A4;margin:10mm}}body{font-family:Arial,sans-serif;direction:rtl;margin:0}.eod-summary{padding:20mm 15mm;page-break-after:always}.eod-summary h1{font-size:22px;text-align:center;margin-bottom:14px}.eod-summary p.cnt{text-align:center;color:#666;font-size:13px;margin-bottom:14px}.eod-summary table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}.eod-summary th,.eod-summary td{border:1px solid #000;padding:6px 10px;text-align:right}.eod-summary th{background:#e8e8e8;font-weight:700}.eod-summary .empty{padding:24px;text-align:center;color:#888;font-style:italic;border:1px dashed #ccc;border-radius:6px}.eod-summary .info{padding:30px;text-align:center;color:#444;font-size:15px;border:2px dashed #888;border-radius:8px;background:#fafafa}.eod-no-print{margin:10px}.eod-no-print button{padding:8px 18px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:700;background:#0969da;color:#fff;border:none;border-radius:6px}@media print{.eod-no-print{display:none}}</style>";
   const body=noActivity
     ? "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס</button>&nbsp;<button onclick='window.close()'>סגור</button></div><div class='eod-summary'><h1>📋 דוח סוף יום — "+targetHeNorm+"</h1><div class='info'>אין פעילות לתאריך זה<br/><small style='color:#777;font-size:12px'>לא תועדו חתימות, ביטולי שיוך או זיכויים בתאריך "+targetHeNorm+"</small></div></div>"
-    : "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס הכל</button></div><div class='eod-summary'><h1>📋 ביטולי שיוך וזיכויים מלאים — "+targetHeNorm+"</h1><p class='cnt'>סהכ: "+fullEvents.length+" פעולות</p>"+(fullEvents.length>0?"<table><thead><tr><th>שעה</th><th>סוג</th><th>שם חייל</th><th>מ.א.</th><th>פלוגה</th><th>מחלקה</th></tr></thead><tbody>"+page1Rows+"</tbody></table>":"<div class='empty'>אין ביטולים מלאים בתאריך זה</div>")+"</div>"+(formsHtml||"<div class='eod-summary'><h1>אין חתימות חדשות בתאריך זה</h1></div>");
+    : "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס הכל</button></div><div class='eod-summary'><h1>📋 ביטולי שיוך וזיכויים מלאים — "+targetHeNorm+"</h1><p class='cnt'>סהכ: "+fullEvents.length+" פעולות</p>"+(fullEvents.length>0?"<table><thead><tr><th>שעה</th><th>סוג</th><th>שם חייל</th><th>מ.א.</th><th>פלוגה</th><th>מחלקה</th></tr></thead><tbody>"+page1Rows+"</tbody></table>":"<div class='empty'>אין ביטולים מלאים בתאריך זה</div>")+"</div>"+summaryHtml+(formsHtml||"<div class='eod-summary'><h1>אין חתימות חדשות בתאריך זה</h1></div>")+adminSigHtml;
   const fullPrintHtml="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'><title>הדפס סוף יום — "+targetHeNorm+"</title>"+headStyleMatch+baseStyles+"</head><body>"+body+"</body></html>";
   const win=window.open("","_blank");
   if(win){
@@ -4760,7 +4796,8 @@ function EndOfDayPickerModal({db,auth,onClose}){
     const map={};
     Object.values(db.actLog||{}).forEach(dayMap=>{
       Object.values(dayMap||{}).forEach(e=>{
-        if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי_חתימה"))return;
+        /* v2.3.70-hotfix13: same types as runEndOfDayPrint filter so archive history matches what the report includes */
+        if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
         const norm=_eodNormHe(e.date);
         if(!norm)return;
         if(!map[norm])map[norm]={date:norm,events:0,sigs:0};
@@ -5969,8 +6006,7 @@ useEffect(()=>{// === LAZY LOADING — defer heavy data ===
 let off1=()=>{};// טען מיד מ-IndexedDB cache (אם קיים) — מיידי
 loadHeavyFromCache(setDb);_decodeUrlEncodedKeysOnce(setDb,auth?.name||"system");setTimeout(()=>{try{_runRenameAndForbiddenCharsMigration(setDb,auth?.name||"system");}catch(e){console.warn("[rename-mig]",e);}},2500);const t_sig=setTimeout(()=>{off1=fbOn("db/signatures",sigs=>{const cleaned=cleanSigs(sigs);setDb(prev=>({...prev,signatures:cleaned}));// שמור ב-IndexedDB לטעינה מהירה הבאה
 idbSet("signatures",cleaned).catch(e=>console.warn("[fb-err]",e));});},200);const off2=fbOn("db/assignments",assignments=>{setDb(prev=>{const asgn=assignments||{};// Mark that Firebase has responded — from now on, empty = truly empty (after reset)
-const updated={...prev,assignments:asgn,_assignmentsLoaded:true};saveDbCache(updated);return updated;});});const off3=fbOn("db/customSoldiers",custom=>{setDb(prev=>{const updated={...prev,customSoldiers:custom||{}};saveDbCache(updated);return updated;});});const off4=fbOn("db/brokenItems",broken=>{setDb(prev=>{const items=broken||[];// Seed broken items from sheet if empty
-const seeded=items.length===0?INITIAL_BROKEN:items;if(items.length===0){fbSet("db/brokenItems",INITIAL_BROKEN).catch(e=>console.warn("[fb-err]",e));}const updated={...prev,brokenItems:seeded};saveDbCache(updated);return updated;});});const off5=fbOn("db/bulkGuarantors",guarantors=>{setDb(prev=>({...prev,bulkGuarantors:guarantors||{}}));});const off6=fbOn("db/userPerms",perms=>{setDb(prev=>({...prev,userPerms:perms||{}}));});const offPwd=fbOn("db/userPasswords",passwords=>{setDb(prev=>({...prev,userPasswords:passwords||{}}));});/* testCerts (22MB!) + testCertHistory — defer 2000ms (heavy, only needed in inspection tab) */
+const updated={...prev,assignments:asgn,_assignmentsLoaded:true};saveDbCache(updated);return updated;});});const off3=fbOn("db/customSoldiers",custom=>{setDb(prev=>{const updated={...prev,customSoldiers:custom||{}};saveDbCache(updated);return updated;});});/* v2.3.71-hotfix14: track seeded flag in db/_meta. Attached BEFORE off4 so the flag is loaded before the broken-items listener can decide whether to seed. */const offMeta=fbOn("db/_meta",meta=>{setDb(prev=>({...prev,_meta:meta||{},_metaLoaded:true}));});const off4=fbOn("db/brokenItems",broken=>{setDb(prev=>{const items=broken||[];/* v2.3.71-hotfix14: seed only once — never reseed after admin deletion. Existing-system migration: if items exist but flag missing, set flag so a future delete-all does not trigger reseed. */const alreadySeeded=prev?._meta?.brokenItemsSeeded===true;let seeded;if(items.length===0&&!alreadySeeded){seeded=INITIAL_BROKEN;fbSet("db/brokenItems",INITIAL_BROKEN).catch(e=>console.warn("[fb-err]",e));fbSet("db/_meta/brokenItemsSeeded",true).catch(e=>console.warn("[fb-err]",e));}else{seeded=items;if(items.length>0&&!alreadySeeded){fbSet("db/_meta/brokenItemsSeeded",true).catch(e=>console.warn("[fb-err]",e));}}const updated={...prev,brokenItems:seeded};saveDbCache(updated);return updated;});});const off5=fbOn("db/bulkGuarantors",guarantors=>{setDb(prev=>({...prev,bulkGuarantors:guarantors||{}}));});const off6=fbOn("db/userPerms",perms=>{setDb(prev=>({...prev,userPerms:perms||{}}));});const offPwd=fbOn("db/userPasswords",passwords=>{setDb(prev=>({...prev,userPasswords:passwords||{}}));});/* testCerts (22MB!) + testCertHistory — defer 2000ms (heavy, only needed in inspection tab) */
 let offTest=()=>{};const t_test=setTimeout(()=>{offTest=fbOn("db/testCerts",certs=>{const v=certs||{};setDb(prev=>({...prev,testCerts:v}));idbSet("testCerts",v).catch(e=>console.warn("[fb-err]",e));});},2000);let offTestHist=()=>{};const t_testHist=setTimeout(()=>{offTestHist=fbOn("db/testCertHistory",hist=>{if(hist){setDb(prev=>({...prev,testCertHistory:hist}));idbSet("testCertHistory",hist).catch(e=>console.warn("[fb-err]",e));}});},3000);const off7=fbOn("db/dynamicUsers",dynUsers=>{setDb(prev=>({...prev,dynamicUsers:dynUsers||{}}));});/* db/nameMakat listener */
 const offNameMakat=fbOn("db/nameMakat",nm=>{if(nm)setDb(prev=>({...prev,nameMakat:nm}));});// db/serials listener — replaces ALL_SERIALS_DATA
 const offSerials=fbOn("db/serials",serials=>{if(serials){// Convert object to array
@@ -6015,7 +6051,7 @@ let off12=()=>{};const t_login=setTimeout(()=>{off12=fbOn("db/loginLog",log=>{co
 /* v2.3.61: actLog scoped to last N days for performance (DB ~1.5MB → ~100KB). Default 30. UI calls window._loadActLogRange(days) to widen. days=0 means all-time. */
 let off13=()=>{};let _alLastRef=null;let _alLastCb=null;function _attachActLog(days){if(_alLastRef&&_alLastCb){try{_alLastRef.off("value",_alLastCb);}catch(_e){console.warn("[caught]",_e);}}const cb=snap=>{const v=snap.val()||{};setDb(prev=>({...prev,actLog:v,_actLogRangeDays:days}));idbSet("actLog",v).catch(e=>console.warn("[fb-err]",e));};let ref;if(days&&days>0){const fromKey=new Date(Date.now()-days*MS_PER_DAY).toISOString().split("T")[0];ref=rtdb.ref("db/actLog").orderByKey().startAt(fromKey);}else{ref=rtdb.ref("db/actLog");}ref.on("value",cb);_alLastRef=ref;_alLastCb=cb;off13=()=>{try{ref.off("value",cb);}catch(_e){console.warn("[caught]",_e);}};}window._loadActLogRange=_attachActLog;const t_log=setTimeout(()=>{if(!_alLastRef)_attachActLog(30);},2500);const off14=fbOn("db/inspections",data=>{setDb(prev=>({...prev,inspections:data||{}}));});/* v2.3.32 CRITICAL FIX: previous code wrote inspectionFamilies data into inspections, wiping all weapon-exam history on every page load. Replaced with a clean listener that only touches inspectionFamilies. */const off15=fbOn("db/inspectionFamilies",data=>{setDb(prev=>({...prev,inspectionFamilies:data||null}));});return()=>{// Clear all pending timers
 clearTimeout(t_sig);clearTimeout(t_test);clearTimeout(t_testHist);clearTimeout(t_ef);clearTimeout(t_log);clearTimeout(t_sigh);clearTimeout(t_login);// Detach listeners (some may not be attached yet, but ()=>{} is safe)
-off1();off2();off3();off4();off5();off6();off7();off8();off9();off10();off11();off11b();off12();off13();off14();off15();offPwd();offTest();if(offSigHist)offSigHist();if(offTestHist)offTestHist();if(offNameMakat)offNameMakat();if(offSerials)offSerials();if(offDeleted)offDeleted();if(offSoldiers)offSoldiers();if(offArmoryMaster)offArmoryMaster();if(offCabNames)offCabNames();if(offAssignmentMeta)offAssignmentMeta();if(offVisutReq)offVisutReq();if(offVisutUsers)offVisutUsers();if(offDailyNotes)offDailyNotes();if(offWaSent)offWaSent();if(offDailyForms)offDailyForms();if(offSigs)offSigs();if(offKits)offKits();if(offKitTpl)offKitTpl();};},[]);React.useEffect(()=>{if(!db.kits||!db.unitItems)return;const tpl=_kitGetTemplate(db);Object.entries(db.kits).forEach(([kitId,kit])=>{if(kit.status!=="available")return;const serialItems=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{(arr||[]).forEach(s=>{const f=_kitFindFreeUnitItemBySerial(db,mk,s);if(f)serialItems.push(f);});});if(serialItems.length===0)return;const cabs=Array.from(new Set(serialItems.map(f=>f.item.cabName||"")));if(cabs.length===1){const newCab=cabs[0];if((kit.cabName||"")!==newCab){fbSet("db/kits/"+kitId+"/cabName",newCab||"").catch(e=>console.warn("[fb-err]",e));}}else{const newCab=cabs.find(c=>c!==(kit.cabName||""));if(newCab!==undefined&&newCab!==null){const fullKit={...kit,kitId};updateKitCabinet(fullKit,newCab,db,setDb,{name:"system_auto"});}}});},[db.unitItems,db.kits]);React.useEffect(()=>{try{_runBarrelAutoLink(db,setDb,auth?.name||"");}catch(e){console.warn("[barrel-auto]",e);}},[db.assignments,db.unitItems]);const[search,setSearch]=useState("");const[filterUnit,setFilterUnit]=useState("הכל");const[sigSortDir,setSigSortDir]=useState("desc");/* desc=מוכן ביותר קודם */
+off1();off2();off3();off4();offMeta();off5();off6();off7();off8();off9();off10();off11();off11b();off12();off13();off14();off15();offPwd();offTest();if(offSigHist)offSigHist();if(offTestHist)offTestHist();if(offNameMakat)offNameMakat();if(offSerials)offSerials();if(offDeleted)offDeleted();if(offSoldiers)offSoldiers();if(offArmoryMaster)offArmoryMaster();if(offCabNames)offCabNames();if(offAssignmentMeta)offAssignmentMeta();if(offVisutReq)offVisutReq();if(offVisutUsers)offVisutUsers();if(offDailyNotes)offDailyNotes();if(offWaSent)offWaSent();if(offDailyForms)offDailyForms();if(offSigs)offSigs();if(offKits)offKits();if(offKitTpl)offKitTpl();};},[]);React.useEffect(()=>{if(!db.kits||!db.unitItems)return;const tpl=_kitGetTemplate(db);Object.entries(db.kits).forEach(([kitId,kit])=>{if(kit.status!=="available")return;const serialItems=[];Object.entries(kit.serials||{}).forEach(([mk,arr])=>{(arr||[]).forEach(s=>{const f=_kitFindFreeUnitItemBySerial(db,mk,s);if(f)serialItems.push(f);});});if(serialItems.length===0)return;const cabs=Array.from(new Set(serialItems.map(f=>f.item.cabName||"")));if(cabs.length===1){const newCab=cabs[0];if((kit.cabName||"")!==newCab){fbSet("db/kits/"+kitId+"/cabName",newCab||"").catch(e=>console.warn("[fb-err]",e));}}else{const newCab=cabs.find(c=>c!==(kit.cabName||""));if(newCab!==undefined&&newCab!==null){const fullKit={...kit,kitId};updateKitCabinet(fullKit,newCab,db,setDb,{name:"system_auto"});}}});},[db.unitItems,db.kits]);React.useEffect(()=>{try{_runBarrelAutoLink(db,setDb,auth?.name||"");}catch(e){console.warn("[barrel-auto]",e);}},[db.assignments,db.unitItems]);const[search,setSearch]=useState("");const[filterUnit,setFilterUnit]=useState("הכל");const[sigSortDir,setSigSortDir]=useState("desc");/* desc=מוכן ביותר קודם */
 const[soldierSortDir,setSoldierSortDir]=useState("none");// none=ללא מיון, desc=מוכן קודם
 const[filterSquad,setFilterSquad]=useState("הכל");const[itemSearch,setItemSearch]=useState("");const[selSoldier,setSelSoldier]=useState(null);const[signInPersonSoldier,setSignInPersonSoldier]=useState(null);const[resetPass,setResetPass]=useState("");const[resetUnlocked,setResetUnlocked]=useState(false);const[dailyType,setDailyType]=useState(null);const[histFilter,setHistFilter]=useState("הכל");const[bulkModal,setBulkModal]=useState(false);const[bulkExitModal,setBulkExitModal]=useState(false);const[bulkSendModal,setBulkSendModal]=useState(false);const[mobileMenu,setMobileMenu]=useState(false);const[showProfile,setShowProfile]=useState(false);const[addModal,setAddModal]=useState(false);const units=useMemo(()=>["הכל",...[...new Set(getSoldiers(db).map(s=>s.unit).filter(Boolean))].sort()],[]);const soldiers=useMemo(()=>{const assignments=db.assignments||{};const signatures=db.signatures||{};const customSoldiers=db.customSoldiers||{};const custom=Object.values(customSoldiers);/* אם Firebase לא נטען עדיין — נחזיר RAW_SOLDIERS + customSoldiers */
 // אם נטען — נחזיר את הכל מ-db.soldiers
