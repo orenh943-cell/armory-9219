@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.68-hotfix11";
+const APP_VERSION = "2.3.69-hotfix12";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2462,9 +2462,18 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
           /* v2.3.68-hotfix3: derive real serial for unitItem reconstruction — for pseudo refs use the actual stored value (real serial or null if 1) */
           const _isVal1=_val===1||_val===true;
           const _realSer=_sIsNsr?(_isVal1?null:String(_val)):String(s);
-          const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-          newUnitItems[uid]={n:line.name,name:line.name,s:_realSer,serial:_realSer,u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
-          returned.push({uid,name:line.name,serial:_realSer});
+          /* v2.3.69-hotfix12: dedup-by-tag (mirror of doReturn main v2.3.53-hotfix1). Reuse existing soldier-tagged unitItem instead of creating phantom ret_ uid. cabName preserved (חוק #7). */
+          const _nmKitS=cleanItemName(line.name);
+          const _srlKitS=_realSer?String(_realSer):null;
+          const _existingUidKitS=Object.keys(newUnitItems).find(k=>{const v=newUnitItems[k];if(!v)return false;if(cleanItemName(v.n||v.name||"")!==_nmKitS)return false;if(_srlKitS){return String(v.s||v.serial||"")===_srlKitS;}return v.assignedSoldierId===soldier.id;});
+          if(_existingUidKitS){
+            newUnitItems[_existingUidKitS]={...newUnitItems[_existingUidKitS],assignedType:"unit",assignedSoldierId:null,assignedSoldierName:null,t:"unit",si:null,sn:null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+            returned.push({uid:_existingUidKitS,name:line.name,serial:_realSer});
+          }else{
+            const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+            newUnitItems[uid]={n:line.name,name:line.name,s:_realSer,serial:_realSer,u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+            returned.push({uid,name:line.name,serial:_realSer});
+          }
         }
       }else{
         // qty: find any keys with this base name (up to qty)
@@ -2475,12 +2484,35 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
           const safeKey=cleanItemName(line.name).replace(/[.#$\[\]"]/g,"");
           const cabName=meta?.[safeKey]?.cabName||null;
           delete asgn[key];
-          const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
           const isVal1=val===1||val===true;
-          newUnitItems[uid]={n:line.name,name:line.name,s:isVal1?null:String(val),serial:isVal1?null:String(val),u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
-          returned.push({uid,name:line.name,serial:isVal1?null:val});
+          const _realSerQ=isVal1?null:String(val);
+          /* v2.3.69-hotfix12: dedup-by-tag (mirror of doReturn main v2.3.53-hotfix1). Reuse existing soldier-tagged unitItem instead of creating phantom ret_ uid. cabName preserved (חוק #7). */
+          const _nmKitQ=cleanItemName(line.name);
+          const _srlKitQ=_realSerQ?String(_realSerQ):null;
+          const _existingUidKitQ=Object.keys(newUnitItems).find(k=>{const v=newUnitItems[k];if(!v)return false;if(cleanItemName(v.n||v.name||"")!==_nmKitQ)return false;if(_srlKitQ){return String(v.s||v.serial||"")===_srlKitQ;}return v.assignedSoldierId===soldier.id;});
+          if(_existingUidKitQ){
+            newUnitItems[_existingUidKitQ]={...newUnitItems[_existingUidKitQ],assignedType:"unit",assignedSoldierId:null,assignedSoldierName:null,t:"unit",si:null,sn:null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+            returned.push({uid:_existingUidKitQ,name:line.name,serial:_realSerQ});
+          }else{
+            const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+            newUnitItems[uid]={n:line.name,name:line.name,s:_realSerQ,serial:_realSerQ,u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:line.makat,cabName:cabName||null,returnedFrom:soldier.name,returnedAt:new Date().toLocaleDateString("he-IL")};
+            returned.push({uid,name:line.name,serial:isVal1?null:val});
+          }
         });
       }
+    }
+    /* v2.3.69-hotfix12: residual cleanup (mirror of doReturn main v2.3.53-hotfix2). Untag any unitItem still tagged to this soldier for the kit's items that did not pass through the dedup paths above. NEVER touch cabName (חוק #7). */
+    {
+      const _kitNames=new Set();
+      lines.forEach(line=>{if(line&&line.name)_kitNames.add(cleanItemName(line.name));});
+      Object.entries(newUnitItems).forEach(([uid,v])=>{
+        if(!v)return;
+        if(v.assignedSoldierId!==soldier.id)return;
+        const itemName=cleanItemName(v.n||v.name||"");
+        if(!_kitNames.has(itemName))return;
+        newUnitItems[uid]={...v,assignedSoldierId:null,assignedSoldierName:null,assignedType:"unit",t:"unit",si:null,sn:null};
+        if(!returned.some(r=>r.uid===uid))returned.push({uid,name:v.n||v.name||itemName,serial:v.s||v.serial||null});
+      });
     }
     // update kit status
     let newStatus,newAssignedTo,newMissing;
