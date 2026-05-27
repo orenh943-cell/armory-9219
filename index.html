@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.79-hotfix22";
+const APP_VERSION = "2.3.80-hotfix23";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3140,16 +3140,18 @@ function buildGeFormPayload(db,unitName,sentToSol,createdBy,opts){
   const allSols=getSoldiers(db);
   const signedIds=new Set(Object.keys(db.signatures||{}));
   Object.values(db.bulkGuarantors||{}).forEach(g=>{Object.keys(g.soldiers||{}).forEach(id=>signedIds.add(id));});
-  /* v2.3.78-hotfix21 + v2.3.79-hotfix22: "גדודי" (NOT battalion) is conceptually the armory itself. SOURCE OF TRUTH for "signed/in-use" is db.assignments — NOT unitItem.assignedType (the two drift apart: a unitItem can be tagged but the assignment removed, or vice-versa). Build a Set of cleanName|serial from ALL assignments; treat a unitItem as "in armory" only if its (cleanName|serial) is NOT in that Set. Ignore non-serial assignment values (counts/quantities) via isSerial. NOTE: spec said "cleanItemName(it.n)+'|'+it.u" but v.u is the platoon field — the right comparison key is name|serial (matches the Set built from assignment-values which ARE serials). Each item carries cabName + assignedUnit so the receiver knows where to find it. */
+  /* v2.3.78-hotfix21 + v2.3.79-hotfix22 + v2.3.80-hotfix23: "גדודי" (NOT battalion) is conceptually the armory itself. SOURCE OF TRUTH for "signed-out-of-armory" = (assignment exists) AND (item is covered by an actual signature). hotfix22 used assignments-only (caused partial-signature items like מאירם's מיקרון to be falsely excluded); hotfix23 gates each assignment through _geIsItemCoveredBySignature — the same helper _geCollectAllUnsignedItems uses for the per-unit/battalion flow. Covered = (full sig) OR (partial sig with item in sig.items) OR (bulkGuarantor signed for soldier). NOTE: v.u is the platoon field, NOT serial — comparison key is cleanName|serial (matches Set built from assignment-values which ARE serials). */
   if(unitName==="גדודי"&&!isBattalionFull){
     const signedSet=new Set();
-    Object.values(db.assignments||{}).forEach(asgn=>{
+    Object.entries(db.assignments||{}).forEach(([sid,asgn])=>{
       if(!asgn)return;
       Object.entries(asgn).forEach(([k,v])=>{
         if(v==null||v===true||v===1)return;
         const sv=String(v).trim();
         if(!sv)return;
         try{if(typeof isSerial==="function"&&!isSerial(sv))return;}catch(_e){}
+        /* v2.3.80-hotfix23: "signed-out-of-armory" requires assignment + actual signature coverage (handles partial sigs + bulkGuarantors via the canonical helper) */
+        try{if(typeof _geIsItemCoveredBySignature==="function"&&!_geIsItemCoveredBySignature(db,sid,k))return;}catch(_e){return;}
         const cn=(typeof cleanItemName==="function"?cleanItemName(k):String(k).trim());
         if(!cn)return;
         signedSet.add(cn+"|"+sv);
@@ -3170,7 +3172,7 @@ function buildGeFormPayload(db,unitName,sentToSol,createdBy,opts){
       gadudiItems.push({key:"gadudi#"+uid,name:rawN,serial:String(s),unitItemKey:uid,cabName:v.cabName||"",assignedUnit:v.u||v.unit||""});
     });
     const soldiersOut=gadudiItems.length>0?[{id:"_gadudi",name:"🏛️ פריטי ארמון גדודי (לא חתום)",unit:"גדודי",items:gadudiItems,isArmoryGroup:true,armoryCategory:"gadudi"}]:[];
-    try{console.log("[GreenEyes גדודי branch v2.3.79]",{totalGadudiItems:gadudiItems.length,scannedUnitItems:Object.keys(db.unitItems||{}).length,signedFromAssignments:signedSet.size});}catch(_){}
+    try{console.log("[GreenEyes גדודי branch v2.3.80]",{totalGadudiItems:gadudiItems.length,scannedUnitItems:Object.keys(db.unitItems||{}).length,signedAndCovered:signedSet.size});}catch(_){}
     return{unitName,isBattalionFull:false,includesArmory:false,createdAt:Date.now(),createdBy:createdBy||null,sentToSoldierId:sentToSol?.id||null,sentToName:sentToSol?.name||null,sentToPhone:sentToSol?.phone||null,soldiers:soldiersOut,items:{},personal:{},signature:null,submittedAt:null};
   }
   // Battalion: include EVERY soldier who has assignments (not just signed) — this fixes the "empty form" bug
