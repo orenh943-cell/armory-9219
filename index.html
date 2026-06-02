@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.89-hotfix31";
+const APP_VERSION = "2.3.90";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -2492,13 +2492,20 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
   const [checked,setChecked]=React.useState(()=>{const c={};lines.forEach((l,i)=>{c[i]=true;});return c;});
   const [working,setWorking]=React.useState(false);
   const [err,setErr]=React.useState("");
-  function doReturnKit(){
+  /* v2.3.90-hotfix32: is the soldier signed on any item of THIS kit? (gates the "זיכוי ערכה" button which clears the signature) */
+  const _signedOnKit=React.useMemo(()=>{const _a=db.assignments?.[soldier.id]||{};const _m=db.assignmentMeta?.[soldier.id]||{};const _sf=k=>cleanItemName(k).replace(/[.#$\[\]"]/g,"");const _tagged=Object.keys(_a).filter(k=>_m[_sf(k)]?.kitId===kitId);if(_tagged.length>0)return _tagged.some(k=>_isItemSignedFor(db,soldier.id,k));const _kn=new Set(lines.map(l=>cleanItemName(l.name)));return Object.keys(_a).some(k=>_kn.has(cleanItemName(k))&&_isItemSignedFor(db,soldier.id,k));},[db.assignments,db.assignmentMeta,db.signatures,kitId,lines,soldier.id]);
+  function doReturnKit(opts){
+    const clearSignature=!!(opts&&opts.clearSignature);
     setErr("");
     setWorking(true);
     const asgn={...(db.assignments?.[soldier.id]||{})};
     const newUnitItems={...(db.unitItems||{})};
     const meta={...(db.assignmentMeta?.[soldier.id]||{})};
     const newAssignmentMeta={...(db.assignmentMeta||{})};
+    /* v2.3.90-hotfix32: identify kit items by assignmentMeta.kitId (robust to hotfix6 serial substitution + duplicate-named items). Legacy kits without kitId tags fall back to name/serial matching. */
+    const _safeOf=k=>cleanItemName(k).replace(/[.#$\[\]"]/g,"");
+    const _useKitId=Object.keys(asgn).some(k=>meta[_safeOf(k)]?.kitId===kitId);
+    const _removedSafeKeys=new Set();
     const returned=[];
     const stillMissing=[];
     for(let i=0;i<lines.length;i++){
@@ -2510,11 +2517,14 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
         for(const s of line.serials){
           const _sIsNsr=String(s).startsWith("__nsr__");
           let key;
-          if(_sIsNsr){
-            /* pseudo refs: match any unclaimed assignment with this clean name (doAssign stores REAL serial or 1, not the pseudo) */
+          if(_useKitId){
+            /* v2.3.90-hotfix32: kit-tagged identification — match by name + kitId, ignore the stored serial value (fixes residue when hotfix6 substituted a different serial, or when duplicate-named items exist) */
+            key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&meta[_safeOf(k)]?.kitId===kitId&&!_claimedKeys.has(k));
+          }else if(_sIsNsr){
+            /* legacy: pseudo refs match any unclaimed assignment with this clean name (doAssign stores REAL serial or 1, not the pseudo) */
             key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&!_claimedKeys.has(k));
           }else{
-            /* real serial: strict match by name + serial value */
+            /* legacy: real serial strict match by name + serial value */
             key=Object.keys(asgn).find(k=>cleanItemName(k)===line.name&&String(asgn[k])===String(s)&&!_claimedKeys.has(k));
           }
           if(!key){stillMissing.push({makat:line.makat,serial:s});continue;}
@@ -2523,9 +2533,10 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
           const cabName=meta?.[safeKey]?.cabName||null;
           const _val=asgn[key];
           delete asgn[key];
-          /* v2.3.68-hotfix3: derive real serial for unitItem reconstruction — for pseudo refs use the actual stored value (real serial or null if 1) */
+          _removedSafeKeys.add(safeKey);
+          /* v2.3.90-hotfix32: derive real serial from the ACTUAL stored value (handles kitId path where stored serial != kit-listed serial; identical to legacy when matched by strict serial) */
           const _isVal1=_val===1||_val===true;
-          const _realSer=_sIsNsr?(_isVal1?null:String(_val)):String(s);
+          const _realSer=_isVal1?null:String(_val);
           /* v2.3.69-hotfix12: dedup-by-tag (mirror of doReturn main v2.3.53-hotfix1). Reuse existing soldier-tagged unitItem instead of creating phantom ret_ uid. cabName preserved (חוק #7). */
           const _nmKitS=cleanItemName(line.name);
           const _srlKitS=_realSer?String(_realSer):null;
@@ -2548,6 +2559,7 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
           const safeKey=cleanItemName(line.name).replace(/[.#$\[\]"]/g,"");
           const cabName=meta?.[safeKey]?.cabName||null;
           delete asgn[key];
+          _removedSafeKeys.add(safeKey);
           const isVal1=val===1||val===true;
           const _realSerQ=isVal1?null:String(val);
           /* v2.3.69-hotfix12: dedup-by-tag (mirror of doReturn main v2.3.53-hotfix1). Reuse existing soldier-tagged unitItem instead of creating phantom ret_ uid. cabName preserved (חוק #7). */
@@ -2583,11 +2595,17 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
     if(stillMissing.length===0){newStatus="available";newAssignedTo=null;newMissing=null;}
     else{newStatus=kit.status==="partial"?"partial":"partial";newAssignedTo=soldier.id;newMissing=stillMissing;}
     const updatedKit={...kit,kitId,status:newStatus,assignedTo:newAssignedTo,missing:newMissing,history:[...(kit.history||[]),{ts:Date.now(),action:stillMissing.length===0?"returned_full":"returned_partial",by:auth?.name||"",note:"מ-"+soldier.name+" ("+returned.length+" פריטים"+(stillMissing.length>0?", חסרים "+stillMissing.length:"")+")"}]};
-    setDb(p=>({...p,assignments:{...(p.assignments||{}),[soldier.id]:asgn},unitItems:newUnitItems,kits:{...(p.kits||{}),[kitId]:updatedKit}}));
+    /* v2.3.90-hotfix32: clean orphan assignmentMeta for removed kit items — only if no remaining assignment key shares the safeKey (meta is keyed by clean name, shared across __N instances). NEVER touches sigHistory/signatures. */
+    let _metaChanged=false;const _newMetaSoldier={...meta};
+    _removedSafeKeys.forEach(sk=>{if(!sk)return;const _stillUsed=Object.keys(asgn).some(k=>_safeOf(k)===sk);if(!_stillUsed&&_newMetaSoldier[sk]!==undefined){delete _newMetaSoldier[sk];_metaChanged=true;}});
+    setDb(p=>({...p,assignments:{...(p.assignments||{}),[soldier.id]:asgn},unitItems:newUnitItems,kits:{...(p.kits||{}),[kitId]:updatedKit},...(_metaChanged?{assignmentMeta:{...(p.assignmentMeta||{}),[soldier.id]:_newMetaSoldier}}:{})}));
     fbSet("db/assignments/"+soldier.id,sanitizeForFirebase(asgn)).catch(e=>console.warn("[fb-err]",e));
     returned.forEach(r=>{fbSet("db/unitItems/"+r.uid,sanitizeForFirebase(newUnitItems[r.uid])).catch(e=>console.warn("[fb-err]",e));});
     fbSet("db/kits/"+kitId,sanitizeForFirebase(updatedKit)).catch(e=>console.warn("[fb-err]",e));
-    logAction("זיכוי_ערכה","ערכה "+kit.name+" הוחזרה מ"+soldier.name+" ("+returned.length+" פריטים)",auth?.name||"מערכת");if(invalidateSignatureOnEquipmentChange(soldier.id,"זיכוי ערכה "+kit.name,db,setDb,auth?.name||"")){setTimeout(()=>alert("⚠️ חתימת "+soldier.name+" בוטלה עקב זיכוי הערכה. נדרשת חתימה חדשה."),100);}
+    if(_metaChanged)fbSet("db/assignmentMeta/"+soldier.id,sanitizeForFirebase(_newMetaSoldier)).catch(e=>console.warn("[fb-err]",e));
+    /* v2.3.90-hotfix32: button A (זיכוי) clears signature; button B (ביטול שיוך) keeps it — same actLog type "זיכוי_ערכה" so End-of-Day report (passes unconditionally) still picks both up */
+    logAction("זיכוי_ערכה","ערכה "+kit.name+" הוחזרה מ"+soldier.name+" ("+returned.length+" פריטים)"+(clearSignature?"":" · ביטול שיוך בלבד — החתימה נשמרה"),auth?.name||"מערכת");
+    if(clearSignature&&invalidateSignatureOnEquipmentChange(soldier.id,"זיכוי ערכה "+kit.name,db,setDb,auth?.name||"")){setTimeout(()=>alert("⚠️ חתימת "+soldier.name+" בוטלה עקב זיכוי הערכה. נדרשת חתימה חדשה."),100);}
     setWorking(false);
     onClose();
   }
@@ -2604,9 +2622,11 @@ function KitReturnModal({soldier,kitId,db,setDb,auth,onClose}){
         ))
       ),
       err&&/*#__PURE__*/React.createElement("div",{style:{padding:8,background:"var(--color-danger-bg)",color:"var(--color-danger-fg)",borderRadius:6,marginBottom:10,fontSize:"var(--text-sm)"}},"⚠️ "+err),
-      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},
-        /*#__PURE__*/React.createElement("button",{onClick:doReturnKit,disabled:working,style:{...S.btn("orange","md"),flex:1}},working?"מזכה...":"↩️ זכה מסומנים"),
-        /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("neutral","md"),flex:1}},"❌ ביטול")
+      _signedOnKit&&/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:8,lineHeight:1.6}},"↩️ זיכוי ערכה = מוריד את הערכה ומאפס את חתימת החייל (נדרשת חתימה מחדש). 🔄 ביטול שיוך = מוריד את הערכה בלבד; החתימה על שאר הציוד נשמרת."),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+        _signedOnKit&&/*#__PURE__*/React.createElement("button",{onClick:()=>doReturnKit({clearSignature:true}),disabled:working,style:{...S.btn("orange","md"),width:"100%"}},working?"מעבד...":"↩️ זיכוי ערכה"),
+        /*#__PURE__*/React.createElement("button",{onClick:()=>doReturnKit({clearSignature:false}),disabled:working,style:{...S.btn("blue","md"),width:"100%"}},working?"מעבד...":"🔄 ביטול שיוך ערכה"),
+        /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("neutral","md"),width:"100%"}},"❌ ביטול")
       )
     )
   );
