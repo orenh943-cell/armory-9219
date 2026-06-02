@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.88-hotfix30";
+const APP_VERSION = "2.3.89-hotfix31";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1171,6 +1171,70 @@ function PartialSignersList({db,soldiers,auth}){
 }
 // === END PartialSignersList ===
 
+/* v2.3.89-hotfix31: דוח "חתום על נשק (M4/קלע סער) ללא כוונה" — קריאה בלבד, אפס fbSet.
+   משתמש ב-_isItemSignedFor (top-level helper), cleanItemName ו-getSoldiers הקיימים. לא נוגע בהם. */
+function WeaponNoScopeList({db,soldiers,auth}){
+  const allSols=getSoldiers(db);
+  const rows=React.useMemo(()=>{
+    const PRIMARY=["M4","קלע סער"];
+    /* זיהוי כוונה לפי keyword contains על cleanItemName (לא string מדויק — תופס וריאציות כתיב + סיומות __N/סידוריים).
+       הערה: הפריט במערכת הוא "מפרו מור" (מ' בהתחלה), לכן תופסים גם "מפרו" וגם "פמרו" כדי לא לפספס. */
+    const isScope=(nm)=>{const n=nm||"";return n.includes("מפרו")||n.includes("פמרו")||n.includes("M5")||n.includes("M21")||n.includes("טריגיקון");};
+    const out=[];
+    Object.entries(db.signatures||{}).forEach(([sid,sig])=>{
+      if(!sig)return;
+      const sol=allSols.find(s=>s.id===sid);
+      if(!sol)return;
+      const asgn=db.assignments?.[sid]||{};
+      const keys=Object.keys(asgn);
+      const weaponKeys=keys.filter(k=>PRIMARY.includes(cleanItemName(k)));
+      const signedWeapons=weaponKeys.filter(k=>_isItemSignedFor(db,sid,k));
+      if(signedWeapons.length===0)return; /* לא חתום על M4/קלע סער — לא רלוונטי */
+      const scopeKeys=keys.filter(k=>isScope(cleanItemName(k)));
+      const signedScope=scopeKeys.some(k=>_isItemSignedFor(db,sid,k));
+      if(signedScope)return; /* יש כוונה חתומה — תקין */
+      out.push({soldier:sol,signedWeapons:Array.from(new Set(signedWeapons.map(k=>cleanItemName(k)))),scopeNames:Array.from(new Set(scopeKeys.map(k=>cleanItemName(k)))),hasScope:scopeKeys.length>0,signedAt:sig.signedAt||""});
+    });
+    /* 🔴 אין כוונה משוייכת בכלל (תקלה) קודם, ואז 🟡 כוונה משוייכת לא חתומה */
+    return out.sort((a,b)=>(a.hasScope?1:0)-(b.hasScope?1:0));
+  },[db.signatures,db.assignments,db.customSoldiers,soldiers]);
+  const [filterUnit,setFilterUnit]=React.useState("הכל");
+  const UNITS=["הכל","א","ב","ג","מסייעת","אגמ","פלסמ"];
+  const filtered=filterUnit==="הכל"?rows:rows.filter(p=>p.soldier.unit===filterUnit);
+  const redCount=filtered.filter(p=>!p.hasScope).length;
+  return /*#__PURE__*/React.createElement("div",{style:{padding:"4px"}},
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}},
+      /*#__PURE__*/React.createElement("h3",{style:{margin:0,fontSize:"var(--text-lg)",fontWeight:800}},"🔭 חתום על נשק ללא כוונה"," ",/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",fontWeight:500}},"("+filtered.length+")")),
+      /*#__PURE__*/React.createElement("select",{value:filterUnit,onChange:e=>setFilterUnit(e.target.value),style:{...S.input,marginBottom:0,width:"auto",fontSize:"var(--text-sm)"}},UNITS.map(u=>/*#__PURE__*/React.createElement("option",{key:u,value:u},u==="הכל"?"כל הפלוגות":"פלוגה "+u)))
+    ),
+    redCount>0&&/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",marginBottom:8,fontWeight:600}},"🔴 "+redCount+" נשק חתום ללא כוונה משוייכת בכלל (תקלה)"),
+    filtered.length===0
+      ? /*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8}},"✅ אין חיילים חתומים על נשק ללא כוונה")
+      : /*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+          filtered.map(p=>/*#__PURE__*/React.createElement("div",{key:p.soldier.id,style:{...S.card,padding:"10px 14px",margin:0,border:"1px solid "+(p.hasScope?"var(--color-warning-fg)":"var(--color-danger-fg)"),background:"var(--color-bg-default)"}},
+            /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:6}},
+              /*#__PURE__*/React.createElement("div",null,
+                /*#__PURE__*/React.createElement("span",{style:{fontWeight:700,fontSize:"var(--text-base)"}},p.soldier.name),
+                /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)",marginRight:6}},"· "+(p.soldier.id||"—")+" · פלוגה "+(p.soldier.unit||"—"))
+              ),
+              /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,fontSize:"var(--text-xs)",flexWrap:"wrap"}},
+                /*#__PURE__*/React.createElement("span",{style:{padding:"2px 8px",borderRadius:8,background:"var(--color-success-bg)",color:"var(--color-success-fg)",fontWeight:700}},"✅ חתום: "+p.signedWeapons.join(", ")),
+                p.hasScope
+                  ? /*#__PURE__*/React.createElement("span",{style:{padding:"2px 8px",borderRadius:8,background:"var(--color-warning-bg)",color:"var(--color-warning-fg)",fontWeight:700}},"🟡 כוונה לא חתומה")
+                  : /*#__PURE__*/React.createElement("span",{style:{padding:"2px 8px",borderRadius:8,background:"var(--color-danger-bg)",color:"var(--color-danger-fg)",fontWeight:700}},"🔴 אין כוונה משוייכת")
+              )
+            ),
+            p.hasScope&&p.scopeNames.length>0&&/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4,paddingTop:6,borderTop:"1px dashed var(--color-border-muted)"}},
+              "כוונות משוייכות לא חתומות: ",/*#__PURE__*/React.createElement("span",{style:{color:"var(--color-warning-fg)",fontWeight:600}},p.scopeNames.join(", "))
+            ),
+            !p.hasScope&&/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",marginTop:4,paddingTop:6,borderTop:"1px dashed var(--color-border-muted)"}},"⚠️ נשק חתום ללא כוונה משוייכת — יש לבדוק שיוך כוונה"),
+            p.signedAt&&/*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)",marginTop:2}},"חתימה אחרונה: "+p.signedAt)
+          ))
+        )
+  );
+}
+// === END WeaponNoScopeList ===
+
 // === Comprehensive battalion inventory Excel report (v2.3.1) ===
 async function _generateComprehensiveInventoryReport(db,authName){
   if(typeof _loadExcelJS!=="function"||!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. נסה שוב.");return;}
@@ -1333,7 +1397,7 @@ function ReportsTab({db,setDb,soldiers,auth}){
   const isAdmin=auth?.role==="admin";
   const perms=auth?getPerms(auth,db):{};
   const subs=[
-    {id:"endofday",label:"הדפס סוף יום",icon:"📅",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(EndOfDayLauncher,{db,auth})},{id:"partialsigners",label:"רשימת חתומים חלקית",icon:"✍️",show:true,render:()=>React.createElement(PartialSignersList,{db,soldiers,auth})},{id:"compinv",label:"מלאי פלוגתי כולל",icon:"📋",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(ComprehensiveInventoryTab,{db,auth})},{id:"actlog",label:"לוג תנועות",icon:"📋",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(ActivityLogTab,{db})},
+    {id:"endofday",label:"הדפס סוף יום",icon:"📅",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(EndOfDayLauncher,{db,auth})},{id:"partialsigners",label:"רשימת חתומים חלקית",icon:"✍️",show:true,render:()=>React.createElement(PartialSignersList,{db,soldiers,auth})},{id:"compinv",label:"מלאי פלוגתי כולל",icon:"📋",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(ComprehensiveInventoryTab,{db,auth})},{id:"weapon-no-scope",label:"חתום על נשק ללא כוונה",icon:"🔭",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(WeaponNoScopeList,{db,soldiers,auth})},{id:"actlog",label:"לוג תנועות",icon:"📋",show:isAdmin||perms.canViewActLog,render:()=>React.createElement(ActivityLogTab,{db})},
     {id:"loginlog",label:"כניסות",icon:"🚪",show:isAdmin,render:()=>React.createElement(LoginLogTab,{db})},
     {id:"greeneyes",label:"ירוק בעיניים",icon:"🟢",show:isAdmin,render:()=>React.createElement(GreenEyesTab,{db,setDb,soldiers,auth})},{id:"getracking",label:"מעקב ירוק בעיניים",icon:"📊",show:isAdmin,render:()=>React.createElement(GreenEyesTrackingTab,{db,setDb,soldiers,auth})},
     {id:"invcount",label:"ספירת מלאי",icon:"📦",show:isAdmin||auth?.username==="מתן"||auth?.username==="יעקב",render:()=>React.createElement(InventoryCountTab,{db,setDb,soldiers,auth})},
