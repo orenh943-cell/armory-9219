@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.92";
+const APP_VERSION = "2.3.93";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5492,7 +5492,7 @@ if(!assigned[name])assigned[name]={};assigned[name][unit]=(assigned[name][unit]|
 const allItemNames=new Set();// From assignments (main source)
 Object.values(assigned).forEach(byUnit=>Object.keys(byUnit).forEach(u=>{}));Object.values(assigned).forEach(()=>{});Object.keys(assigned).forEach(name=>allItemNames.add(cleanItemName(name)));// From unitItems
 Object.values(db.unitItems||{}).forEach(item=>{const name=item.n||item.name||"";if(name)allItemNames.add(name);});// From armoryMaster (adds declared items even with 0 assignments)
-const masterData2=db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:{};Object.keys(masterData2).forEach(name=>allItemNames.add(name));return Array.from(allItemNames).map(name=>{const info=masterData2[name]||{};const makat=info.makat||getMakat(name)||null;// האם הפריט הזה הוא אביזר של חבילת נשק (כמו איוטק OGL, מצפן, חסם בית בליעה)
+const masterData2=db.armoryMaster&&Object.keys(db.armoryMaster).length>0?db.armoryMaster:{};Object.keys(masterData2).forEach(name=>allItemNames.add(name));/* v2.3.93: dedup-by-serial — זהה ל-getLiveCount (byte 6090). unitItem שהצ שלו כבר משוייך לחייל ב-assignments לא ייספר שוב (תיקון פאנטום מלאי). תצוגה בלבד — אפס שינוי דאטה. */const assignedSerials=new Set();Object.values(db.assignments||{}).forEach(asgn=>{Object.values(asgn||{}).forEach(v=>{if(v&&v!==1&&v!==true)assignedSerials.add(String(v));});});return Array.from(allItemNames).map(name=>{const info=masterData2[name]||{};const makat=info.makat||getMakat(name)||null;// האם הפריט הזה הוא אביזר של חבילת נשק (כמו איוטק OGL, מצפן, חסם בית בליעה)
 // אם כן — אביזרי חבילה ללא צ הם "זכאות וירטואלית" — הם לא פיזית אצל החייל
 const isBundleAccessory=(()=>{for(const wepName of Object.keys(WEAPON_BUNDLES||{})){const bundle=WEAPON_BUNDLES[wepName];const arr=Array.isArray(bundle)?bundle:bundle?.fixed||[];const dyn=bundle?.dynamic?.map(d=>d.name)||[];if([...arr,...dyn].some(b=>cleanItemName(b)===name))return true;}return false;})();// ספור יחידות פריט אצל חיילים (מ-assignments) — כולל חייל עם 2+ יחידות
 let soldierCount=0;const soldiersByUnit={};// unit -> count of items (not soldiers)
@@ -5502,8 +5502,8 @@ allSols.forEach(s=>{const asgn=db.assignments?.[s.id]||{};// ספור פריטי
 let itemCount=0;Object.entries(asgn||{}).forEach(([k,v])=>{if(cleanItemName(k)===name){const hasSerial=v&&v!==1&&v!==true;if(hasSerial||!isBundleAccessory)itemCount++;}});if(itemCount>0){soldierCount+=itemCount;soldiersByUnit[s.unit]=(soldiersByUnit[s.unit]||0)+itemCount;}});// גם assignments של חיילים שלא ב-allSols — ספור פעם אחת
 Object.entries(db.assignments||{}).forEach(([solId,asgn])=>{if(allSols.find(s=>s.id===solId))return;// כבר נספר
 const matchEntries=Object.entries(asgn||{}).filter(([k,v])=>{if(cleanItemName(k)!==name)return false;const hasSerial=v&&v!==1&&v!==true;return hasSerial||!isBundleAccessory;});if(matchEntries.length>0){soldierCount+=matchEntries.length;const unit=db.customSoldiers?.[solId]?.unit||db.soldiers?.[solId]?.unit||"א";soldiersByUnit[unit]=(soldiersByUnit[unit]||0)+matchEntries.length;}});// ספור לפלוגה (unitItems עם t=unit, לא גדודי)
-const unitItemsForName=Object.values(db.unitItems||{}).filter(v=>{const n=cleanItemName(v.n||v.name||"");const t=v.t||v.assignedType||"unit";const u=v.u||v.unit||"";return n===name&&t==="unit"&&u!=="גדודי";});const toUnits=unitItemsForName.length;// ספור ארמון גדודי (unitItems עם unit=גדודי)
-const gadudi=Object.values(db.unitItems||{}).filter(v=>{const n=cleanItemName(v.n||v.name||"");const t=v.t||v.assignedType||"unit";const u=v.u||v.unit||"";return n===name&&t==="unit"&&u==="גדודי";}).length;const liveTotal=soldierCount+toUnits+gadudi;// total: מעדיף armoryMaster.total (כמו ArmoryDashTab) — אם המשתמש קבע 50 וה-live מציג 91 בגלל רישומים פאנטום, ה-master הוא מקור האמת
+const unitItemsForName=Object.values(db.unitItems||{}).filter(v=>{const n=cleanItemName(v.n||v.name||"");const t=v.t||v.assignedType||"unit";const u=v.u||v.unit||"";const _ser=String(v.s||v.serial||"");if(_ser&&assignedSerials.has(_ser))return false;/* v2.3.93: dedup כפילות צ */return n===name&&t==="unit"&&u!=="גדודי";});const toUnits=unitItemsForName.length;// ספור ארמון גדודי (unitItems עם unit=גדודי)
+const gadudi=Object.values(db.unitItems||{}).filter(v=>{const n=cleanItemName(v.n||v.name||"");const t=v.t||v.assignedType||"unit";const u=v.u||v.unit||"";const _ser=String(v.s||v.serial||"");if(_ser&&assignedSerials.has(_ser))return false;/* v2.3.93: dedup כפילות צ */return n===name&&t==="unit"&&u==="גדודי";}).length;const liveTotal=soldierCount+toUnits+gadudi;// total: מעדיף armoryMaster.total (כמו ArmoryDashTab) — אם המשתמש קבע 50 וה-live מציג 91 בגלל רישומים פאנטום, ה-master הוא מקור האמת
 const total=info.total>0?info.total:liveTotal;// פנוי = גדודי (בארמון) + כל מה שמעל ה-total
 // gadudi = פריטים שיושבים בארמון גדודי (זמינים להוצאה)
 const extraFree=Math.max(0,total-liveTotal);const unassigned=gadudi+extraFree;// liveByUnit לתצוגה — כולל חיילים + unitItems לפי פלוגה
