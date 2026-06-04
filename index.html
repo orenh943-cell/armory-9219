@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.101";
+const APP_VERSION = "2.3.102";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1531,6 +1531,75 @@ function ComprehensiveInventoryTab({db,auth}){
     /*#__PURE__*/React.createElement("button",{onClick:async()=>{setBusy(true);try{await _generateComprehensiveInventoryReport(db,auth?.name||"");}finally{setBusy(false);}},disabled:busy,style:{padding:"12px 28px",background:busy?"#888":"#1a7f37",color:"#fff",border:"none",borderRadius:8,cursor:busy?"default":"pointer",fontWeight:800,fontSize:15,opacity:busy?0.7:1}},busy?"⏳ יוצר…":"📋 הורד דוח מלאי פלוגתי כולל")
   );
 }
+/* v2.3.102: ארכיב מסמכים PDF — אחסון מפוצל: db/docArchiveMeta (קל, נטען ברשימה) + db/docArchiveFiles (data-URL כבד, נטען on-demand בלבד). Lazy: fbGet רק ב-mount של הטאב, אין fbOn ב-startup. מנגנון העלאה הועתק מ-InquiryModal (3MB, PDF בלבד). show:isAdmin. */
+function DocArchiveTab({db,setDb,auth}){
+  const isAdmin=auth?.role==="admin";
+  const CATS=["נהלים","חוזים","טפסים","אחר"];
+  const [docs,setDocs]=React.useState({});
+  const [loading,setLoading]=React.useState(true);
+  const [busy,setBusy]=React.useState(false);
+  const [filterCat,setFilterCat]=React.useState("הכל");
+  const [search,setSearch]=React.useState("");
+  const [uploadedFile,setUploadedFile]=React.useState(null);
+  const [uploadedFileName,setUploadedFileName]=React.useState("");
+  const [docName,setDocName]=React.useState("");
+  const [docDesc,setDocDesc]=React.useState("");
+  const [docCat,setDocCat]=React.useState("נהלים");
+  const fileInputRef=React.useRef(null);
+  /* lazy: טען מטא בלבד ב-mount (לא fileData) — לא ב-startup */
+  React.useEffect(()=>{let alive=true;fbGet("db/docArchiveMeta").then(d=>{if(alive){setDocs(d||{});setLoading(false);}}).catch(e=>{console.warn("[docarchive]",e);if(alive)setLoading(false);});return()=>{alive=false;};},[]);
+  /* handleFileUpload — מועתק מ-InquiryModal, PDF בלבד + 3MB */
+  function handleFileUpload(e){const file=e.target.files[0];if(!file)return;if(file.type!=="application/pdf"&&!/\.pdf$/i.test(file.name)){alert("יש להעלות קובץ PDF בלבד");return;}if(file.size>3*1024*1024){alert("הקובץ גדול מדי — מקסימום 3MB");return;}const reader=new FileReader();reader.onload=ev=>{setUploadedFile(ev.target.result);setUploadedFileName(file.name);setDocName(p=>p||file.name.replace(/\.pdf$/i,""));};reader.readAsDataURL(file);}
+  async function doUpload(){if(busy)return;if(!uploadedFile){alert("בחר קובץ PDF");return;}if(!docName.trim()){alert("הזן שם מסמך");return;}setBusy(true);try{const id="doc_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);const meta={fileName:docName.trim(),description:docDesc.trim(),category:docCat,uploadedBy:auth?.name||auth?.username||"",uploadedAt:Date.now(),origName:uploadedFileName};await Promise.all([fbSet("db/docArchiveMeta/"+id,meta),fbSet("db/docArchiveFiles/"+id,uploadedFile)]);setDocs(p=>({...p,[id]:meta}));setUploadedFile(null);setUploadedFileName("");setDocName("");setDocDesc("");setDocCat("נהלים");if(fileInputRef.current)fileInputRef.current.value="";}catch(e){console.error("[docarchive-upload]",e);alert("שגיאה בהעלאה: "+((e&&e.message)||e));}finally{setBusy(false);}}
+  /* fileData נמשך on-demand בלבד. data: URLs חסומים ב-window.open → ממירים ל-Blob URL */
+  async function openDoc(id){try{const data=await fbGet("db/docArchiveFiles/"+id);if(!data){alert("הקובץ לא נמצא");return;}const blob=await(await fetch(data)).blob();const url=URL.createObjectURL(blob);window.open(url,"_blank");setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){console.warn("[docopen]",e);alert("שגיאה בפתיחת המסמך");}}
+  async function downloadDoc(id){try{const data=await fbGet("db/docArchiveFiles/"+id);if(!data){alert("הקובץ לא נמצא");return;}const a=document.createElement("a");a.href=data;a.download=((docs[id]&&docs[id].fileName)||"מסמך")+".pdf";document.body.appendChild(a);a.click();document.body.removeChild(a);}catch(e){console.warn("[docdl]",e);alert("שגיאה בהורדה");}}
+  async function deleteDoc(id){if(!isAdmin)return;if(!window.confirm('למחוק את "'+((docs[id]&&docs[id].fileName)||"")+'"? הפעולה בלתי הפיכה.'))return;try{await Promise.all([fbDelete("db/docArchiveMeta/"+id),fbDelete("db/docArchiveFiles/"+id)]);setDocs(p=>{const n={...p};delete n[id];return n;});}catch(e){console.warn("[docdel]",e);alert("שגיאה במחיקה");}}
+  const list=React.useMemo(()=>{const q=search.trim();return Object.entries(docs).map(([id,m])=>({id,...m})).filter(d=>(filterCat==="הכל"||d.category===filterCat)&&(!q||String(d.fileName||"").includes(q)||String(d.description||"").includes(q))).sort((a,b)=>(b.uploadedAt||0)-(a.uploadedAt||0));},[docs,filterCat,search]);
+  const _date=ts=>{try{return ts?new Date(ts).toLocaleDateString("he-IL"):"";}catch(_){return"";}};
+  return React.createElement("div",{style:{padding:"4px"}},
+    React.createElement("h3",{style:{margin:"0 0 6px",fontSize:"var(--text-lg)",fontWeight:800}},"📁 ארכיב מסמכים"),
+    React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:12}},"מסמכי PDF (נהלים / חוזים / טפסים). עד 3MB למסמך. גלוי למנהלים בלבד."),
+    React.createElement("div",{style:{...S.card,marginBottom:14,padding:"12px 14px"}},
+      React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:8}},"⬆️ העלאת מסמך"),
+      React.createElement("input",{ref:fileInputRef,type:"file",accept:".pdf,application/pdf",onChange:handleFileUpload,style:{display:"none"}}),
+      uploadedFile
+        ? React.createElement("div",null,
+            React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+              React.createElement("span",{style:{color:"var(--color-success-fg)",fontWeight:600,fontSize:"var(--text-sm)"}},"✅ "+uploadedFileName),
+              React.createElement("button",{onClick:()=>{setUploadedFile(null);setUploadedFileName("");if(fileInputRef.current)fileInputRef.current.value="";},style:{...S.btn("red","xs")}},"הסר")),
+            React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+              React.createElement("input",{value:docName,onChange:e=>setDocName(e.target.value),placeholder:"שם המסמך",style:{...S.input,marginBottom:0}}),
+              React.createElement("select",{value:docCat,onChange:e=>setDocCat(e.target.value),style:{...S.input,marginBottom:0}},CATS.map(c=>React.createElement("option",{key:c,value:c},c)))),
+            React.createElement("input",{value:docDesc,onChange:e=>setDocDesc(e.target.value),placeholder:"תיאור (אופציונלי)",style:{...S.input,marginBottom:8}}),
+            React.createElement("button",{onClick:doUpload,disabled:busy,style:{...S.btn("green","md"),width:"100%",opacity:busy?0.6:1}},busy?"⏳ מעלה…":"💾 שמור בארכיב"))
+        : React.createElement("button",{onClick:()=>fileInputRef.current&&fileInputRef.current.click(),style:{...S.btn("blue","md")}},"📂 בחר קובץ PDF")
+    ),
+    React.createElement("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
+      React.createElement("select",{value:filterCat,onChange:e=>setFilterCat(e.target.value),style:{...S.input,marginBottom:0,width:"auto"}},["הכל",...CATS].map(c=>React.createElement("option",{key:c,value:c},c==="הכל"?"כל הקטגוריות":c))),
+      React.createElement("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"🔍 חפש שם / תיאור",style:{...S.input,marginBottom:0,flex:1,minWidth:120}})),
+    loading
+      ? React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)"}},"⏳ טוען…")
+      : list.length===0
+        ? React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8}},"אין מסמכים בארכיב")
+        : React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+            list.map(d=>React.createElement("div",{key:d.id,style:{...S.card,padding:"10px 14px",margin:0}},
+              React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}},
+                React.createElement("div",{style:{flex:1,minWidth:140}},
+                  React.createElement("div",null,
+                    React.createElement("span",{style:{fontWeight:700,fontSize:"var(--text-base)"}},"📄 "+d.fileName),
+                    React.createElement("span",{style:{marginRight:8,fontSize:10,padding:"2px 8px",borderRadius:8,background:"var(--color-accent-bg)",color:"var(--color-accent-fg)",fontWeight:700}},d.category||"אחר")),
+                  d.description&&React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},d.description),
+                  React.createElement("div",{style:{fontSize:10,color:"var(--color-text-muted)",marginTop:2}},(d.uploadedBy||"—")+" · "+_date(d.uploadedAt))),
+                React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+                  React.createElement("button",{onClick:()=>openDoc(d.id),style:{...S.btn("blue","sm")}},"📄 פתח"),
+                  React.createElement("button",{onClick:()=>downloadDoc(d.id),style:{...S.btn("neutral","sm")}},"⬇️ הורד"),
+                  isAdmin&&React.createElement("button",{onClick:()=>deleteDoc(d.id),style:{...S.btn("red","sm")}},"🗑️"))
+              )
+            )))
+  );
+}
+// === END DocArchiveTab ===
 function ReportsTab({db,setDb,soldiers,auth}){
   const isAdmin=auth?.role==="admin";
   const perms=auth?getPerms(auth,db):{};
@@ -1539,7 +1608,7 @@ function ReportsTab({db,setDb,soldiers,auth}){
     {id:"loginlog",label:"כניסות",icon:"🚪",show:isAdmin,render:()=>React.createElement(LoginLogTab,{db})},
     {id:"greeneyes",label:"ירוק בעיניים",icon:"🟢",show:isAdmin,render:()=>React.createElement(GreenEyesTab,{db,setDb,soldiers,auth})},{id:"getracking",label:"מעקב ירוק בעיניים",icon:"📊",show:isAdmin,render:()=>React.createElement(GreenEyesTrackingTab,{db,setDb,soldiers,auth})},
     {id:"invcount",label:"ספירת מלאי",icon:"📦",show:isAdmin||auth?.username==="מתן"||auth?.username==="יעקב",render:()=>React.createElement(InventoryCountTab,{db,setDb,soldiers,auth})},
-    {id:"poll",label:"סקר נוכחות",icon:"📊",show:isAdmin,render:()=>React.createElement(PollTab,{db,setDb,soldiers,auth})}
+    {id:"poll",label:"סקר נוכחות",icon:"📊",show:isAdmin,render:()=>React.createElement(PollTab,{db,setDb,soldiers,auth})},{id:"doc-archive",label:"ארכיב מסמכים",icon:"📁",show:isAdmin,render:()=>React.createElement(DocArchiveTab,{db,setDb,auth})}
   ].filter(s=>s.show);
   const [sub,setSub]=React.useState(()=>subs[0]?.id||"actlog");
   const current=subs.find(s=>s.id===sub)||subs[0];
