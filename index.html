@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.103";
+const APP_VERSION = "2.3.104";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1654,14 +1654,20 @@ function CompanyReturnTab({db,setDb,soldiers,auth}){
   const [search,setSearch]=React.useState("");
   const [rows,setRows]=React.useState([]);
   const [returned,setReturned]=React.useState({});
+  const [checked,setChecked]=React.useState({});
+  /* v2.3.104: כל אביזרי הנשק (fixed+dynamic) מ-WEAPON_BUNDLES ∪ EXCLUDED_LABEL_ITEMS */
+  const _bundleAccs=React.useMemo(()=>{const s=new Set();Object.values(WEAPON_BUNDLES||{}).forEach(b=>{const arr=Array.isArray(b)?b:(b&&b.fixed)||[];const dyn=(b&&b.dynamic&&b.dynamic.map(d=>d.name))||[];[...arr,...dyn].forEach(n=>s.add(cleanItemName(n)));});EXCLUDED_LABEL_ITEMS.forEach(n=>s.add(n));return s;},[]);
   const _isScope=nm=>{const n=nm||"";return n.includes("מפרו")||n.includes("פמרו")||n.includes("M5")||n.includes("M21")||n.includes("טריגיקון");};
-  const _type=nm=>WEAPON_KEYS.includes(nm)?"weapon":_isScope(nm)?"scope":EXCLUDED_LABEL_ITEMS.has(nm)?"acc":"other";
+  const _type=nm=>WEAPON_KEYS.includes(nm)?"weapon":_isScope(nm)?"scope":_bundleAccs.has(nm)?"acc":"other";
   /* snapshot על שינוי פלוגה — רשימה יציבה (שורות לא נעלמות אחרי זיכוי) */
-  React.useEffect(()=>{const out=[];allSols.filter(s=>s.unit===unit).forEach(s=>{const asgn=db.assignments?.[s.id]||{};Object.entries(asgn).forEach(([k,v])=>{const nm=cleanItemName(k);out.push({sid:s.id,key:k,soldierName:s.name||"",name:nm,serial:isSerial(v)?String(v):"",type:_type(nm)});});});setRows(out);setReturned({});},[unit,allSols]);
+  React.useEffect(()=>{const out=[];allSols.filter(s=>s.unit===unit).forEach(s=>{const asgn=db.assignments?.[s.id]||{};Object.entries(asgn).forEach(([k,v])=>{const nm=cleanItemName(k);out.push({sid:s.id,key:k,soldierName:s.name||"",name:nm,serial:isSerial(v)?String(v):"",type:_type(nm)});});});setRows(out);setReturned({});const c={};out.forEach(r=>{if(r.type!=="other")c[r.sid+"|"+r.key]=true;});setChecked(c);},[unit,allSols]);
   function ret(r){const ok=returnSingleItem(db,setDb,r.sid,r.key,auth);if(ok)setReturned(p=>({...p,[r.sid+"|"+r.key]:true}));}
   const _isRet=r=>!!returned[r.sid+"|"+r.key];
+  function toggleCheck(r){const kk=r.sid+"|"+r.key;setChecked(p=>({...p,[kk]:!p[kk]}));}
+  /* v2.3.104: זיכוי בלוק — batch-safe בלי לגעת ב-returnSingleItem: captureSetDb (cap) משרשר workDb מתפתח כך שכל קריאה קוראת את ה-db המעודכן; ה-fbSet הפנימיים נורים פר-פריט; בסוף setDb אחד */
+  function returnBlock(blockRows){let workDb=db;const cap=u=>{workDb=(typeof u==="function")?u(workDb):u;};const ret2={};blockRows.forEach(r=>{const kk=r.sid+"|"+r.key;if(checked[kk]&&!returned[kk]){const ok=returnSingleItem(workDb,cap,r.sid,r.key,auth);if(ok)ret2[kk]=true;}});setDb(workDb);if(Object.keys(ret2).length)setReturned(p=>({...p,...ret2}));}
   const q=search.trim();
-  const weaponBlocks=React.useMemo(()=>{if(mode!=="weapons")return[];const bySid={};rows.forEach(r=>{if(!bySid[r.sid])bySid[r.sid]={sid:r.sid,name:r.soldierName,rows:[]};bySid[r.sid].rows.push(r);});const order={weapon:0,scope:1,acc:2,other:3};return Object.values(bySid).filter(b=>b.rows.some(r=>r.type==="weapon")).map(b=>({...b,rows:[...b.rows].sort((a,c)=>(order[a.type]-order[c.type])||a.name.localeCompare(c.name,"he"))})).filter(b=>!q||b.name.includes(q)||b.rows.some(r=>r.name.includes(q)||r.serial.includes(q))).sort((a,c)=>a.name.localeCompare(c.name,"he"));},[mode,rows,q]);
+  const weaponBlocks=React.useMemo(()=>{if(mode!=="weapons")return[];const bySid={};rows.forEach(r=>{if(r.type==="other")return;/* v2.3.104: רק נשק/כוונת/אביזר-נשק */if(!bySid[r.sid])bySid[r.sid]={sid:r.sid,name:r.soldierName,rows:[]};bySid[r.sid].rows.push(r);});const order={weapon:0,scope:1,acc:2,other:3};return Object.values(bySid).filter(b=>b.rows.some(r=>r.type==="weapon")).map(b=>({...b,rows:[...b.rows].sort((a,c)=>(order[a.type]-order[c.type])||a.name.localeCompare(c.name,"he"))})).filter(b=>!q||b.name.includes(q)||b.rows.some(r=>r.name.includes(q)||r.serial.includes(q))).sort((a,c)=>a.name.localeCompare(c.name,"he"));},[mode,rows,q]);
   const otherRows=React.useMemo(()=>{if(mode!=="other"||!q)return[];return rows.filter(r=>r.type!=="weapon"&&(r.name.includes(q)||r.serial.includes(q))).sort((a,c)=>a.soldierName.localeCompare(c.soldierName,"he")||a.name.localeCompare(c.name,"he"));},[mode,rows,q]);
   const doneCount=Object.keys(returned).length;
   const _badge=t=>t==="weapon"?["🔫 נשק","var(--color-danger-fg)"]:t==="scope"?["🔭 כוונת","var(--color-accent-fg)"]:t==="acc"?["אביזר","var(--color-text-muted)"]:["פריט","var(--color-text-secondary)"];
@@ -1685,9 +1691,15 @@ function CompanyReturnTab({db,setDb,soldiers,auth}){
       ? (weaponBlocks.length===0
           ? React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8}},"אין חיילים עם נשק בפלוגה זו")
           : React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:10}},
-              weaponBlocks.map(b=>React.createElement("div",{key:b.sid,style:{...S.card,padding:"10px 12px",margin:0}},
+              weaponBlocks.map(b=>{const nSel=b.rows.filter(r=>checked[r.sid+"|"+r.key]&&!_isRet(r)).length;return React.createElement("div",{key:b.sid,style:{...S.card,padding:"10px 12px",margin:0}},
                 React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)",marginBottom:6,paddingBottom:4,borderBottom:"1px solid var(--color-border-muted)"}},"👤 "+b.name),
-                b.rows.map(r=>_rowEl(r,false))))))
+                b.rows.map(r=>{const done=_isRet(r);const sel=!!checked[r.sid+"|"+r.key];const bd=_badge(r.type);return React.createElement("div",{key:r.sid+"|"+r.key,onClick:done?undefined:()=>toggleCheck(r),style:{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:6,marginBottom:4,cursor:done?"default":"pointer",background:done?"var(--color-success-bg)":sel?"var(--color-accent-bg)":"var(--color-bg-canvas)",border:"1px solid "+(done?"var(--color-success-fg)":sel?"var(--color-accent-fg)":"transparent"),opacity:done?0.7:1}},
+                  React.createElement("span",{style:{width:16,textAlign:"center",fontWeight:700,color:done?"var(--color-success-fg)":sel?"var(--color-accent-fg)":"var(--color-text-muted)"}},done?"✓":sel?"✓":"○"),
+                  React.createElement("span",{style:{fontSize:10,color:bd[1],fontWeight:700,whiteSpace:"nowrap"}},bd[0]),
+                  React.createElement("span",{style:{flex:1,fontWeight:r.type==="weapon"?700:500,fontSize:"var(--text-sm)",color:r.type==="weapon"?"var(--color-danger-fg)":done?"var(--color-text-secondary)":"var(--color-text-primary)"}},r.name),
+                  r.serial&&React.createElement("span",{style:{fontFamily:"monospace",fontSize:11,color:"var(--color-text-muted)"}},r.serial),
+                  done&&React.createElement("span",{style:{color:"var(--color-success-fg)",fontWeight:700,fontSize:"var(--text-xs)"}},"זוכה"));}),
+                React.createElement("button",{onClick:()=>returnBlock(b.rows),disabled:nSel===0,style:{...S.btn("orange","sm"),width:"100%",marginTop:6,opacity:nSel===0?0.5:1}},"✓ בצע זיכוי ("+nSel+" מסומנים)"));})))
       : (!q
           ? React.createElement("div",{style:{textAlign:"center",padding:24,color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8}},"הקלד שם פריט / צ כדי לחפש מי מחזיק")
           : otherRows.length===0
