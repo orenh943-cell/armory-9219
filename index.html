@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.104";
+const APP_VERSION = "2.3.105";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1600,32 +1600,15 @@ function DocArchiveTab({db,setDb,auth}){
   );
 }
 // === END DocArchiveTab ===
-/* v2.3.103: helper זיכוי-פר-פריט מבודד — שכפול ליבת doReturn (UNASSIGN/signoffMode=false) בלי לגעת בו.
-   מסיר מ-assignments + מחזיר unitItem (dedup-by-tag hotfix12 + makat v2.3.94, מונע פאנטום) + עדכון חתימה חלקי (_updateSigOrArchive byte 3032: מסיר את הפריט מ-sig.items, מארכב רק אם כלום לא נשאר). */
+/* v2.3.105: helper זיכוי-פר-פריט מבודד — שכפול ענף ה-SIGNOFF של doReturn (signoffMode=true) בלי לגעת בו.
+   זיכוי = מקצץ חתימה בלבד: מסיר את הפריט מ-sig.items, מארכב (archiveAndClearSig) רק אם כלום לא נשאר חתום (שכפול חד-פריטי של _updateSigOrArchive). אל תיגע ב-assignments/unitItems (ראה doReturn signoffMode=true: "CREDIT only updates sig.items — no touch to assignments/unitItems"). v2.3.103/104 שכפלו בטעות את ענף UNASSIGN (מחקו assignments + יצרו unitItem→פאנטום) — תוקן. */
 function returnSingleItem(db,setDb,soldierId,itemKey,auth){
-  const asgn={...((db.assignments||{})[soldierId]||{})};
+  const asgn=(db.assignments||{})[soldierId]||{};
   if(!(itemKey in asgn))return false;
   const val=asgn[itemKey];const cleanN=cleanItemName(itemKey);const realSer=isSerial(val)?String(val):null;
-  delete asgn[itemKey];
-  const newUnitItems={...(db.unitItems||{})};
-  const safeKey=cleanN.replace(/[.#$\[\]"]/g,"");
-  const _meta=(db.assignmentMeta||{})[soldierId]||{};
-  const cabName=(_meta[safeKey]&&(_meta[safeKey].cabName||_meta[safeKey].lastCabName))||null;
   const solName=((db.soldiers||{})[soldierId]&&db.soldiers[soldierId].name)||((db.customSoldiers||{})[soldierId]&&db.customSoldiers[soldierId].name)||String(soldierId);
-  const _date=new Date().toLocaleDateString("he-IL");
-  /* dedup-by-tag (hotfix12): מצא unitItem קיים (שם+צ, או מתויג לחייל) במקום ליצור כפילות */
-  const existingUid=Object.keys(newUnitItems).find(k=>{const v=newUnitItems[k];if(!v)return false;if(cleanItemName(v.n||v.name||"")!==cleanN)return false;if(realSer){return String(v.s||v.serial||"")===realSer;}return v.assignedSoldierId===soldierId||v.si===soldierId;});
-  let _retUid;
-  if(existingUid){
-    newUnitItems[existingUid]={...newUnitItems[existingUid],t:"unit",assignedType:"unit",assignedSoldierId:null,assignedSoldierName:null,si:null,sn:null,returnedFrom:solName,returnedAt:_date,makat:String(newUnitItems[existingUid].makat||getMakat(cleanN,db)||"")};
-    _retUid=existingUid;
-  }else{
-    const uid="ret_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
-    newUnitItems[uid]={n:cleanN,name:cleanN,s:realSer,serial:realSer,u:"גדודי",unit:"גדודי",t:"unit",assignedType:"unit",makat:getMakat(cleanN,db)||"",cabName:cabName||null,returnedFrom:solName,returnedAt:_date};
-    _retUid=uid;
-  }
-  /* חתימה — שכפול _updateSigOrArchive חלקי */
-  let ndb={...db,assignments:{...(db.assignments||{}),[soldierId]:asgn},unitItems:newUnitItems};
+  /* v2.3.105: SIGNOFF — חתימה בלבד. אין delete מ-assignments, אין יצירת unitItem (signoff לא נוגע בהם). שכפול חד-פריטי של _updateSigOrArchive. */
+  let ndb={...db};
   const _sig=(db.signatures||{})[soldierId];let _newSig=null;
   if(_sig){
     const _prevItems=Array.isArray(_sig.items)?_sig.items:Object.keys((db.assignments||{})[soldierId]||{});
@@ -1639,8 +1622,6 @@ function returnSingleItem(db,setDb,soldierId,itemKey,auth){
     }
   }
   setDb(ndb);
-  fbSet("db/assignments/"+soldierId,sanitizeForFirebase(asgn)).catch(e=>console.warn("[fb-err]",e));
-  fbSet("db/unitItems/"+_retUid,sanitizeForFirebase(newUnitItems[_retUid])).catch(e=>console.warn("[fb-err]",e));
   if(_newSig)fbSet("db/signatures/"+soldierId,_newSig).catch(e=>console.warn("[fb-err]",e));
   try{logAction("זיכוי","זוכה "+cleanN+(realSer?" ("+realSer+")":"")+" מ"+solName,auth?.name||"מערכת");}catch(_){console.warn("[caught]",_);}
   return true;
