@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.107";
+const APP_VERSION = "2.3.109";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1612,18 +1612,21 @@ function returnSingleItem(db,setDb,soldierId,itemKey,auth){
   const _sig=(db.signatures||{})[soldierId];let _newSig=null;
   if(_sig){
     const _prevItems=Array.isArray(_sig.items)?_sig.items:Object.keys((db.assignments||{})[soldierId]||{});
-    const _newItems=_prevItems.filter(k=>k!==itemKey&&cleanItemName(k)!==cleanN);
+    /* v2.3.109: זיכוי חלקי לפי כמות — fallback מודע-כמות. אם לפריט יש אחים __N (qty>1) → התאמת-מפתח-מדויקת בלבד (פר-יחידה); אם יחיד (qty=1) → cleanName fallback כמו קודם (זהה התנהגות מילה-במילה). */
+    const _siblings=Object.keys((db.assignments||{})[soldierId]||{}).filter(k=>cleanItemName(k)===cleanN).length>1;
+    const _newItems=_prevItems.filter(k=>!(k===itemKey||(!_siblings&&cleanItemName(k)===cleanN)));
     if(_newItems.length===0){
       ndb=archiveAndClearSig(ndb,soldierId);/* מארכב ל-sigHistory + מנקה signatures (כולל Firebase) */
     }else{
-      const _newAssignedItems={...(_sig.assignedItems||{})};delete _newAssignedItems[itemKey];Object.keys(_newAssignedItems).forEach(kk=>{if(cleanItemName(kk)===cleanN)delete _newAssignedItems[kk];});
+      const _newAssignedItems={...(_sig.assignedItems||{})};delete _newAssignedItems[itemKey];if(!_siblings){Object.keys(_newAssignedItems).forEach(kk=>{if(cleanItemName(kk)===cleanN)delete _newAssignedItems[kk];});}
       _newSig={..._sig,items:_newItems,assignedItems:_newAssignedItems,partial:true};
       ndb={...ndb,signatures:{...(db.signatures||{}),[soldierId]:_newSig}};
     }
   }
   setDb(ndb);
   if(_newSig)fbSet("db/signatures/"+soldierId,_newSig).catch(e=>console.warn("[fb-err]",e));
-  try{logAction("זיכוי","זוכה "+cleanN+(realSer?" ("+realSer+")":"")+" מ"+solName,auth?.name||"מערכת");}catch(_){console.warn("[caught]",_);}
+  /* v2.3.108: type "זיכוי_פלוגה" נפרד + details בפורמט שֵם-קודם-עם-מ.א שה-EOD parser מחלץ נכון (שם+מ.א→פלוגה/מחלקה) + הפריט אחרי "·". solName נפתר מ-db.soldiers/customSoldiers. */
+  try{logAction("זיכוי_פלוגה","זיכוי פלוגה "+solName+" ("+soldierId+") · "+cleanN+(realSer?" ("+realSer+")":""),auth?.name||"מערכת");}catch(_){console.warn("[caught]",_);}
   return true;
 }
 /* v2.3.103: מסך זיכוי פלוגה מהיר — getSoldiers+assignments (template WeaponNoScopeList). show:isAdmin.
@@ -3121,7 +3124,7 @@ if(!signoffMode){const meta=(db.assignmentMeta||{})[soldier.id]||{};retSel.forEa
 const sStr=isSerial(assigned[name])?String(assigned[name]):null;const rowKey=clean+(sStr||"");const alreadyChosen=finalRetCabinet[rowKey]||finalRetCabinet[name]||finalRetCabinet[clean];if(alreadyChosen?.inCabinet)return;// מצא את ה-meta של הפריט הזה
 const safeKey=clean.replace(/[.#$\[\]"]/g,"");const metaEntry=meta[safeKey]||meta[clean]||meta[name];/* v2.3.53: fallback to lastCabName (saved on sign) if cabName missing */const _cabFromMeta=metaEntry?.cabName||metaEntry?.lastCabName;if(_cabFromMeta){// השתמש במיקום השמור מהזיכוי / lastCabName מחתימה
 finalRetCabinet[rowKey]={inCabinet:true,cabName:_cabFromMeta};}});}retSel.forEach(name=>{const clean=cleanItemName(name);const bundle=Array.isArray(WEAPON_BUNDLES[clean])?WEAPON_BUNDLES[clean]:[];if(bundle){// העתק ארון לאביזרים
-bundle.forEach(acc=>{if(!finalRetCabinet[acc]&&(finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean])){finalRetCabinet[acc]=finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean];}});}});let ndb;let na={...assigned};/* v2.3.53: helper — update sig.items partially; archive only if empty */const _updateSigOrArchive=(dbWithChanges)=>{const _sig=dbWithChanges.signatures?.[soldier.id];if(!_sig)return dbWithChanges;const _prevItems=Array.isArray(_sig.items)?_sig.items:Object.keys(dbWithChanges.assignments?.[soldier.id]||{});const _retCleans=retSel.map(k=>cleanItemName(k));const _newItems=_prevItems.filter(k=>!retSel.includes(k)&&!_retCleans.includes(cleanItemName(k)));if(_newItems.length===0){return archiveAndClearSig(dbWithChanges,soldier.id);}const _newAssignedItems={...(_sig.assignedItems||{})};retSel.forEach(k=>{delete _newAssignedItems[k];const _ck=cleanItemName(k);Object.keys(_newAssignedItems).forEach(kk=>{if(cleanItemName(kk)===_ck)delete _newAssignedItems[kk];});});const _newSig={..._sig,items:_newItems,assignedItems:_newAssignedItems,partial:true};const _nsigs={...(dbWithChanges.signatures||{}),[soldier.id]:_newSig};_writes.push(fbSet("db/signatures/"+soldier.id,_newSig));return{...dbWithChanges,signatures:_nsigs};};/* v2.3.53-hotfix3: CREDIT only updates sig.items (no touch to assignments/unitItems). UNASSIGN clears assignments + bundle.dynamic. */
+bundle.forEach(acc=>{if(!finalRetCabinet[acc]&&(finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean])){finalRetCabinet[acc]=finalRetCabinet[clean+(assigned[name]&&isSerial(assigned[name])?String(assigned[name]):"")]||finalRetCabinet[clean];}});}});let ndb;let na={...assigned};/* v2.3.53: helper — update sig.items partially; archive only if empty */const _updateSigOrArchive=(dbWithChanges)=>{const _sig=dbWithChanges.signatures?.[soldier.id];if(!_sig)return dbWithChanges;const _prevItems=Array.isArray(_sig.items)?_sig.items:Object.keys(dbWithChanges.assignments?.[soldier.id]||{});const _retCleans=retSel.map(k=>cleanItemName(k));/* v2.3.109: זיכוי חלקי לפי כמות — fallback מודע-כמות. cleanName שיש לו אחים __N (qty>1) → התאמת-מפתח-מדויקת בלבד (פר-יחידה); cleanName יחיד (qty=1) → cleanName fallback כמו קודם (זהה התנהגות). signoff-only בפועל: ב-unassign retSel כולל את כל היחידות (cascade) → _multiCleans ריק → התנהגות זהה. */const _asgnQ=dbWithChanges.assignments?.[soldier.id]||{};const _cleanCount={};Object.keys(_asgnQ).forEach(_k=>{const _c=cleanItemName(_k);_cleanCount[_c]=(_cleanCount[_c]||0)+1;});const _multiCleans=new Set(_retCleans.filter(_c=>_cleanCount[_c]>1));const _shouldRemove=k=>retSel.includes(k)||(!_multiCleans.has(cleanItemName(k))&&_retCleans.includes(cleanItemName(k)));const _newItems=_prevItems.filter(k=>!_shouldRemove(k));if(_newItems.length===0){return archiveAndClearSig(dbWithChanges,soldier.id);}const _newAssignedItems={...(_sig.assignedItems||{})};retSel.forEach(k=>{delete _newAssignedItems[k];if(!_multiCleans.has(cleanItemName(k))){const _ck=cleanItemName(k);Object.keys(_newAssignedItems).forEach(kk=>{if(cleanItemName(kk)===_ck)delete _newAssignedItems[kk];});}});const _newSig={..._sig,items:_newItems,assignedItems:_newAssignedItems,partial:true};const _nsigs={...(dbWithChanges.signatures||{}),[soldier.id]:_newSig};_writes.push(fbSet("db/signatures/"+soldier.id,_newSig));return{...dbWithChanges,signatures:_nsigs};};/* v2.3.53-hotfix3: CREDIT only updates sig.items (no touch to assignments/unitItems). UNASSIGN clears assignments + bundle.dynamic. */
 if(signoffMode){
   ndb=_updateSigOrArchive({...db});
 }else{
@@ -5141,7 +5144,7 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   Object.values(db.actLog||{}).forEach(dayMap=>{
     Object.entries(dayMap||{}).forEach(([k,e])=>{
       /* v2.3.70-hotfix13: added זיכוי (doReturn signoff), זיכוי_ערכה (doReturnKit), זיכוי_כלי (future). זיכוי_חתימה kept for legacy/forward compat. */
-      if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
+      if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_פלוגה"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
       if(_eodNormHe(e.date)!==targetHeNorm)return;
       allEvents.push([k,e]);
     });
@@ -5149,7 +5152,7 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   allEvents.sort((a,b)=>(a[1].ts||0)-(b[1].ts||0));
   const fullEvents=allEvents.filter(([,e])=>{
     /* v2.3.70-hotfix13: all credit types pass unconditionally; only ביטול_שיוך needs the "soldier empty now" check */
-    if(e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי")return true;
+    if(e.type==="זיכוי"||e.type==="זיכוי_פלוגה"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי")return true;
     const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);
     if(!m)return false;
     const sid=m[2];
@@ -5157,21 +5160,29 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   });
   const escHtml=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const page1Rows=fullEvents.map(([,e])=>{
-    let name="",sid="",typeLabel="";
+    let name="",sid="",typeLabel="",item="";/* v2.3.108: item = הפריט/ים שעליהם בוצעה הפעולה (עמודה חדשה) */
     if(e.type==="זיכוי_חתימה"){
       typeLabel="🟢 זיכוי חתימה";
       const m=e.details&&e.details.match(/של (.+?)\s*\((\d+)\)/);
       if(m){name=m[1];sid=m[2];}
+    }else if(e.type==="זיכוי_פלוגה"){
+      /* v2.3.108: returnSingleItem (זיכוי פלוגה). details: "זיכוי פלוגה {name} ({sid}) · {item}{ (serial)}" */
+      typeLabel="↩️ זיכוי פלוגה";
+      const m=e.details&&e.details.match(/זיכוי פלוגה (.+?)\s*\((\d+)\)/);
+      if(m){name=m[1];sid=m[2];}
+      const mi=e.details&&e.details.match(/·\s*(.+)$/);if(mi)item=mi[1].trim();
     }else if(e.type==="זיכוי"){
       /* v2.3.70-hotfix13: doReturn main signoff. details: "זוכה {name} ({sid}) · ..." */
       typeLabel="🟢 זיכוי כלים";
       const m=e.details&&e.details.match(/זוכה (.+?)\s*\((\d+)\)/);
       if(m){name=m[1];sid=m[2];}
+      const mi=e.details&&e.details.match(/פריטים?:\s*([^·]+)/);if(mi)item=mi[1].trim();
     }else if(e.type==="זיכוי_ערכה"){
       /* v2.3.70-hotfix13: doReturnKit. details: "ערכה X הוחזרה מ{name} (N פריטים)" — no sid in details, lookup by name */
       typeLabel="🟣 זיכוי ערכה";
       const m=e.details&&e.details.match(/מ(.+?)\s*\(\d+\s*פריטים?\)/);
       if(m){name=m[1].trim();const sol=allSols2.find(s=>s.name===name);if(sol)sid=sol.id;}
+      const mi=e.details&&e.details.match(/ערכה (.+?) הוחזרה/);if(mi)item=mi[1].trim();
     }else if(e.type==="זיכוי_כלי"){
       /* v2.3.70-hotfix13: future writer placeholder — try standard "מ{name} ({sid})" then fallback */
       typeLabel="🟡 זיכוי כלי";
@@ -5182,9 +5193,11 @@ function runEndOfDayPrint(db,auth,targetDateHe){
       typeLabel="🔴 ביטול שיוך מלא";
       const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);
       if(m){name=m[1];sid=m[2];}
+      /* v2.3.108: ביטול_שיוך בשני פורמטים — doReturn ("· פריטים: ...") והישן ("(sid): ...") */
+      const mi=e.details&&(e.details.match(/פריטים?:\s*([^·]+)/)||e.details.match(/\(\d+\):\s*(.+)$/));if(mi)item=mi[1].trim();
     }
     const sol=allSols2.find(s=>s.id===sid);
-    return "<tr><td>"+escHtml(e.time||"")+"</td><td>"+escHtml(typeLabel)+"</td><td>"+escHtml(name||sol?.name||"—")+"</td><td>"+escHtml(sid||"—")+"</td><td>"+escHtml(sol?.unit||"—")+"</td><td>"+escHtml(sol?.squad||"—")+"</td></tr>";
+    return "<tr><td>"+escHtml(e.time||"")+"</td><td>"+escHtml(typeLabel)+"</td><td>"+escHtml(name||sol?.name||"—")+"</td><td>"+escHtml(sid||"—")+"</td><td>"+escHtml(sol?.unit||"—")+"</td><td>"+escHtml(sol?.squad||"—")+"</td><td>"+escHtml(item||"—")+"</td></tr>";
   }).join("");
   const signedToday=[];
   Object.entries(db.signatures||{}).forEach(([sid,sig])=>{
@@ -5204,19 +5217,20 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   const headStyleMatch=signedToday.length>0?(buildSignatureFormHtml(signedToday[0].sol,signedToday[0].sig,{}).match(/<style[\s\S]*?<\/style>/i)||[""])[0]:"";
   const noActivity=fullEvents.length===0&&signedToday.length===0;
   /* v2.3.70-hotfix13: numeric summary block (פער b) — counts per type + unique soldiers */
-  const _eodCnt={bitulim:0,zkChatima:0,zkKli:0,zkErka:0,zkKliFuture:0};
+  const _eodCnt={bitulim:0,zkChatima:0,zkKli:0,zkErka:0,zkKliFuture:0,zkPluga:0};
   const _eodUniqSids=new Set();
   fullEvents.forEach(([,e])=>{
     let sid=null;
     if(e.type==="ביטול_שיוך"){_eodCnt.bitulim++;const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
     else if(e.type==="זיכוי_חתימה"){_eodCnt.zkChatima++;const m=e.details&&e.details.match(/של (.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
+    else if(e.type==="זיכוי_פלוגה"){_eodCnt.zkPluga++;const m=e.details&&e.details.match(/זיכוי פלוגה (.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
     else if(e.type==="זיכוי"){_eodCnt.zkKli++;const m=e.details&&e.details.match(/זוכה (.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
     else if(e.type==="זיכוי_ערכה"){_eodCnt.zkErka++;const m=e.details&&e.details.match(/מ(.+?)\s*\(\d+\s*פריטים?\)/);if(m){const sol=allSols2.find(s=>s.name===m[1].trim());if(sol)sid=sol.id;}}
     else if(e.type==="זיכוי_כלי"){_eodCnt.zkKliFuture++;const m=e.details&&e.details.match(/מ(.+?)\s*\((\d+)\)/);if(m)sid=m[2];}
     if(sid)_eodUniqSids.add(sid);
   });
   signedToday.forEach(({sol})=>_eodUniqSids.add(sol.id));
-  const summaryHtml=noActivity?"":"<div class='eod-summary' style='page-break-after:always'><div style='margin:0 0 12px;padding:14px;border:2px solid #000;background:#f4f6fa;border-radius:6px'><h2 style='margin:0 0 10px;text-align:center;font-size:16px;letter-spacing:1px'>📊 סיכום יום — "+escHtml(targetHeNorm)+"</h2><table style='width:100%;border-collapse:collapse;font-size:13px'><tr><td style='padding:6px 10px;border:1px solid #888'>סה\"כ חיילים (ייחודיים)</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+_eodUniqSids.size+"</td><td style='padding:6px 10px;border:1px solid #888'>חתימות חדשות היום</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+signedToday.length+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🔴 ביטולי שיוך מלא</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.bitulim+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי כלים</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+(_eodCnt.zkKli+_eodCnt.zkKliFuture)+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🟣 זיכויי ערכות</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkErka+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי חתימה</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkChatima+"</td></tr></table></div></div>";
+  const summaryHtml=noActivity?"":"<div class='eod-summary' style='page-break-after:always'><div style='margin:0 0 12px;padding:14px;border:2px solid #000;background:#f4f6fa;border-radius:6px'><h2 style='margin:0 0 10px;text-align:center;font-size:16px;letter-spacing:1px'>📊 סיכום יום — "+escHtml(targetHeNorm)+"</h2><table style='width:100%;border-collapse:collapse;font-size:13px'><tr><td style='padding:6px 10px;border:1px solid #888'>סה\"כ חיילים (ייחודיים)</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+_eodUniqSids.size+"</td><td style='padding:6px 10px;border:1px solid #888'>חתימות חדשות היום</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700;font-size:15px'>"+signedToday.length+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🔴 ביטולי שיוך מלא</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.bitulim+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי כלים</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+(_eodCnt.zkKli+_eodCnt.zkKliFuture)+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>🟣 זיכויי ערכות</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkErka+"</td><td style='padding:6px 10px;border:1px solid #888'>🟢 זיכויי חתימה</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkChatima+"</td></tr><tr><td style='padding:6px 10px;border:1px solid #888'>↩️ זיכויי פלוגה</td><td style='padding:6px 10px;border:1px solid #888;text-align:center;font-weight:700'>"+_eodCnt.zkPluga+"</td><td style='padding:6px 10px;border:1px solid #888'></td><td style='padding:6px 10px;border:1px solid #888'></td></tr></table></div></div>";
   /* v2.3.70-hotfix13: final approval block (פער c) — page-break-inside:avoid so signatures don't split */
   const _eodAuthName=auth?.name||"";
   const _eodPrintDate=new Date().toLocaleDateString("he-IL");
@@ -5224,7 +5238,7 @@ function runEndOfDayPrint(db,auth,targetDateHe){
   const baseStyles="<style>@media print{@page{size:A4;margin:10mm}}body{font-family:Arial,sans-serif;direction:rtl;margin:0}.eod-summary{padding:20mm 15mm;page-break-after:always}.eod-summary h1{font-size:22px;text-align:center;margin-bottom:14px}.eod-summary p.cnt{text-align:center;color:#666;font-size:13px;margin-bottom:14px}.eod-summary table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}.eod-summary th,.eod-summary td{border:1px solid #000;padding:6px 10px;text-align:right}.eod-summary th{background:#e8e8e8;font-weight:700}.eod-summary .empty{padding:24px;text-align:center;color:#888;font-style:italic;border:1px dashed #ccc;border-radius:6px}.eod-summary .info{padding:30px;text-align:center;color:#444;font-size:15px;border:2px dashed #888;border-radius:8px;background:#fafafa}.eod-no-print{margin:10px}.eod-no-print button{padding:8px 18px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:700;background:#0969da;color:#fff;border:none;border-radius:6px}@media print{.eod-no-print{display:none}}</style>";
   const body=noActivity
     ? "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס</button>&nbsp;<button onclick='window.close()'>סגור</button></div><div class='eod-summary'><h1>📋 דוח סוף יום — "+targetHeNorm+"</h1><div class='info'>אין פעילות לתאריך זה<br/><small style='color:#777;font-size:12px'>לא תועדו חתימות, ביטולי שיוך או זיכויים בתאריך "+targetHeNorm+"</small></div></div>"
-    : "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס הכל</button></div><div class='eod-summary'><h1>📋 ביטולי שיוך וזיכויים מלאים — "+targetHeNorm+"</h1><p class='cnt'>סהכ: "+fullEvents.length+" פעולות</p>"+(fullEvents.length>0?"<table><thead><tr><th>שעה</th><th>סוג</th><th>שם חייל</th><th>מ.א.</th><th>פלוגה</th><th>מחלקה</th></tr></thead><tbody>"+page1Rows+"</tbody></table>":"<div class='empty'>אין ביטולים מלאים בתאריך זה</div>")+"</div>"+summaryHtml+(formsHtml||"<div class='eod-summary'><h1>אין חתימות חדשות בתאריך זה</h1></div>")+adminSigHtml;
+    : "<div class='eod-no-print'><button onclick='window.print()'>🖨️ הדפס הכל</button></div><div class='eod-summary'><h1>📋 ביטולי שיוך וזיכויים מלאים — "+targetHeNorm+"</h1><p class='cnt'>סהכ: "+fullEvents.length+" פעולות</p>"+(fullEvents.length>0?"<table><thead><tr><th>שעה</th><th>סוג</th><th>שם חייל</th><th>מ.א.</th><th>פלוגה</th><th>מחלקה</th><th>פריט</th></tr></thead><tbody>"+page1Rows+"</tbody></table>":"<div class='empty'>אין ביטולים מלאים בתאריך זה</div>")+"</div>"+summaryHtml+(formsHtml||"<div class='eod-summary'><h1>אין חתימות חדשות בתאריך זה</h1></div>")+adminSigHtml;
   const fullPrintHtml="<!DOCTYPE html><html dir='rtl'><head><meta charset='UTF-8'><title>הדפס סוף יום — "+targetHeNorm+"</title>"+headStyleMatch+baseStyles+"</head><body>"+body+"</body></html>";
   const win=window.open("","_blank");
   if(win){
@@ -5245,7 +5259,7 @@ function EndOfDayPickerModal({db,auth,onClose}){
     Object.values(db.actLog||{}).forEach(dayMap=>{
       Object.values(dayMap||{}).forEach(e=>{
         /* v2.3.70-hotfix13: same types as runEndOfDayPrint filter so archive history matches what the report includes */
-        if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
+        if(!e||!(e.type==="ביטול_שיוך"||e.type==="זיכוי"||e.type==="זיכוי_פלוגה"||e.type==="זיכוי_חתימה"||e.type==="זיכוי_ערכה"||e.type==="זיכוי_כלי"))return;
         const norm=_eodNormHe(e.date);
         if(!norm)return;
         if(!map[norm])map[norm]={date:norm,events:0,sigs:0};
