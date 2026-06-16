@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.116";
+const APP_VERSION = "2.3.117";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5248,7 +5248,7 @@ function UniformSignModal({soldier,uniformData,db,auth,onClose,onSaved}){
     )
   );
 }
-/* ===== UniformsTab — ביגוד טקטי (v2.3.116, שלב 3ג: החתמה דיגיטלית במקום; שלב 3ב: סינון פלוגה + טופס 1008; שלב 3א: תצוגה + חיפוש; שלב 2: העלאת Excel + הצלבה + שמירה לענף מבודד uniformAssignments) =====
+/* ===== UniformsTab — ביגוד טקטי (v2.3.117, שלב 3ד: סטטוס כביסה + הדפסה מרוכזת + ייצוא Excel; שלב 3ג: החתמה דיגיטלית; שלב 3ב: סינון + טופס 1008; שלב 3א: תצוגה + חיפוש; שלב 2: העלאת Excel + הצלבה + שמירה לענף מבודד uniformAssignments) =====
    בידוד: קורא getSoldiers + uniformAssignments + uniformSignatures (read-only); כותב אך ורק ל-db/uniformAssignments דרך rtdb.update (לא setDb/saveDB);
    לא נוגע ב-assignments/signatures/doReturn/signoff/checkSerialDuplicate. lazy: טעינה רק ב-mount. */
 function UniformsTab({db,setDb,soldiers,auth}){
@@ -5310,7 +5310,7 @@ function UniformsTab({db,setDb,soldiers,auth}){
   const rows=React.useMemo(function(){
     if(!uniforms)return[];
     const sols=getSoldiers(db);const byId={};sols.forEach(function(s){byId[String(s.id).trim()]=s;});
-    const arr=Object.keys(uniforms).map(function(id){const u=uniforms[id]||{};const s=byId[String(id).trim()];return{soldierId:id,name:(s&&s.name)||u.soldierName||"—",unit:(s&&s.unit)||u.unit||"—",squad:(s&&s.squad)||u.squad||"—",uniformCode:u.uniformCode||"",shirtSize:u.shirtSize||"",pantsSize:u.pantsSize||"",shirtQty:u.shirtQty||0,pantsQty:u.pantsQty||0,signed:!!(uniformSigs&&uniformSigs[id])};});
+    const arr=Object.keys(uniforms).map(function(id){const u=uniforms[id]||{};const s=byId[String(id).trim()];return{soldierId:id,name:(s&&s.name)||u.soldierName||"—",unit:(s&&s.unit)||u.unit||"—",squad:(s&&s.squad)||u.squad||"—",uniformCode:u.uniformCode||"",shirtSize:u.shirtSize||"",pantsSize:u.pantsSize||"",shirtQty:u.shirtQty||0,pantsQty:u.pantsQty||0,signed:!!(uniformSigs&&uniformSigs[id]),laundryStatus:u.laundryStatus||null};});
     arr.sort(function(a,b){return (a.unit||"").localeCompare(b.unit||"","he")||(a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");});
     return arr;
   },[uniforms,uniformSigs,db]);
@@ -5318,13 +5318,17 @@ function UniformsTab({db,setDb,soldiers,auth}){
   const scoped=React.useMemo(function(){return filterUnit==="הכל"?rows:rows.filter(function(r){return r.unit===filterUnit;});},[rows,filterUnit]);
   const filtered=React.useMemo(function(){const q=(_debSearch||"").trim().toLowerCase();if(!q)return scoped;return scoped.filter(function(r){return (r.name||"").toLowerCase().indexOf(q)>=0||(r.soldierId||"").indexOf(q)>=0||(r.uniformCode||"").toLowerCase().indexOf(q)>=0;});},[scoped,_debSearch]);
   if(uniforms===null||uniformSigs===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען נתוני ביגוד...");
-  const savedCount=rows.length;const scopedCount=scoped.length;const signedN=scoped.filter(function(r){return r.signed;}).length;const pendingN=scopedCount-signedN;
+  const savedCount=rows.length;const scopedCount=scoped.length;const signedN=scoped.filter(function(r){return r.signed;}).length;const pendingN=scopedCount-signedN;const laundryN=scoped.filter(function(r){return r.laundryStatus==="sent";}).length;
   function openUniformForm(r){const sols=getSoldiers(db);const s=sols.find(function(x){return String(x.id).trim()===String(r.soldierId).trim();})||{id:r.soldierId,name:r.name,unit:r.unit,squad:r.squad,phone:""};const u=(uniforms&&uniforms[r.soldierId])||{};const sig=(uniformSigs&&uniformSigs[r.soldierId])||null;const w=window.open("","_blank");if(!w){alert("חלון קופץ נחסם — אפשר חלונות קופצים ונסה שוב.");return;}w.document.write(buildUniformFormHtml(s,u,auth,db,sig));w.document.close();}
+  async function setLaundry(id,status){try{await fbSet("db/uniformAssignments/"+id+"/laundryStatus",status);setUniforms(function(prev){const next={...(prev||{})};next[id]={...(next[id]||{}),laundryStatus:status};return next;});try{logAction("מדים_כביסה",(status==="sent"?"נשלח לכביסה":"חזר מכביסה")+" — מ.א "+id,(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[uniform-laundry-log]",_e);}}catch(e){console.error("[uniform-laundry]",e);alert("שגיאה בעדכון סטטוס כביסה: "+(e.message||e));}}
+  function printUnitForms(){if(!scoped.length){alert("אין חיילים בסינון הנוכחי");return;}const sols=getSoldiers(db);const byId={};sols.forEach(function(s){byId[String(s.id).trim()]=s;});let css="";const bodies=scoped.map(function(r,i){const s=byId[String(r.soldierId).trim()]||{id:r.soldierId,name:r.name,unit:r.unit,squad:r.squad,phone:""};const u=(uniforms&&uniforms[r.soldierId])||{};const sig=(uniformSigs&&uniformSigs[r.soldierId])||null;const full=buildUniformFormHtml(s,u,auth,db,sig);if(i===0){const cm=full.match(/<style>([\s\S]*?)<\/style>/i);css=cm?cm[1]:"";}let body=(full.match(/<body>([\s\S]*?)<\/body>/i)||[null,full])[1];body=body.replace(/<button class="noprint"[\s\S]*?<\/button>/i,"");return '<div style="page-break-after:always">'+body+'</div>';}).join("");const w=window.open("","_blank");if(!w){alert("חלון קופץ נחסם — אפשר חלונות קופצים ונסה שוב.");return;}const label=filterUnit==="הכל"?"כל הגדוד":"פלוגה "+filterUnit;w.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>טפסי ביגוד — '+label+'</title><style>'+css+' @media print{.noprint{display:none}}</style></head><body><button class="noprint" onclick="window.print()" style="margin-bottom:10px;padding:6px 18px;cursor:pointer;font-size:12px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפס הכל</button>'+bodies+'</body></html>');w.document.close();}
+  async function exportUniformsExcel(){if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. בדוק חיבור לאינטרנט ונסה שוב.");return;}try{const wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";const ws=wb.addWorksheet("ביגוד טקטי");ws.views=[{rightToLeft:true}];ws.columns=[{header:"שם",key:"name",width:18},{header:"מ.א",key:"id",width:12},{header:"פלוגה",key:"unit",width:10},{header:"מחלקה",key:"squad",width:10},{header:"קוד",key:"code",width:14},{header:"חולצה",key:"shirt",width:12},{header:"מכנס",key:"pants",width:12},{header:"סטטוס חתימה",key:"sigStatus",width:14},{header:"סטטוס כביסה",key:"laundry",width:14},{header:"תאריך חתימה",key:"signedAt",width:18},{header:"מנפק",key:"issuer",width:18}];ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};ws.getRow(1).alignment={horizontal:"center",vertical:"middle"};ws.getRow(1).height=22;scoped.forEach(function(r){const sig=(uniformSigs&&uniformSigs[r.soldierId])||null;const lau=r.laundryStatus==="sent"?"נשלח לכביסה":(r.laundryStatus==="returned"?"חזר מכביסה":"—");ws.addRow({name:r.name,id:r.soldierId,unit:r.unit,squad:r.squad,code:r.uniformCode||"—",shirt:(r.shirtSize||"—")+" x"+(r.shirtQty||0),pants:(r.pantsSize||"—")+" x"+(r.pantsQty||0),sigStatus:r.signed?"חתום":"ממתין",laundry:lau,signedAt:(sig&&sig.signedAt)||"—",issuer:(sig&&sig.issuerName)||"—"});});const wsSum=wb.addWorksheet("סיכום");wsSum.views=[{rightToLeft:true}];wsSum.columns=[{header:"מדד",key:"k",width:26},{header:"ערך",key:"v",width:14}];wsSum.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};wsSum.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};const sentN=scoped.filter(function(r){return r.laundryStatus==="sent";}).length;const retN=scoped.filter(function(r){return r.laundryStatus==="returned";}).length;[{k:"פלוגה",v:(filterUnit==="הכל"?"כל הגדוד":filterUnit)},{k:"סה\"כ חיילים",v:scoped.length},{k:"חתומים",v:signedN},{k:"לא חתומים (ממתינים)",v:pendingN},{k:"נשלחו לכביסה",v:sentN},{k:"חזרו מכביסה",v:retN}].forEach(function(row){wsSum.addRow(row);});const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="ביגוד_טקטי_"+(filterUnit==="הכל"?"כל_הגדוד":filterUnit)+"_"+new Date().toISOString().slice(0,10)+".xlsx";a.click();URL.revokeObjectURL(url);try{logAction("ייצוא_מדים","יוצא Excel ביגוד טקטי ("+scoped.length+" חיילים)",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[uniform-excel-log]",_e);}}catch(e){console.error("[uniform-excel]",e);alert("שגיאה בייצוא: "+(e.message||e));}}
   const listSection=/*#__PURE__*/React.createElement("div",null,
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:16,flexWrap:"wrap",alignItems:"center",marginBottom:12,padding:"10px 14px",borderRadius:10,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",fontWeight:700,fontSize:"var(--text-sm)"}},
       /*#__PURE__*/React.createElement("span",null,(filterUnit==="הכל"?"כל הגדוד":"פלוגה "+filterUnit)+" · "+scopedCount+" חיילים"),
       /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-success-fg)"}},"✓ "+signedN+" חתומים"),
-      /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-warning-fg)"}},"⏳ "+pendingN+" ממתינים")
+      /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-warning-fg)"}},"⏳ "+pendingN+" ממתינים"),
+      /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-accent-fg)"}},"🧺 "+laundryN+" בכביסה")
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
       /*#__PURE__*/React.createElement("select",{value:filterUnit,onChange:function(e){setFilterUnit(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}},
@@ -5332,6 +5336,10 @@ function UniformsTab({db,setDb,soldiers,auth}){
         unitOptions.map(function(u){return/*#__PURE__*/React.createElement("option",{key:u,value:u},"פלוגה "+u);})
       ),
       /*#__PURE__*/React.createElement("input",{value:search,onChange:function(e){setSearch(e.target.value);},placeholder:"🔍 חיפוש לפי שם / מ.א / קוד...",style:{...S.input,flex:1,minWidth:180,marginBottom:0}})
+    ),
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
+      /*#__PURE__*/React.createElement("button",{onClick:printUnitForms,disabled:scopedCount===0,style:{...S.btn("purple"),padding:"8px 14px",opacity:scopedCount===0?0.5:1}},"🖨️ הדפס טפסי פלוגה ("+scopedCount+")"),
+      /*#__PURE__*/React.createElement("button",{onClick:exportUniformsExcel,disabled:scopedCount===0,style:{...S.btn("blue"),padding:"8px 14px",opacity:scopedCount===0?0.5:1}},"📊 ייצוא Excel")
     ),
     savedCount===0
       ?/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"אין חיילים עם מדים עדיין. העלה קובץ מדים כדי להתחיל.")
@@ -5350,10 +5358,11 @@ function UniformsTab({db,setDb,soldiers,auth}){
                   /*#__PURE__*/React.createElement("td",{style:{...S.td,fontFamily:"monospace"}},r.uniformCode||"—"),
                   /*#__PURE__*/React.createElement("td",{style:S.td},(r.shirtSize||"—")+" ×"+(r.shirtQty||0)),
                   /*#__PURE__*/React.createElement("td",{style:S.td},(r.pantsSize||"—")+" ×"+(r.pantsQty||0)),
-                  /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:r.signed?"green":"orange",small:true},r.signed?"✓ חתום":"⏳ ממתין")),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},/*#__PURE__*/React.createElement(Badge,{color:r.signed?"green":"orange",small:true},r.signed?"✓ חתום":"⏳ ממתין"),r.laundryStatus==="sent"&&/*#__PURE__*/React.createElement(Badge,{color:"blue",small:true},"🧺 בכביסה"),r.laundryStatus==="returned"&&/*#__PURE__*/React.createElement(Badge,{color:"purple",small:true},"🔄 חזר"))),
                   /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
                     /*#__PURE__*/React.createElement("button",{onClick:function(){setSignRow(r);},style:{...S.btn(r.signed?"gray":"green"),padding:"4px 10px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}},r.signed?"✍️ החתם מחדש":"✍️ החתם"),
-                    /*#__PURE__*/React.createElement("button",{onClick:function(){openUniformForm(r);},style:{...S.btn("blue"),padding:"4px 10px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}},"📄 טופס 1008")
+                    /*#__PURE__*/React.createElement("button",{onClick:function(){openUniformForm(r);},style:{...S.btn("blue"),padding:"4px 10px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}},"📄 טופס 1008"),
+                    /*#__PURE__*/React.createElement("button",{onClick:function(){setLaundry(r.soldierId,r.laundryStatus==="sent"?"returned":"sent");},style:{...S.btn(r.laundryStatus==="sent"?"orange":"gray"),padding:"4px 10px",fontSize:"var(--text-sm)",whiteSpace:"nowrap"}},r.laundryStatus==="sent"?"🔄 חזר מכביסה":"🧺 שלח לכביסה")
                   ))
                 );})
             )
