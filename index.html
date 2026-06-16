@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.113";
+const APP_VERSION = "2.3.114";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5101,16 +5101,18 @@ setDb(prev=>{const newDb={...prev};// ניקוי ארונות אחרים
 const newCabs={...(prev.cabinets||{})};Object.keys(cleanedCabs).forEach(k=>{newCabs[k]=cleanedCabs[k];});// הוספה לארון היעד
 if(!alreadyIn){newCabs[cabName]=[...(prev.cabinets?.[cabName]||[]),{alias:item.name,fullname:item.name,qty:1,serial:item.serial,makat:getMakat(item.name,db)||"",soldierName:item.soldierName||"בארמון",signed:false}];}newDb.cabinets=newCabs;// עדכון unitItems / assignmentMeta
 if(item.source==="unit"&&item.uid){newDb.unitItems={...prev.unitItems,[item.uid]:{...prev.unitItems[item.uid],cabName,location:cabName}};}if(item.source==="soldier"&&item.soldierId&&item.itemKey){const safeKey=item.itemKey.replace(/[.#$\[\]"]/g,"");newDb.assignmentMeta={...(prev.assignmentMeta||{}),[item.soldierId]:{...(prev.assignmentMeta?.[item.soldierId]||{}),[safeKey]:{...(prev.assignmentMeta?.[item.soldierId]?.[safeKey]||{}),cabName,location:cabName}}};}return newDb;});setPhase("done");}catch(e){console.error("[ADD-TO-CAB] שגיאה:",e);setError("שגיאה: "+e.message);}}function reset(){setSerial("");setSearchResult(null);setError("");setPhase("input");if(inputRef.current)inputRef.current.focus();}return/*#__PURE__*/React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}},/*#__PURE__*/React.createElement("div",{style:{background:"var(--color-bg-default)",borderRadius:10,maxWidth:500,width:"100%",maxHeight:"90vh",overflowY:"auto",padding:20,direction:"rtl"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:18}},"\u2795 \u05D4\u05D5\u05E1\u05E3 \u05E4\u05E8\u05D9\u05D8 \u05DC\u05D0\u05E8\u05D5\u05DF"),/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"var(--color-text-secondary)",marginTop:2}},"\uD83D\uDCE6 ",cabName)),/*#__PURE__*/React.createElement("button",{title:"סגור",onClick:onClose,style:{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"var(--color-text-muted)"}},"\u2715")),phase==="input"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{padding:"10px 14px",background:"var(--color-accent-subtle)",borderRadius:6,fontSize:12,marginBottom:14,lineHeight:1.6}},"\uD83D\uDCA1 \u05D4\u05E7\u05DC\u05D3 \u05E6 \u05E9\u05DC \u05E4\u05E8\u05D9\u05D8 \u05E9\u05DB\u05D1\u05E8 \u05E7\u05D9\u05D9\u05DD \u05D1\u05DE\u05E2\u05E8\u05DB\u05EA. \u05D4\u05DE\u05E2\u05E8\u05DB\u05EA \u05EA\u05DE\u05E6\u05D0 \u05D0\u05D5\u05EA\u05D5 \u05D5\u05EA\u05E2\u05D1\u05D9\u05E8 \u05DC\u05D0\u05E8\u05D5\u05DF \u05D4\u05E0\u05D5\u05DB\u05D7\u05D9.",/*#__PURE__*/React.createElement("br",null),"\u05D0\u05DD \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05D0\u05E8\u05D5\u05DF \u05D0\u05D7\u05E8 \u2014 \u05D4\u05D5\u05D0 \u05D9\u05D5\u05E1\u05E8 \u05DE\u05E9\u05DD \u05D0\u05D5\u05D8\u05D5\u05DE\u05D8\u05D9\u05EA."),/*#__PURE__*/React.createElement("div",{style:{marginBottom:14}},/*#__PURE__*/React.createElement("label",{style:{display:"block",fontSize:13,fontWeight:700,marginBottom:6}},"\u05E6 \u05D4\u05E4\u05E8\u05D9\u05D8:"),/*#__PURE__*/React.createElement("input",{ref:inputRef,value:serial,onChange:e=>setSerial(e.target.value),placeholder:"\u05D4\u05D6\u05DF \u05E6...",onKeyDown:e=>{if(e.key==="Enter")searchSerial();},style:{...S.input,fontSize:18,fontFamily:"monospace",fontWeight:700,textAlign:"center",letterSpacing:2}})),error&&/*#__PURE__*/React.createElement("div",{style:{color:"var(--color-danger-fg)",fontSize:13,marginBottom:10,fontWeight:600}},error),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},/*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("gray"),flex:1,padding:"10px"}},"\u05D1\u05D9\u05D8\u05D5\u05DC"),/*#__PURE__*/React.createElement("button",{onClick:searchSerial,style:{...S.btn("blue"),flex:2,padding:"10px",fontWeight:700}},"\uD83D\uDD0D \u05D7\u05E4\u05E9"))),phase==="confirm"&&searchResult&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{padding:"10px 14px",background:"var(--color-success-subtle)",borderRadius:6,fontSize:13,marginBottom:14}},"\u2705 \u05E0\u05DE\u05E6\u05D0 \u05E4\u05E8\u05D9\u05D8 \u05E2\u05DD \u05E6 ",/*#__PURE__*/React.createElement("b",null,serial)),/*#__PURE__*/React.createElement("div",{style:{padding:"12px 14px",background:"var(--color-bg-subtle)",borderRadius:6,fontSize:13,lineHeight:1.8,marginBottom:14}},"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05E4\u05E8\u05D9\u05D8:")," ",searchResult.name,/*#__PURE__*/React.createElement("br",null),"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05E6:")," ",/*#__PURE__*/React.createElement("span",{style:{fontFamily:"monospace",fontWeight:700}},serial),/*#__PURE__*/React.createElement("br",null),searchResult.source==="unit"?/*#__PURE__*/React.createElement(React.Fragment,null,"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05E1\u05D8\u05D8\u05D5\u05E1:")," \u05D1\u05D0\u05E8\u05DE\u05D5\u05DF",/*#__PURE__*/React.createElement("br",null)):/*#__PURE__*/React.createElement(React.Fragment,null,"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05D7\u05D9\u05D9\u05DC:")," ",searchResult.soldierName,/*#__PURE__*/React.createElement("br",null),"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05D7\u05EA\u05D5\u05DD:")," ",searchResult.isPartialSigned?"⚠️ חלקית — הפריט הזה לא נחתם":searchResult.isSigned?"✅ כן":"⏳ לא",/*#__PURE__*/React.createElement("br",null)),"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05DE\u05D9\u05E7\u05D5\u05DD \u05E0\u05D5\u05DB\u05D7\u05D9:")," ",searchResult.currentLocation),/*#__PURE__*/React.createElement("div",{style:{padding:"12px 14px",background:"var(--color-warning-subtle)",borderRadius:6,fontSize:13,marginBottom:14}},/*#__PURE__*/React.createElement("b",null,"\uD83D\uDCE6 \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D9\u05D5\u05E2\u05D1\u05E8 \u05DC:"),/*#__PURE__*/React.createElement("br",null),/*#__PURE__*/React.createElement("span",{style:{fontWeight:700,fontSize:14}},cabName)),error&&/*#__PURE__*/React.createElement("div",{style:{color:"var(--color-danger-fg)",fontSize:13,marginBottom:10,fontWeight:600}},error),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},/*#__PURE__*/React.createElement("button",{onClick:()=>setPhase("input"),style:{...S.btn("gray"),flex:1,padding:"10px"}},"\u21A9\uFE0F \u05D7\u05D6\u05E8\u05D4"),/*#__PURE__*/React.createElement("button",{title:"אשר",onClick:executeAdd,style:{...S.btn("green"),flex:2,padding:"10px",fontWeight:700}},"\u2705 \u05D4\u05E2\u05D1\u05E8 \u05DC\u05D0\u05E8\u05D5\u05DF"))),phase==="done"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",fontSize:36,marginBottom:8}},"\u2705"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:18,textAlign:"center",marginBottom:14}},"\u05D4\u05E4\u05E8\u05D9\u05D8 \u05E2\u05D1\u05E8 \u05DC\u05D0\u05E8\u05D5\u05DF!"),/*#__PURE__*/React.createElement("div",{style:{padding:"12px 14px",background:"var(--color-success-subtle)",borderRadius:6,fontSize:13,lineHeight:1.8,marginBottom:14}},"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05E4\u05E8\u05D9\u05D8:")," ",searchResult?.name,/*#__PURE__*/React.createElement("br",null),"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05E6:")," ",serial,/*#__PURE__*/React.createElement("br",null),"\u2022 ",/*#__PURE__*/React.createElement("b",null,"\u05DE\u05D9\u05E7\u05D5\u05DD \u05D7\u05D3\u05E9:")," ",cabName),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8}},/*#__PURE__*/React.createElement("button",{onClick:reset,style:{...S.btn("blue"),flex:1,padding:"10px",fontWeight:700}},"\u2795 \u05D4\u05D5\u05E1\u05E3 \u05E4\u05E8\u05D9\u05D8 \u05E0\u05D5\u05E1\u05E3"),/*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("gray"),flex:1,padding:"10px"}},"\u05E1\u05D9\u05D9\u05DD")))));}// =================== VISUT TAB ===================
-/* ===== UniformsTab — ביגוד טקטי (v2.3.113, שלב 2: העלאת Excel + הצלבה מול getSoldiers + שמירה לענף מבודד uniformAssignments) =====
-   בידוד: קורא getSoldiers (read-only) בלבד; כותב אך ורק ל-db/uniformAssignments דרך rtdb.update (לא setDb/saveDB);
+/* ===== UniformsTab — ביגוד טקטי (v2.3.114, שלב 3א: תצוגה — רשימה + סטטוס חתימה + חיפוש debounce; שלב 2: העלאת Excel + הצלבה + שמירה לענף מבודד uniformAssignments) =====
+   בידוד: קורא getSoldiers + uniformAssignments + uniformSignatures (read-only); כותב אך ורק ל-db/uniformAssignments דרך rtdb.update (לא setDb/saveDB);
    לא נוגע ב-assignments/signatures/doReturn/signoff/checkSerialDuplicate. lazy: טעינה רק ב-mount. */
 function UniformsTab({db,setDb,soldiers,auth}){
   const [uniforms,setUniforms]=React.useState(null);
+  const [uniformSigs,setUniformSigs]=React.useState(null);
   const [parsed,setParsed]=React.useState(null);
   const [busy,setBusy]=React.useState(false);
   const [msg,setMsg]=React.useState("");
+  const [search,setSearch]=React.useState("");
   const fileRef=React.useRef(null);
-  React.useEffect(function(){let alive=true;fbGet("db/uniformAssignments").then(function(v){if(alive)setUniforms(v||{});}).catch(function(e){console.error("[uniforms-load]",e);if(alive)setUniforms({});});return function(){alive=false;};},[]);
+  React.useEffect(function(){let alive=true;Promise.all([fbGet("db/uniformAssignments"),fbGet("db/uniformSignatures")]).then(function(r){if(!alive)return;setUniforms(r[0]||{});setUniformSigs(r[1]||{});}).catch(function(e){console.error("[uniforms-load]",e);if(alive){setUniforms({});setUniformSigs({});}});return function(){alive=false;};},[]);
   const cv=function(row,col){const v=row.getCell(col).value;if(v==null)return"";if(typeof v==="object"){if(v.text!=null)return String(v.text).trim();if(v.result!=null)return String(v.result).trim();if(Array.isArray(v.richText))return v.richText.map(function(r){return r.text;}).join("").trim();return"";}return String(v).trim();};
   async function handleUpload(e){
     const file=e.target.files&&e.target.files[0];if(!file)return;
@@ -5155,8 +5157,48 @@ function UniformsTab({db,setDb,soldiers,auth}){
     }catch(err){console.error("[uniforms-save]",err);setMsg("⚠️ שגיאה בשמירה: "+(err.message||err));}
     finally{setBusy(false);}
   }
-  if(uniforms===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען נתוני ביגוד...");
-  const savedCount=Object.keys(uniforms||{}).length;
+  const _debSearch=useDebouncedValue(search,300);
+  const rows=React.useMemo(function(){
+    if(!uniforms)return[];
+    const sols=getSoldiers(db);const byId={};sols.forEach(function(s){byId[String(s.id).trim()]=s;});
+    const arr=Object.keys(uniforms).map(function(id){const u=uniforms[id]||{};const s=byId[String(id).trim()];return{soldierId:id,name:(s&&s.name)||u.soldierName||"—",unit:(s&&s.unit)||u.unit||"—",squad:(s&&s.squad)||u.squad||"—",uniformCode:u.uniformCode||"",shirtSize:u.shirtSize||"",pantsSize:u.pantsSize||"",shirtQty:u.shirtQty||0,pantsQty:u.pantsQty||0,signed:!!(uniformSigs&&uniformSigs[id])};});
+    arr.sort(function(a,b){return (a.unit||"").localeCompare(b.unit||"","he")||(a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");});
+    return arr;
+  },[uniforms,uniformSigs,db]);
+  const filtered=React.useMemo(function(){const q=(_debSearch||"").trim().toLowerCase();if(!q)return rows;return rows.filter(function(r){return (r.name||"").toLowerCase().indexOf(q)>=0||(r.soldierId||"").indexOf(q)>=0||(r.uniformCode||"").toLowerCase().indexOf(q)>=0;});},[rows,_debSearch]);
+  if(uniforms===null||uniformSigs===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען נתוני ביגוד...");
+  const savedCount=rows.length;const signedN=rows.filter(function(r){return r.signed;}).length;const pendingN=savedCount-signedN;
+  const listSection=/*#__PURE__*/React.createElement("div",null,
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:16,flexWrap:"wrap",alignItems:"center",marginBottom:12,padding:"10px 14px",borderRadius:10,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)",fontWeight:700,fontSize:"var(--text-sm)"}},
+      /*#__PURE__*/React.createElement("span",null,"סה\"כ "+savedCount+" חיילים"),
+      /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-success-fg)"}},"✓ "+signedN+" חתומים"),
+      /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-warning-fg)"}},"⏳ "+pendingN+" ממתינים")
+    ),
+    /*#__PURE__*/React.createElement("input",{value:search,onChange:function(e){setSearch(e.target.value);},placeholder:"🔍 חיפוש לפי שם / מ.א / קוד...",style:{...S.input,marginBottom:12}}),
+    savedCount===0
+      ?/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"אין חיילים עם מדים עדיין. העלה קובץ מדים כדי להתחיל.")
+      :/*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
+        /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+          /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:680}},
+            /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["שם","מ.א","פלוגה","מחלקה","קוד","חולצה","מכנס","סטטוס"].map(function(h){return/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h);}))),
+            /*#__PURE__*/React.createElement("tbody",null,
+              filtered.length===0
+                ?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:8,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין תוצאות"))
+                :filtered.map(function(r){return/*#__PURE__*/React.createElement("tr",{key:r.soldierId,style:{background:r.signed?"var(--color-success-bg)":"var(--color-bg-default)"},onMouseEnter:function(e){e.currentTarget.style.background="var(--color-accent-bg)";},onMouseLeave:function(e){e.currentTarget.style.background=r.signed?"var(--color-success-bg)":"var(--color-bg-default)";}},
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},r.name),
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)"}},r.soldierId),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:"purple",small:true},r.unit)),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},r.squad),
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,fontFamily:"monospace"}},r.uniformCode||"—"),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},(r.shirtSize||"—")+" ×"+(r.shirtQty||0)),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},(r.pantsSize||"—")+" ×"+(r.pantsQty||0)),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:r.signed?"green":"orange",small:true},r.signed?"✓ חתום":"⏳ ממתין"))
+                );})
+            )
+          )
+        )
+      )
+  );
   return/*#__PURE__*/React.createElement("div",{style:{padding:20,maxWidth:1000,margin:"0 auto"}},
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:12}},
       /*#__PURE__*/React.createElement("h2",{style:{fontSize:"var(--text-lg)",fontWeight:800,margin:0}},"👕 ביגוד טקטי"),
@@ -5167,7 +5209,7 @@ function UniformsTab({db,setDb,soldiers,auth}){
       /*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsx",onChange:handleUpload,style:{display:"none"}})
     ),
     msg&&/*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},msg),
-    parsed&&/*#__PURE__*/React.createElement("div",{style:{...S.card,padding:16}},
+    parsed?/*#__PURE__*/React.createElement("div",{style:{...S.card,padding:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:14,flexWrap:"wrap",marginBottom:12}},
         /*#__PURE__*/React.createElement("span",{style:{fontWeight:800,color:"var(--color-success-fg)"}},"✓ "+parsed.matched.length+" חיילים הותאמו"),
         parsed.unmatched.length>0&&/*#__PURE__*/React.createElement("span",{style:{fontWeight:800,color:"var(--color-warning-fg)"}},"⚠️ "+parsed.unmatched.length+" לא נמצאו")
@@ -5193,7 +5235,7 @@ function UniformsTab({db,setDb,soldiers,auth}){
         /*#__PURE__*/React.createElement("button",{onClick:doSave,disabled:busy||!parsed.matched.length,style:{...S.btn("blue"),padding:"10px 18px",opacity:(busy||!parsed.matched.length)?0.6:1}},"💾 שמור "+parsed.matched.length+" מותאמים"),
         /*#__PURE__*/React.createElement("button",{onClick:function(){setParsed(null);setMsg("");},disabled:busy,style:{...S.btn("gray"),padding:"10px 16px"}},"ביטול")
       )
-    )
+    ):listSection
   );
 }
 function VisutTab({db,setDb,soldiers,auth}){const[viewMode,setViewMode]=React.useState("inventory");// inventory | requests
