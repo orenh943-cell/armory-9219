@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.122";
+const APP_VERSION = "2.3.123";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5393,7 +5393,7 @@ function UniformCompanyReturnModal({rows,uniformSigs,defaultUnit,unitOptions,aut
   );
 }
 /* ===== buildGuaranteeReceiptHtml — קבלת ערבות נציג פלוגה (v2.3.121). שלד+CSS מ-buildUniformFormHtml. קריאה בלבד. ===== */
-function buildGuaranteeReceiptHtml(unit,g){
+function buildGuaranteeReceiptHtml(unit,g,draft){
   const DECL_TEXT="הנני, נציג הפלוגה החתום מטה, מאשר בזאת קבלת אחריות (ערבות) על פריטי הביגוד הטקטי של חיילי הפלוגה המפורטים בטופס זה. באחריותי לוודא החתמה אישית של כל חייל על פריטיו, או החזרה פיזית של פריטים שלא חולקו. כל עוד פריט לא נחתם אישית ולא הוחזר — הוא נותר באחריותי המלאה.";
   const entries=Object.entries((g&&g.initialItems)||{});
   let totS=0,totP=0;
@@ -5405,9 +5405,9 @@ function buildGuaranteeReceiptHtml(unit,g){
       <td style="padding:4px 8px;border:1px solid #000;text-align:center;font-size:11px">${it.shirtQty||0}</td>
       <td style="padding:4px 8px;border:1px solid #000;text-align:center;font-size:11px">${it.pantsQty||0}</td>
     </tr>`;}).join("");
-  const repSig=(g&&g.repSig)||null;
+  const repSig=draft?null:((g&&g.repSig)||null);
   return `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-<title>קבלת ערבות — ביגוד טקטי — פלוגה ${unit}</title>
+<title>${draft?"טיוטת קבלת ערבות":"קבלת ערבות"} — ביגוד טקטי — פלוגה ${unit}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;direction:rtl;padding:16px;color:#000;font-size:12px;max-width:800px;margin:0 auto}
@@ -5432,11 +5432,11 @@ function buildGuaranteeReceiptHtml(unit,g){
   @media print{.noprint{display:none}}
 </style></head><body>
 <button class="noprint" onclick="window.print()" style="margin-bottom:10px;padding:6px 18px;cursor:pointer;font-size:12px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפסה</button>
-<div class="form-title">קבלת ערבות — ביגוד טקטי</div>
+<div class="form-title">${draft?"קבלת ערבות — ביגוד טקטי · טיוטה להכנה":"קבלת ערבות — ביגוד טקטי"}</div>
 <div class="info-row">
   <div class="info-cell"><div class="info-lbl">פלוגה</div><div class="info-val">${unit}</div></div>
-  <div class="info-cell"><div class="info-lbl">נציג ערב</div><div class="info-val">${(g&&g.repName)||"—"}</div></div>
-  <div class="info-cell"><div class="info-lbl">מ.א נציג</div><div class="info-val">${(g&&g.repId)||"—"}</div></div>
+  <div class="info-cell"><div class="info-lbl">נציג ערב</div><div class="info-val">${draft?"&nbsp;":((g&&g.repName)||"—")}</div></div>
+  <div class="info-cell"><div class="info-lbl">מ.א נציג</div><div class="info-val">${draft?"&nbsp;":((g&&g.repId)||"—")}</div></div>
   <div class="info-cell"><div class="info-lbl">גדוד</div><div class="info-val">9219</div></div>
 </div>
 <div class="sec-hdr">פריטי הביגוד שבאחריות הנציג (${entries.length} חיילים)</div>
@@ -5457,10 +5457,10 @@ function buildGuaranteeReceiptHtml(unit,g){
 <div class="sig-block">
   <div class="sig-side">
     <div class="sig-title">פרטי הנציג הערב</div>
-    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">${(g&&g.repName)||"&nbsp;"}</div></div>
-    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">${(g&&g.repId)||"&nbsp;"}</div></div>
-    <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${(g&&g.createdAt)||"&nbsp;"}</div></div>
-    <div class="sig-row"><div class="sl">החתים</div><div class="sv">${(g&&g.issuerName)||"&nbsp;"}</div></div>
+    <div class="sig-row"><div class="sl">שם מלא</div><div class="sv">${draft?"&nbsp;":((g&&g.repName)||"&nbsp;")}</div></div>
+    <div class="sig-row"><div class="sl">מספר אישי</div><div class="sv">${draft?"&nbsp;":((g&&g.repId)||"&nbsp;")}</div></div>
+    <div class="sig-row"><div class="sl">תאריך</div><div class="sv">${draft?"&nbsp;":((g&&g.createdAt)||"&nbsp;")}</div></div>
+    <div class="sig-row"><div class="sl">החתים</div><div class="sv">${draft?"&nbsp;":((g&&g.issuerName)||"&nbsp;")}</div></div>
     <div class="sig-row"><div class="sl">חתימת הנציג</div><div class="sv" style="min-height:46px">${repSig?`<img src="${repSig}" style="height:42px;max-width:100%"/>`:"&nbsp;"}</div></div>
   </div>
 </div>
@@ -5600,7 +5600,7 @@ function UniformGuaranteeModal({rows,guarantees,defaultUnit,unitOptions,db,auth,
     )
   );
 }
-/* ===== UniformsTab — ביגוד טקטי (v2.3.122, שלב 3ח: סינון זכאים דוח 1 + ייצוא זכאים; שלב 3ז: ערבות נציג פלוגה; שלב 3ו: זיכוי פלוגתי; שלב 3ה: זיכוי פר-יחידה + חתום חלקית; שלב 3ד: כביסה + הדפסה מרוכזת + ייצוא; שלב 3ג: החתמה דיגיטלית; שלב 3ב: סינון + 1008; שלב 3א: תצוגה; שלב 2: העלאה + הצלבה + שמירה לענף מבודד uniformAssignments) =====
+/* ===== UniformsTab — ביגוד טקטי (v2.3.123, שלב 3ט: טיוטת קבלת ערבות ריקה; שלב 3ח: סינון זכאים דוח 1 + ייצוא זכאים; שלב 3ז: ערבות נציג פלוגה; שלב 3ו: זיכוי פלוגתי; שלב 3ה: זיכוי פר-יחידה + חתום חלקית; שלב 3ד: כביסה + הדפסה מרוכזת + ייצוא; שלב 3ג: החתמה דיגיטלית; שלב 3ב: סינון + 1008; שלב 3א: תצוגה; שלב 2: העלאה + הצלבה + שמירה לענף מבודד uniformAssignments) =====
    בידוד: קורא getSoldiers + uniformAssignments + uniformSignatures (read-only); כותב אך ורק ל-db/uniformAssignments דרך rtdb.update (לא setDb/saveDB);
    לא נוגע ב-assignments/signatures/doReturn/signoff/checkSerialDuplicate. lazy: טעינה רק ב-mount. */
 function UniformsTab({db,setDb,soldiers,auth}){
@@ -5786,6 +5786,16 @@ function UniformsTab({db,setDb,soldiers,auth}){
       try{logAction("ייצוא_מדים","יוצא Excel גדודי: "+units.length+" פלוגות, "+rows.length+" חיילים",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[uniform-excel-log]",_e);}
     }catch(e){console.error("[uniform-excel]",e);alert("שגיאה בייצוא: "+(e.message||e));}
   }
+  function printDraftReceipt(){
+    const u=filterUnit!=="הכל"?filterUnit:(unitOptions[0]||"");
+    if(!u){alert("בחר פלוגה ספציפית להכנת טיוטה");return;}
+    var list=rows.filter(function(r){return r.unit===u;});
+    if(filterActive)list=list.filter(function(r){return isEligible(r.soldierId);});
+    if(!list.length){alert("אין חיילים עם מדים בפלוגה "+u);return;}
+    var initialItems={};list.slice().sort(function(a,b){return (a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");}).forEach(function(r){initialItems[r.soldierId]={name:r.name,code:r.uniformCode||"",shirtQty:r.shirtQty||0,pantsQty:r.pantsQty||0};});
+    var w=window.open("","_blank");if(!w){alert("חלון קופץ נחסם — אפשר חלונות קופצים ונסה שוב.");return;}
+    w.document.write(buildGuaranteeReceiptHtml(u,{initialItems:initialItems},true));w.document.close();
+  }
   const listSection=/*#__PURE__*/React.createElement("div",null,
     filterActive&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",borderRadius:10,background:"#e0f2fe",border:"1px solid #38bdf8",color:"#075985",fontWeight:700,fontSize:"var(--text-sm)"}},/*#__PURE__*/React.createElement("span",null,"🔵 סינון דוח 1 פעיל · "+(((eligibility&&eligibility.ids)||[]).length)+" זכאים · הועלה "+((eligibility&&eligibility.updatedAt)||"—")),/*#__PURE__*/React.createElement("button",{onClick:toggleElig,style:{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)"}},"כבה"),/*#__PURE__*/React.createElement("button",{onClick:clearElig,style:{...S.btn("gray"),padding:"3px 10px",fontSize:"var(--text-xs)"}},"נקה סינון")),
     (!filterActive&&eligibility&&eligibility.ids&&eligibility.ids.length)&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10,padding:"6px 12px",borderRadius:8,background:"var(--color-bg-subtle)",border:"1px dashed var(--color-border-default)",color:"var(--color-text-secondary)",fontSize:"var(--text-xs)"}},/*#__PURE__*/React.createElement("span",null,"דוח 1 טעון ("+eligibility.ids.length+" זכאים) — הסינון כבוי"),/*#__PURE__*/React.createElement("button",{onClick:toggleElig,style:{...S.btn("blue"),padding:"3px 10px",fontSize:"var(--text-xs)"}},"הפעל סינון")),
@@ -5808,6 +5818,7 @@ function UniformsTab({db,setDb,soldiers,auth}){
       /*#__PURE__*/React.createElement("button",{onClick:exportUniformsExcel,disabled:savedCount===0,style:{...S.btn("blue"),padding:"8px 14px",opacity:savedCount===0?0.5:1}},"📊 ייצוא Excel גדודי"),
       /*#__PURE__*/React.createElement("button",{onClick:function(){setCompanyReturnOpen(true);},disabled:savedCount===0,style:{...S.btn("red"),padding:"8px 14px",opacity:savedCount===0?0.5:1}},"↩️ זיכוי פלוגה"),
       /*#__PURE__*/React.createElement("button",{onClick:function(){setGuaranteeOpen(true);},disabled:savedCount===0,style:{...S.btn("purple"),padding:"8px 14px",opacity:savedCount===0?0.5:1}},"🤝 ערבות פלוגה"),
+      /*#__PURE__*/React.createElement("button",{onClick:printDraftReceipt,disabled:savedCount===0,style:{...S.btn("gray"),padding:"8px 14px",opacity:savedCount===0?0.5:1}},"🖨️ הדפס טיוטת ערבות (ריקה)"),
       /*#__PURE__*/React.createElement("button",{onClick:function(){if(eligFileRef.current)eligFileRef.current.click();},disabled:busy,style:{...S.btn("gray"),padding:"8px 14px",opacity:busy?0.6:1}},"📋 העלה דוח 1 (זכאים)"),
       /*#__PURE__*/React.createElement("input",{ref:eligFileRef,type:"file",accept:".xlsx",onChange:handleEligUpload,style:{display:"none"}}),
       (eligibility&&eligibility.ids&&eligibility.ids.length)&&/*#__PURE__*/React.createElement("button",{onClick:toggleElig,style:{...S.btn(filterActive?"blue":"gray"),padding:"8px 14px"}},filterActive?"🔵 סינון דוח 1: פעיל":"⚪ סינון דוח 1: כבוי"),
