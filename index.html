@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.133";
+const APP_VERSION = "2.3.134";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -7259,7 +7259,7 @@ React.useEffect(()=>{const blocked=Object.keys(USERS).filter(k=>deletedUsers[k])
 const dynamicUsers=Object.entries(db.dynamicUsers||{});// Merge userPerms phone into static users so phone displays correctly
 const staticUsersWithPhone=staticUsers.map(([k,u])=>[k,{...u,phone:db.userPerms?.[k]?.phone||db.userPerms?.[k]?._phone||u.phone||""}]);const allUsers=[...staticUsersWithPhone,...dynamicUsers.map(([k,u])=>[k,{...u,dynamic:true}])];const[showAdd,setShowAdd]=useState(false);const[newUser,setNewUser]=useState({username:"",name:"",pass:"",role:"viewer",viewUnit:"הכל",editUnit:"הכל",soldierId:"",phone:""});const[err,setErr]=useState("");const[searchUser,setSearchUser]=useState("");const[editPassUser,setEditPassUser]=useState(null);const[editPassVal,setEditPassVal]=useState("");const[editRankUser,setEditRankUser]=useState(null);const[editRankVal,setEditRankVal]=useState("");const[editRoleUser,setEditRoleUser]=useState(null);const[editRoleVal,setEditRoleVal]=useState("");const[editPhoneUser,setEditPhoneUser]=useState(null);const[editPhoneVal,setEditPhoneVal]=useState("");const[shareUser,setShareUser]=useState(null);const[sigModalUser,setSigModalUser]=useState(null);/* ✍️ חתימה שמורה */
 const[nameSuggestions,setNameSuggestions]=useState([]);const[soldiers]=useState(()=>getSoldiers(loadDB()||{}));// תלויות בין הרשאות
-const PERM_DEPS={canSign:["canViewSoldiers"],canBulkSign:["canViewSoldiers","canSign"],canCheckout:["canViewSoldiers","canViewInventory"],canReturn:["canViewSoldiers","canViewInventory"],canEdit:["canViewSoldiers"],canEditBroken:["canViewBroken"],canApproveExitForm:["canFillExitForm"],canCommanderDecide:["canFillExitForm"],isMagad:["canCommanderDecide","canApproveExitForm","canFillExitForm"],canManagePerms:["canViewSoldiers"],canManageUniforms:["canViewSoldiers"],canModule_company_a:["canViewSoldiers"],canModule_company_b:["canViewSoldiers"],canModule_company_c:["canViewSoldiers"],canModule_support:["canViewSoldiers"],canModule_agam:["canViewSoldiers"],canModule_plasm:["canViewSoldiers"]};// אם פותחים הרשאה — פותחים גם תלויות
+const PERM_DEPS={canSign:["canViewSoldiers"],canBulkSign:["canViewSoldiers","canSign"],canCheckout:["canViewSoldiers","canViewInventory"],canReturn:["canViewSoldiers","canViewInventory"],canEdit:["canViewSoldiers"],canEditBroken:["canViewBroken"],canApproveExitForm:["canFillExitForm"],canCommanderDecide:["canFillExitForm"],isMagad:["canCommanderDecide","canApproveExitForm","canFillExitForm"],canManagePerms:["canViewSoldiers"],canManageUniforms:["canViewSoldiers"],canModule_company_a:["canViewSoldiers"],canModule_company_b:["canViewSoldiers"],canModule_company_c:["canViewSoldiers"],canModule_support:["canViewSoldiers"],canModule_agam:["canViewSoldiers"],canModule_plasm:["canViewSoldiers"],canModule_adjutancy:["canViewSoldiers"]};// אם פותחים הרשאה — פותחים גם תלויות
 // אם סוגרים הרשאה — סוגרים גם מה שתלוי בה
 const PERM_REVDEPS={};// מה תלוי בהרשאה זו
 Object.entries(PERM_DEPS).forEach(([p,deps])=>{deps.forEach(dep=>{if(!PERM_REVDEPS[dep])PERM_REVDEPS[dep]=[];PERM_REVDEPS[dep].push(p);});});function togglePerm(username,perm,isDynamic){const baseRole=isDynamic?db.dynamicUsers?.[username]?.role||"viewer":USERS[username]?.role||"viewer";const base=DEFAULT_PERMS[baseRole]||{};const current=db.userPerms?.[username]||{};const merged={...base,...current};const newVal=!merged[perm];let updated={...current,[perm]:newVal};if(newVal){/* פותחים — פתח גם תלויות */
@@ -7342,13 +7342,17 @@ function PresenceTab({moduleId,auth}){
   const [toDate,setToDate]=React.useState("");
   const [search,setSearch]=React.useState("");
   const [squadFilter,setSquadFilter]=React.useState("all");
+  const [unitFilter,setUnitFilter]=React.useState("all");
   const [busy,setBusy]=React.useState(false);
   const [msg,setMsg]=React.useState("");
   React.useEffect(function(){let alive=true;Promise.all([fbGet("db/soldiers"),fbGet("db/customSoldiers"),fbGet("db/deletedSoldiers"),fbGet("db/presenceReports")]).then(function(r){if(!alive)return;const sdb={soldiers:r[0]||{},customSoldiers:r[1]||{},deletedSoldiers:r[2]||{}};setRoster(getSoldiers(sdb));setReports(r[3]||{});}).catch(function(e){console.error("[presence-load]",e);if(alive){setRoster([]);setReports({});}});return function(){alive=false;};},[moduleId]);
+  React.useEffect(function(){var ids=Object.keys(checked).filter(function(k){return checked[k];});if(ids.length===1){var rep=reports[ids[0]];if(rep){setCat(rep.category||"in_unit");setFromDate(rep.fromDate||"");setToDate(rep.toDate||"");}}},[checked]);
+  const cross=moduleId==="adjutancy";
   const def=MAP[moduleId]||{by:"unit",val:""};
-  const list=React.useMemo(function(){if(!roster)return[];const f=roster.filter(function(s){return def.by==="unit"?s.unit===def.val:s.squad===def.val;});f.sort(function(a,b){return (a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");});return f;},[roster,moduleId]);
+  const list=React.useMemo(function(){if(!roster)return[];var f=cross?roster.slice():roster.filter(function(s){return def.by==="unit"?s.unit===def.val:s.squad===def.val;});f.sort(function(a,b){return (a.unit||"").localeCompare(b.unit||"","he")||(a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");});return f;},[roster,moduleId]);
   const squadOptions=React.useMemo(function(){var set={};list.forEach(function(s){if(s.squad)set[s.squad]=true;});return Object.keys(set).sort(function(a,b){return a.localeCompare(b,"he");});},[list]);
-  const filtered=React.useMemo(function(){var q=search.trim().toLowerCase();return list.filter(function(s){if(squadFilter!=="all"&&s.squad!==squadFilter)return false;if(!q)return true;return (s.name||"").toLowerCase().indexOf(q)>=0||(String(s.id)||"").indexOf(q)>=0;});},[list,search,squadFilter]);
+  const unitOptions=React.useMemo(function(){var set={};(roster||[]).forEach(function(s){if(s.unit)set[s.unit]=true;});return Object.keys(set).sort(function(a,b){return a.localeCompare(b,"he");});},[roster]);
+  const filtered=React.useMemo(function(){var q=search.trim().toLowerCase();return list.filter(function(s){if(cross&&unitFilter!=="all"&&s.unit!==unitFilter)return false;if(squadFilter!=="all"&&s.squad!==squadFilter)return false;if(!q)return true;return (s.name||"").toLowerCase().indexOf(q)>=0||(String(s.id)||"").indexOf(q)>=0;});},[list,search,squadFilter,unitFilter,cross]);
   const selIds=Object.keys(checked).filter(function(k){return checked[k];});
   function setAll(v){const c={};filtered.forEach(function(s){c[s.id]=v;});setChecked(c);}
   async function report(){
@@ -7370,7 +7374,7 @@ function PresenceTab({moduleId,auth}){
   const total=list.length;const reportedN=list.filter(function(s){return reports[s.id];}).length;
   return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1000,margin:"0 auto"}},
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:12}},
-      /*#__PURE__*/React.createElement("h2",{style:{margin:0,fontSize:"var(--text-xl)",fontWeight:800}},"📋 דוח 1 — דיווח נוכחות"),
+      /*#__PURE__*/React.createElement("h2",{style:{margin:0,fontSize:"var(--text-xl)",fontWeight:800}},cross?"📋 דוח 1 גדודי — כל הגדוד":"📋 דוח 1 — דיווח נוכחות"),
       /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-sm)",color:"var(--color-text-secondary)"}},total+" חיילים · "+reportedN+" דווחו")
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10,padding:"10px 12px",borderRadius:10,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},
@@ -7382,6 +7386,7 @@ function PresenceTab({moduleId,auth}){
       /*#__PURE__*/React.createElement("button",{onClick:report,disabled:busy||!selIds.length,style:{...S.btn("green"),padding:"8px 14px",opacity:(busy||!selIds.length)?0.5:1}},busy?"מדווח...":"דווח על "+selIds.length+" מסומנים")
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}},
+      cross&&/*#__PURE__*/React.createElement("select",{value:unitFilter,onChange:function(e){setUnitFilter(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}},/*#__PURE__*/React.createElement("option",{value:"all"},"כל הגדוד"),unitOptions.map(function(u){return/*#__PURE__*/React.createElement("option",{key:u,value:u},"פלוגה "+u);})),
       /*#__PURE__*/React.createElement("select",{value:squadFilter,onChange:function(e){setSquadFilter(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}},/*#__PURE__*/React.createElement("option",{value:"all"},"כל המחלקות"),squadOptions.map(function(sq){return/*#__PURE__*/React.createElement("option",{key:sq,value:sq},sq);})),
       /*#__PURE__*/React.createElement("input",{value:search,onChange:function(e){setSearch(e.target.value);},placeholder:"🔍 חיפוש שם / מ.א...",style:{...S.input,flex:1,minWidth:160,marginBottom:0}}),
       /*#__PURE__*/React.createElement("button",{onClick:function(){setAll(true);},style:{...S.btn("gray"),padding:"6px 12px"}},"סמן הכל"),
@@ -7391,14 +7396,15 @@ function PresenceTab({moduleId,auth}){
     /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
       /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
         /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:560}},
-          /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["✓","שם","מ.א","מחלקה","סטטוס נוכחי"].map(function(h){return/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h);}))),
+          /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["✓","שם","מ.א"].concat(cross?["פלוגה"]:[]).concat(["מחלקה","סטטוס נוכחי"]).map(function(h){return/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h);}))),
           /*#__PURE__*/React.createElement("tbody",null,
             filtered.length===0
-              ?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:5,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין חיילים"))
+              ?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:cross?6:5,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין חיילים"))
               :filtered.map(function(s){var on=!!checked[s.id];var rep=reports[s.id];var c=rep?CATS.find(function(x){return x.k===rep.category;}):null;return/*#__PURE__*/React.createElement("tr",{key:s.id,style:{background:on?"var(--color-accent-bg)":"var(--color-bg-default)"}},
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},/*#__PURE__*/React.createElement("input",{type:"checkbox",checked:on,onChange:function(e){var v=e.target.checked;setChecked(function(p){return {...p,[s.id]:v};});}})),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},s.name),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontFamily:"monospace",color:"var(--color-text-secondary)"}},s.id),
+                cross&&/*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:"purple",small:true},s.unit||"—")),
                 /*#__PURE__*/React.createElement("td",{style:S.td},s.squad||"—"),
                 /*#__PURE__*/React.createElement("td",{style:S.td},(rep&&c)?/*#__PURE__*/React.createElement("span",{style:{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}},/*#__PURE__*/React.createElement(Badge,{color:c.color,small:true},c.label),(rep.fromDate||rep.toDate)?/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}},(rep.fromDate||"?")+" → "+(rep.toDate||"?")):null):/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)"}},"טרם דווח"))
               );})
@@ -7410,7 +7416,7 @@ function PresenceTab({moduleId,auth}){
 }
 function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
-  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"}],support:[{id:"presence",label:"דוח 1",icon:"📋"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"}]};
+  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"}],support:[{id:"presence",label:"דוח 1",icon:"📋"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"}]};
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
   /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
@@ -7422,7 +7428,7 @@ function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const [subTabs,setSubTabs]=React.useState({});
   function pick(id){setActiveModule(id);try{sessionStorage.setItem("activeModule",id);}catch(e){}}
   const _cur=allowed.some(function(m){return m.id===activeModule;})?activeModule:"armory";
-  const SIDEBAR_MODULES=["company_a","company_b","company_c","support","agam","plasm","armament","logistics"];
+  const SIDEBAR_MODULES=["company_a","company_b","company_c","support","agam","plasm","armament","logistics","adjutancy"];
   const _hasSidebar=(_cur==="armory"||SIDEBAR_MODULES.indexOf(_cur)>=0);
   const moduleBar=allowed.length>1?/*#__PURE__*/React.createElement("div",{className:_hasSidebar?"module-bar":"",style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"8px 10px",background:"var(--color-bg-default)",borderBottom:"1px solid var(--color-border-muted)",position:"sticky",top:0,zIndex:60}},
     allowed.map(function(m){var on=_cur===m.id;return/*#__PURE__*/React.createElement("button",{key:m.id,onClick:function(){pick(m.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},m.icon+" "+m.label);})
