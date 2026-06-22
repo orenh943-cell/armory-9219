@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.134";
+const APP_VERSION = "2.3.135";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -7414,9 +7414,52 @@ function PresenceTab({moduleId,auth}){
     )
   );
 }
+/* ===== PresenceDashboard — דשבורד נוכחות גדודי לשלישות (v2.3.135). קריאה בלבד: רוסטר חי + presenceReports. ===== */
+function PresenceDashboard({auth}){
+  const CATS=[{k:"in_unit",label:"ביחידה",fg:"var(--color-success-fg)",bg:"var(--color-success-bg)"},{k:"released",label:"שוחרר",fg:"var(--color-text-secondary)",bg:"var(--color-bg-subtle)"},{k:"refresh",label:"רענון",fg:"var(--color-accent-fg)",bg:"var(--color-accent-bg)"},{k:"gimel",label:"גימלים",fg:"#9a6700",bg:"#fff8c5"},{k:"organize",label:"התארגנות",fg:"var(--color-purple-fg)",bg:"var(--color-purple-bg)"},{k:"none",label:"לא דווח",fg:"var(--color-danger-fg)",bg:"var(--color-danger-bg)"}];
+  const [roster,setRoster]=React.useState(null);
+  const [reports,setReports]=React.useState({});
+  React.useEffect(function(){let alive=true;Promise.all([fbGet("db/soldiers"),fbGet("db/customSoldiers"),fbGet("db/deletedSoldiers"),fbGet("db/presenceReports")]).then(function(r){if(!alive)return;var sdb={soldiers:r[0]||{},customSoldiers:r[1]||{},deletedSoldiers:r[2]||{}};setRoster(getSoldiers(sdb));setReports(r[3]||{});}).catch(function(e){console.error("[presence-dash-load]",e);if(alive){setRoster([]);setReports({});}});return function(){alive=false;};},[]);
+  function catOf(id){var rep=reports[id];return (rep&&rep.category)?rep.category:"none";}
+  function dcard(num,label,fg,bg){return/*#__PURE__*/React.createElement("div",{key:label,style:{background:bg,borderRadius:12,padding:"14px 12px",textAlign:"center",border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:28,fontWeight:800,color:fg,lineHeight:1.1}},num),/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4}},label));}
+  if(roster===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען נתונים...");
+  var total=roster.length;
+  var counts={in_unit:0,released:0,refresh:0,gimel:0,organize:0,none:0};
+  roster.forEach(function(s){var k=catOf(s.id);counts[k]=(counts[k]||0)+1;});
+  var ORDER=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  var present=[];roster.forEach(function(s){if(s.unit&&present.indexOf(s.unit)<0)present.push(s.unit);});
+  var units=ORDER.filter(function(u){return present.indexOf(u)>=0;}).concat(present.filter(function(u){return ORDER.indexOf(u)<0;}));
+  var byUnit=units.map(function(u){var list=roster.filter(function(s){return s.unit===u;});var c={in_unit:0,released:0,refresh:0,gimel:0,organize:0,none:0};list.forEach(function(s){c[catOf(s.id)]++;});var reported=list.length-c.none;var pct=list.length?Math.round(reported/list.length*100):0;return {unit:u,total:list.length,c:c,pct:pct};});
+  return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1000,margin:"0 auto"}},
+    /*#__PURE__*/React.createElement("h2",{style:{margin:"0 0 12px",fontSize:"var(--text-xl)",fontWeight:800}},"📊 דשבורד נוכחות גדודי"),
+    /*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}},
+      dcard(total,"סה\"כ חיילים","var(--color-text-primary)","var(--color-bg-subtle)"),
+      CATS.map(function(ct){return dcard(counts[ct.k]||0,ct.label,ct.fg,ct.bg);})
+    ),
+    /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:14}},
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10,fontSize:"var(--text-base)"}},"פילוח פלוגתי"),
+      /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+        /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:680}},
+          /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["פלוגה","סה\"כ","ביחידה","שוחרר","רענון","גימלים","התארגנות","לא דווח","% דיווח"].map(function(h){return/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h);}))),
+          /*#__PURE__*/React.createElement("tbody",null,byUnit.map(function(r){var bc=r.pct>=80?"var(--color-success-fg)":r.pct>=50?"#9a6700":"var(--color-danger-fg)";return/*#__PURE__*/React.createElement("tr",{key:r.unit},
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:700}},r.unit),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},r.total),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",color:"var(--color-success-fg)"}},r.c.in_unit),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},r.c.released),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",color:"var(--color-accent-fg)"}},r.c.refresh),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",color:"#9a6700"}},r.c.gimel),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",color:"var(--color-purple-fg)"}},r.c.organize),
+            /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",color:"var(--color-danger-fg)",fontWeight:700}},r.c.none),
+            /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:6}},/*#__PURE__*/React.createElement("div",{style:{flex:1,height:8,background:"var(--color-bg-inset)",borderRadius:4,overflow:"hidden",minWidth:60}},/*#__PURE__*/React.createElement("div",{style:{height:"100%",width:r.pct+"%",background:bc,borderRadius:4}})),/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",fontWeight:700,color:bc,minWidth:34}},r.pct+"%")))
+          );}))
+        )
+      )
+    )
+  );
+}
 function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
-  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"}],support:[{id:"presence",label:"דוח 1",icon:"📋"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"}]};
+  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"}],support:[{id:"presence",label:"דוח 1",icon:"📋"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"},{id:"dash",label:"דשבורד",icon:"📊"}]};
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
   /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
@@ -7439,7 +7482,7 @@ function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
     var _tabs=MODULE_TABS[_cur]||[{id:"presence",label:"דוח 1",icon:"📋"}];
     var _curTab=(subTabs[_cur]&&_tabs.some(function(t){return t.id===subTabs[_cur];}))?subTabs[_cur]:(_tabs[0]&&_tabs[0].id);
     var _modMeta=MODULES.find(function(m){return m.id===_cur;})||{label:_cur,icon:"🏗️"};
-    var _renderTab=function(tid){if(tid==="presence")return/*#__PURE__*/React.createElement(PresenceTab,{key:_cur,moduleId:_cur,auth:auth});return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"בקרוב");};
+    var _renderTab=function(tid){if(tid==="presence")return/*#__PURE__*/React.createElement(PresenceTab,{key:_cur,moduleId:_cur,auth:auth});if(tid==="dash")return/*#__PURE__*/React.createElement(PresenceDashboard,{key:_cur+"-dash",auth:auth});return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"בקרוב");};
     var _pickSub=function(id){setSubTabs(function(p){var n={...p};n[_cur]=id;return n;});};
     var _sideBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 16px",background:on?"var(--btn-primary-bg)":"none",border:"none",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:600,borderRight:on?"3px solid var(--color-accent-fg)":"3px solid transparent",textAlign:"right",fontFamily:"inherit"}},t.icon+" "+t.label);};
     var _mobBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},t.icon+" "+t.label);};
