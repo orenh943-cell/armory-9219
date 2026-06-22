@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.131";
+const APP_VERSION = "2.3.132";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -7408,7 +7408,11 @@ function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
-  const allowed=MODULES.filter(function(m){return canViewModule(auth,db,m.id);});
+  /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
+  const [livePerms,setLivePerms]=React.useState(null);
+  React.useEffect(function(){let alive=true;var off=fbOn("db/userPerms",function(v){if(alive)setLivePerms(v||{});});return function(){alive=false;if(typeof off==="function")off();};},[]);
+  const _permsDb={userPerms:livePerms||(db&&db.userPerms)||{}};
+  const allowed=MODULES.filter(function(m){return canViewModule(auth,_permsDb,m.id);});
   const [activeModule,setActiveModule]=React.useState(function(){try{var s=sessionStorage.getItem("activeModule");if(s&&allowed.some(function(m){return m.id===s;}))return s;}catch(e){}return"armory";});
   function pick(id){setActiveModule(id);try{sessionStorage.setItem("activeModule",id);}catch(e){}}
   const moduleBar=allowed.length>1?/*#__PURE__*/React.createElement("div",{className:activeModule==="armory"?"module-bar":"",style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"8px 10px",background:"var(--color-bg-default)",borderBottom:"1px solid var(--color-border-muted)",position:"sticky",top:0,zIndex:60}},
