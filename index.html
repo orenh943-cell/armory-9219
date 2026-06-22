@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.135";
+const APP_VERSION = "2.3.136";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -7370,6 +7370,35 @@ function PresenceTab({moduleId,auth}){
     }catch(e){console.error("[presence-report]",e);setMsg("⚠️ שגיאה בדיווח: "+(e.message||e));}
     finally{setBusy(false);}
   }
+  async function exportPresence(){
+    if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. בדוק חיבור ונסה שוב.");return;}
+    try{
+      var NAVY={argb:"FF1a3a6b"},WHITE={argb:"FFFFFFFF"},GR_BG={argb:"FFDDF4E0"},GR_FG={argb:"FF1A7F37"},RD_BG={argb:"FFFCE0E0"},RD_FG={argb:"FFCF222E"},YL_BG={argb:"FFFFF8C5"},YL_FG={argb:"FF9A6700"},SUM_BG={argb:"FFEEF2F8"};
+      var _san=function(s){var n=String(s||"פלוגה").replace(/[\\\/\?\*\[\]:]/g,"_").trim();return n.slice(0,31)||"פלוגה";};
+      var catLabel=function(k){if(k==="none")return "לא דווח";var c=CATS.find(function(x){return x.k===k;});return c?c.label:k;};
+      var catOf=function(id){var rep=reports[id];return (rep&&rep.category)?rep.category:"none";};
+      var hdr=function(ws){ws.getRow(1).font={bold:true,color:WHITE};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:NAVY};ws.getRow(1).alignment={horizontal:"center",vertical:"middle"};ws.getRow(1).height=22;};
+      var wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";var today=new Date().toISOString().slice(0,10);var fname,logMsg;
+      if(!cross){
+        var ws=wb.addWorksheet(_san(def.val||"פלוגה"));ws.views=[{rightToLeft:true}];
+        ws.columns=[{header:"שם",key:"name",width:18},{header:"מ.א",key:"id",width:12},{header:"מחלקה",key:"squad",width:12},{header:"סוג דיווח",key:"cat",width:22},{header:"מתאריך",key:"from",width:14},{header:"עד תאריך",key:"to",width:14}];hdr(ws);
+        var cc={in_unit:0,released:0,refresh:0,gimel:0,organize:0,none:0};
+        filtered.slice().sort(function(a,b){return (a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");}).forEach(function(s){var rep=reports[s.id];var k=(rep&&rep.category)?rep.category:"none";cc[k]=(cc[k]||0)+1;ws.addRow({name:s.name,id:s.id,squad:s.squad||"—",cat:catLabel(k),from:(rep&&rep.fromDate)||"—",to:(rep&&rep.toDate)||"—"});});
+        var sr=ws.addRow({name:"סיכום: ביחידה "+cc.in_unit+" · שוחרר "+cc.released+" · רענון "+cc.refresh+" · גימלים "+cc.gimel+" · התארגנות "+cc.organize+" · לא דווח "+cc.none});ws.mergeCells(sr.number,1,sr.number,6);sr.getCell(1).font={bold:true,color:NAVY};sr.getCell(1).fill={type:"pattern",pattern:"solid",fgColor:SUM_BG};sr.getCell(1).alignment={horizontal:"right"};
+        fname="דוח1_"+_san(def.val||"פלוגה")+"_"+today+".xlsx";logMsg="ייצוא דוח 1 פלוגה "+(def.val||"")+" ("+filtered.length+" חיילים)";
+      }else{
+        var ORDER=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];var present=[];roster.forEach(function(s){if(s.unit&&present.indexOf(s.unit)<0)present.push(s.unit);});var units=ORDER.filter(function(u){return present.indexOf(u)>=0;}).concat(present.filter(function(u){return ORDER.indexOf(u)<0;}));
+        var wsSum=wb.addWorksheet("📋 ריכוז גדודי");wsSum.views=[{rightToLeft:true}];wsSum.columns=[{header:"פלוגה",key:"unit",width:12},{header:"סה\"כ",key:"total",width:8},{header:"ביחידה",key:"in_unit",width:9},{header:"שוחרר",key:"released",width:9},{header:"רענון",key:"refresh",width:8},{header:"גימלים",key:"gimel",width:8},{header:"התארגנות",key:"organize",width:10},{header:"לא דווח",key:"none",width:9},{header:"% דיווח",key:"pct",width:9}];hdr(wsSum);
+        var g={total:0,in_unit:0,released:0,refresh:0,gimel:0,organize:0,none:0};
+        units.forEach(function(u){var lst=roster.filter(function(s){return s.unit===u;});var c={in_unit:0,released:0,refresh:0,gimel:0,organize:0,none:0};lst.forEach(function(s){c[catOf(s.id)]++;});var reported=lst.length-c.none;var pct=lst.length?Math.round(reported/lst.length*100):0;g.total+=lst.length;g.in_unit+=c.in_unit;g.released+=c.released;g.refresh+=c.refresh;g.gimel+=c.gimel;g.organize+=c.organize;g.none+=c.none;var row=wsSum.addRow({unit:u,total:lst.length,in_unit:c.in_unit,released:c.released,refresh:c.refresh,gimel:c.gimel,organize:c.organize,none:c.none,pct:pct+"%"});row.alignment={horizontal:"center"};row.getCell("unit").alignment={horizontal:"right"};var pc=row.getCell("pct");if(pct>=80){pc.fill={type:"pattern",pattern:"solid",fgColor:GR_BG};pc.font={bold:true,color:GR_FG};}else if(pct>=50){pc.fill={type:"pattern",pattern:"solid",fgColor:YL_BG};pc.font={bold:true,color:YL_FG};}else{pc.fill={type:"pattern",pattern:"solid",fgColor:RD_BG};pc.font={bold:true,color:RD_FG};}});
+        var gPct=g.total?Math.round((g.total-g.none)/g.total*100):0;var gRow=wsSum.addRow({unit:"סה\"כ גדודי",total:g.total,in_unit:g.in_unit,released:g.released,refresh:g.refresh,gimel:g.gimel,organize:g.organize,none:g.none,pct:gPct+"%"});gRow.font={bold:true};gRow.eachCell(function(c){c.fill={type:"pattern",pattern:"solid",fgColor:SUM_BG};c.alignment={horizontal:"center"};});gRow.getCell("unit").alignment={horizontal:"right"};
+        units.forEach(function(u){var lst=roster.filter(function(s){return s.unit===u;});if(!lst.length)return;var ws2=wb.addWorksheet(_san(u));ws2.views=[{rightToLeft:true}];ws2.columns=[{header:"שם",key:"name",width:18},{header:"מ.א",key:"id",width:12},{header:"מחלקה",key:"squad",width:12},{header:"סוג דיווח",key:"cat",width:22},{header:"מתאריך",key:"from",width:14},{header:"עד תאריך",key:"to",width:14},{header:"מי דיווח",key:"by",width:16}];hdr(ws2);lst.slice().sort(function(a,b){return (a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");}).forEach(function(s){var rep=reports[s.id];var k=(rep&&rep.category)?rep.category:"none";ws2.addRow({name:s.name,id:s.id,squad:s.squad||"—",cat:catLabel(k),from:(rep&&rep.fromDate)||"—",to:(rep&&rep.toDate)||"—",by:(rep&&rep.reportedBy)||"—"});});});
+        fname="דוח1_גדודי_"+today+".xlsx";logMsg="ייצוא דוח 1 גדודי ("+roster.length+" חיילים, "+units.length+" פלוגות)";
+      }
+      var buf=await wb.xlsx.writeBuffer();var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download=fname;a.click();URL.revokeObjectURL(url);
+      try{logAction("ייצוא_נוכחות",logMsg,(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[presence-excel-log]",_e);}
+    }catch(e){console.error("[presence-excel]",e);alert("שגיאה בייצוא: "+(e.message||e));}
+  }
   if(roster===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען רוסטר...");
   const total=list.length;const reportedN=list.filter(function(s){return reports[s.id];}).length;
   return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1000,margin:"0 auto"}},
@@ -7383,7 +7412,8 @@ function PresenceTab({moduleId,auth}){
       /*#__PURE__*/React.createElement("input",{type:"date",value:fromDate,onChange:function(e){setFromDate(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}}),
       /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"עד"),
       /*#__PURE__*/React.createElement("input",{type:"date",value:toDate,onChange:function(e){setToDate(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}}),
-      /*#__PURE__*/React.createElement("button",{onClick:report,disabled:busy||!selIds.length,style:{...S.btn("green"),padding:"8px 14px",opacity:(busy||!selIds.length)?0.5:1}},busy?"מדווח...":"דווח על "+selIds.length+" מסומנים")
+      /*#__PURE__*/React.createElement("button",{onClick:report,disabled:busy||!selIds.length,style:{...S.btn("green"),padding:"8px 14px",opacity:(busy||!selIds.length)?0.5:1}},busy?"מדווח...":"דווח על "+selIds.length+" מסומנים"),
+      /*#__PURE__*/React.createElement("button",{onClick:exportPresence,style:{...S.btn("blue"),padding:"8px 14px"}},cross?"📊 ייצוא גדודי":"📊 ייצוא Excel")
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}},
       cross&&/*#__PURE__*/React.createElement("select",{value:unitFilter,onChange:function(e){setUnitFilter(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}},/*#__PURE__*/React.createElement("option",{value:"all"},"כל הגדוד"),unitOptions.map(function(u){return/*#__PURE__*/React.createElement("option",{key:u,value:u},"פלוגה "+u);})),
