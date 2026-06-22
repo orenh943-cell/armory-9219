@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.126";
+const APP_VERSION = "2.3.127";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -6264,6 +6264,8 @@ function viewSavedDailyForm(savedEntry){
 }
 function DailyFormsArchive({db,auth}){
   const [expanded,setExpanded]=React.useState(false);
+  const [dFrom,setDFrom]=React.useState("");
+  const [dTo,setDTo]=React.useState("");
   const rows=React.useMemo(()=>{
     const htmls=db.dailyFormsHtml||{};
     const forms=db.dailyForms||{};
@@ -6286,14 +6288,26 @@ function DailyFormsArchive({db,auth}){
     arr.sort((a,b)=>b.sortKey.localeCompare(a.sortKey));
     return arr;
   },[db.dailyFormsHtml,db.dailyForms]);
-  const visible=expanded?rows:rows.slice(0,5);
+  const _dfActive=!!(dFrom||dTo);
+  const _fRows=_dfActive?rows.filter(function(r){const iso=_eodHeToIso(r.date);if(!iso)return false;return (!dFrom||iso>=dFrom)&&(!dTo||iso<=dTo);}):rows;
+  const visible=_dfActive?_fRows:(expanded?rows:rows.slice(0,5));
   return /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:12,padding:"14px 16px",border:"1px solid var(--color-border-default)"}},
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)"}},"📚 ארכיון דוחות פתיחה/סגירה"),
       /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},rows.length+" דוחות שמורים")
     ),
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}},
+      /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"מתאריך"),
+      /*#__PURE__*/React.createElement("input",{type:"date",value:dFrom,onChange:function(e){setDFrom(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}}),
+      /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"עד"),
+      /*#__PURE__*/React.createElement("input",{type:"date",value:dTo,onChange:function(e){setDTo(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}}),
+      _dfActive&&/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-accent-fg)",fontWeight:700}},"נמצאו "+_fRows.length+" דוחות"),
+      _dfActive&&/*#__PURE__*/React.createElement("button",{onClick:function(){setDFrom("");setDTo("");},style:{...S.btn("gray"),padding:"4px 10px",fontSize:"var(--text-xs)"}},"נקה")
+    ),
     rows.length===0
       ? /*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:18,color:"var(--color-text-muted)",fontSize:"var(--text-sm)",border:"1px dashed var(--color-border-muted)",borderRadius:6}},"אין דוחות בארכיון. הדוחות יופיעו כאן אחרי שיוצרים טופס פתיחה/סגירה.")
+      : (_dfActive&&_fRows.length===0)
+      ? /*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:18,color:"var(--color-text-muted)",fontSize:"var(--text-sm)",border:"1px dashed var(--color-border-muted)",borderRadius:6}},"לא נמצאו דוחות בטווח התאריכים שנבחר.")
       : /*#__PURE__*/React.createElement("div",{style:{border:"1px solid var(--color-border-muted)",borderRadius:6,overflow:"hidden"}},
           visible.map(r=>/*#__PURE__*/React.createElement("div",{key:r.key,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderBottom:"1px solid var(--color-border-muted)",background:"var(--color-bg-default)"}},
             /*#__PURE__*/React.createElement("button",{onClick:()=>r.hasHtml?viewSavedDailyForm(r.html):alert("אין HTML שמור עבור הדוח הזה — נדרש להפיק שוב"),disabled:!r.hasHtml,title:r.hasHtml?"הצג טופס":"אין HTML שמור",style:{flex:1,minWidth:0,textAlign:"right",background:"transparent",border:"none",cursor:r.hasHtml?"pointer":"default",padding:"4px 6px",fontSize:"var(--text-sm)",color:r.hasHtml?"var(--color-text-primary)":"var(--color-text-muted)",display:"flex",alignItems:"center",gap:8,fontFamily:"inherit"}},
@@ -6305,7 +6319,7 @@ function DailyFormsArchive({db,auth}){
             ),
             /*#__PURE__*/React.createElement("button",{onClick:()=>{if(!r.hasHtml){alert("אין HTML שמור עבור הדוח הזה — לא ניתן ליצור PDF. נא להפיק את הדוח מחדש מטופס הפתיחה/סגירה.");return;}shareSavedDailyFormPdf(r.html,r.form,r.key);},disabled:!r.hasHtml,title:"שלח PDF בוואטסאפ",style:{...S.btn("wa","sm"),opacity:r.hasHtml?1:0.5,cursor:r.hasHtml?"pointer":"not-allowed"}},"📲")
           )),
-          rows.length>5&&/*#__PURE__*/React.createElement("button",{onClick:()=>setExpanded(p=>!p),style:{width:"100%",padding:"6px 0",background:"var(--color-bg-subtle)",border:"none",cursor:"pointer",fontSize:"var(--text-xs)",fontFamily:"inherit",color:"var(--color-accent-fg)",fontWeight:700}},expanded?"▲ הצג פחות":"▼ הצג עוד "+(rows.length-5)+" דוחות")
+          (!_dfActive&&rows.length>5)&&/*#__PURE__*/React.createElement("button",{onClick:()=>setExpanded(p=>!p),style:{width:"100%",padding:"6px 0",background:"var(--color-bg-subtle)",border:"none",cursor:"pointer",fontSize:"var(--text-xs)",fontFamily:"inherit",color:"var(--color-accent-fg)",fontWeight:700}},expanded?"▲ הצג פחות":"▼ הצג עוד "+(rows.length-5)+" דוחות")
         )
   );
 }
