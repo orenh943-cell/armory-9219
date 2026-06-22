@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.132";
+const APP_VERSION = "2.3.133";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -509,6 +509,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .desktop-sidebar { display: none !important; }
   .main-content { margin-right: 0 !important; padding: 8px !important; }
   .module-bar { margin-right: 0 !important; }
+  .module-subtabs-mobile { display: flex !important; }
   .mobile-header { display: flex !important; }
   .desktop-only { display: none !important; }
   .grid-2 { grid-template-columns: 1fr !important; }
@@ -7340,12 +7341,14 @@ function PresenceTab({moduleId,auth}){
   const [fromDate,setFromDate]=React.useState("");
   const [toDate,setToDate]=React.useState("");
   const [search,setSearch]=React.useState("");
+  const [squadFilter,setSquadFilter]=React.useState("all");
   const [busy,setBusy]=React.useState(false);
   const [msg,setMsg]=React.useState("");
   React.useEffect(function(){let alive=true;Promise.all([fbGet("db/soldiers"),fbGet("db/customSoldiers"),fbGet("db/deletedSoldiers"),fbGet("db/presenceReports")]).then(function(r){if(!alive)return;const sdb={soldiers:r[0]||{},customSoldiers:r[1]||{},deletedSoldiers:r[2]||{}};setRoster(getSoldiers(sdb));setReports(r[3]||{});}).catch(function(e){console.error("[presence-load]",e);if(alive){setRoster([]);setReports({});}});return function(){alive=false;};},[moduleId]);
   const def=MAP[moduleId]||{by:"unit",val:""};
   const list=React.useMemo(function(){if(!roster)return[];const f=roster.filter(function(s){return def.by==="unit"?s.unit===def.val:s.squad===def.val;});f.sort(function(a,b){return (a.squad||"").localeCompare(b.squad||"","he")||(a.name||"").localeCompare(b.name||"","he");});return f;},[roster,moduleId]);
-  const filtered=React.useMemo(function(){const q=search.trim().toLowerCase();if(!q)return list;return list.filter(function(s){return (s.name||"").toLowerCase().indexOf(q)>=0||(String(s.id)||"").indexOf(q)>=0;});},[list,search]);
+  const squadOptions=React.useMemo(function(){var set={};list.forEach(function(s){if(s.squad)set[s.squad]=true;});return Object.keys(set).sort(function(a,b){return a.localeCompare(b,"he");});},[list]);
+  const filtered=React.useMemo(function(){var q=search.trim().toLowerCase();return list.filter(function(s){if(squadFilter!=="all"&&s.squad!==squadFilter)return false;if(!q)return true;return (s.name||"").toLowerCase().indexOf(q)>=0||(String(s.id)||"").indexOf(q)>=0;});},[list,search,squadFilter]);
   const selIds=Object.keys(checked).filter(function(k){return checked[k];});
   function setAll(v){const c={};filtered.forEach(function(s){c[s.id]=v;});setChecked(c);}
   async function report(){
@@ -7379,6 +7382,7 @@ function PresenceTab({moduleId,auth}){
       /*#__PURE__*/React.createElement("button",{onClick:report,disabled:busy||!selIds.length,style:{...S.btn("green"),padding:"8px 14px",opacity:(busy||!selIds.length)?0.5:1}},busy?"מדווח...":"דווח על "+selIds.length+" מסומנים")
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}},
+      /*#__PURE__*/React.createElement("select",{value:squadFilter,onChange:function(e){setSquadFilter(e.target.value);},style:{...S.input,width:"auto",marginBottom:0}},/*#__PURE__*/React.createElement("option",{value:"all"},"כל המחלקות"),squadOptions.map(function(sq){return/*#__PURE__*/React.createElement("option",{key:sq,value:sq},sq);})),
       /*#__PURE__*/React.createElement("input",{value:search,onChange:function(e){setSearch(e.target.value);},placeholder:"🔍 חיפוש שם / מ.א...",style:{...S.input,flex:1,minWidth:160,marginBottom:0}}),
       /*#__PURE__*/React.createElement("button",{onClick:function(){setAll(true);},style:{...S.btn("gray"),padding:"6px 12px"}},"סמן הכל"),
       /*#__PURE__*/React.createElement("button",{onClick:function(){setAll(false);},style:{...S.btn("gray"),padding:"6px 12px"}},"נקה")
@@ -7406,6 +7410,7 @@ function PresenceTab({moduleId,auth}){
 }
 function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
+  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"}],support:[{id:"presence",label:"דוח 1",icon:"📋"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"}]};
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
   /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
@@ -7414,14 +7419,38 @@ function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const _permsDb={userPerms:livePerms||(db&&db.userPerms)||{}};
   const allowed=MODULES.filter(function(m){return canViewModule(auth,_permsDb,m.id);});
   const [activeModule,setActiveModule]=React.useState(function(){try{var s=sessionStorage.getItem("activeModule");if(s&&allowed.some(function(m){return m.id===s;}))return s;}catch(e){}return"armory";});
+  const [subTabs,setSubTabs]=React.useState({});
   function pick(id){setActiveModule(id);try{sessionStorage.setItem("activeModule",id);}catch(e){}}
-  const moduleBar=allowed.length>1?/*#__PURE__*/React.createElement("div",{className:activeModule==="armory"?"module-bar":"",style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"8px 10px",background:"var(--color-bg-default)",borderBottom:"1px solid var(--color-border-muted)",position:"sticky",top:0,zIndex:60}},
-    allowed.map(function(m){var on=activeModule===m.id;return/*#__PURE__*/React.createElement("button",{key:m.id,onClick:function(){pick(m.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},m.icon+" "+m.label);})
-  ):null;
   const _cur=allowed.some(function(m){return m.id===activeModule;})?activeModule:"armory";
+  const SIDEBAR_MODULES=["company_a","company_b","company_c","support","agam","plasm","armament","logistics"];
+  const _hasSidebar=(_cur==="armory"||SIDEBAR_MODULES.indexOf(_cur)>=0);
+  const moduleBar=allowed.length>1?/*#__PURE__*/React.createElement("div",{className:_hasSidebar?"module-bar":"",style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"8px 10px",background:"var(--color-bg-default)",borderBottom:"1px solid var(--color-border-muted)",position:"sticky",top:0,zIndex:60}},
+    allowed.map(function(m){var on=_cur===m.id;return/*#__PURE__*/React.createElement("button",{key:m.id,onClick:function(){pick(m.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},m.icon+" "+m.label);})
+  ):null;
   if(_cur==="armory")return/*#__PURE__*/React.createElement(React.Fragment,null,moduleBar,/*#__PURE__*/React.createElement(ManagerApp,{auth:auth,onLogout:onLogout,db:db,setDb:setDb,theme:theme,toggleTheme:toggleTheme}));
   if(_cur==="uniforms")return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--color-bg-canvas)"}},moduleBar,/*#__PURE__*/React.createElement("div",{style:{padding:"var(--space-5) var(--space-4)"}},canManageUniforms(auth,db)?/*#__PURE__*/React.createElement(UniformsTab,{db:db,setDb:setDb,auth:auth,soldiers:getSoldiers(db)}):/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-danger-fg)",fontWeight:700}},"⛔ אין הרשאה לביגוד טקטי")));
-  if(["company_a","company_b","company_c","support","agam","plasm","armament","logistics"].indexOf(_cur)>=0)return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--color-bg-canvas)"}},moduleBar,/*#__PURE__*/React.createElement("div",{style:{padding:"var(--space-5) var(--space-4)"}},/*#__PURE__*/React.createElement(PresenceTab,{moduleId:_cur,auth:auth})));
+  if(SIDEBAR_MODULES.indexOf(_cur)>=0){
+    var _tabs=MODULE_TABS[_cur]||[{id:"presence",label:"דוח 1",icon:"📋"}];
+    var _curTab=(subTabs[_cur]&&_tabs.some(function(t){return t.id===subTabs[_cur];}))?subTabs[_cur]:(_tabs[0]&&_tabs[0].id);
+    var _modMeta=MODULES.find(function(m){return m.id===_cur;})||{label:_cur,icon:"🏗️"};
+    var _renderTab=function(tid){if(tid==="presence")return/*#__PURE__*/React.createElement(PresenceTab,{key:_cur,moduleId:_cur,auth:auth});return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"בקרוב");};
+    var _pickSub=function(id){setSubTabs(function(p){var n={...p};n[_cur]=id;return n;});};
+    var _sideBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 16px",background:on?"var(--btn-primary-bg)":"none",border:"none",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:600,borderRight:on?"3px solid var(--color-accent-fg)":"3px solid transparent",textAlign:"right",fontFamily:"inherit"}},t.icon+" "+t.label);};
+    var _mobBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},t.icon+" "+t.label);};
+    return/*#__PURE__*/React.createElement(React.Fragment,null,
+      moduleBar,
+      /*#__PURE__*/React.createElement("div",{className:"desktop-sidebar",style:{width:195,background:"var(--color-bg-default)",borderLeft:"1px solid var(--color-border-muted)",position:"fixed",right:0,top:0,bottom:0,zIndex:50,display:"flex",flexDirection:"column"}},
+        /*#__PURE__*/React.createElement("div",{style:{padding:"var(--space-4)",borderBottom:"1px solid var(--color-border-muted)",fontWeight:800,fontSize:15}},(_modMeta.icon||"")+" "+(_modMeta.label||"")),
+        /*#__PURE__*/React.createElement("nav",{style:{flex:1,padding:"var(--space-2) 0",overflowY:"auto"}},_tabs.map(_sideBtn)),
+        /*#__PURE__*/React.createElement("div",{style:{padding:"var(--space-3) var(--space-4)",borderTop:"1px solid var(--color-border-muted)",display:"flex",flexDirection:"column",gap:"var(--space-2)"}},
+          /*#__PURE__*/React.createElement("button",{className:"theme-toggle",onClick:toggleTheme,style:{width:"100%",minHeight:34,padding:"4px 10px"}},theme==="dark"?"☀️ מצב בהיר":"🌙 מצב כהה"),
+          /*#__PURE__*/React.createElement("button",{onClick:onLogout,style:{...S.btn(),width:"100%",fontSize:"var(--text-sm)",minHeight:38,padding:"6px 12px"}},"🚪 יציאה")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div",{className:"module-subtabs-mobile",style:{display:"none",gap:6,flexWrap:"wrap",padding:"6px 10px",borderBottom:"1px solid var(--color-border-muted)",background:"var(--color-bg-default)"}},_tabs.map(_mobBtn)),
+      /*#__PURE__*/React.createElement("main",{className:"main-content",style:{marginRight:195,padding:"var(--space-5) var(--space-4)",minHeight:"100vh",background:"var(--color-bg-canvas)"}},_renderTab(_curTab))
+    );
+  }
   const mod=MODULES.find(function(m){return m.id===_cur;})||{label:_cur,icon:"🏗️"};
   return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--color-bg-canvas)"}},moduleBar,
     /*#__PURE__*/React.createElement("div",{style:{maxWidth:640,margin:"60px auto",textAlign:"center",color:"var(--color-text-secondary)",padding:"0 16px"}},
