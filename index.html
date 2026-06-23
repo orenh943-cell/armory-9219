@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.143";
+const APP_VERSION = "2.3.144";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8260,13 +8260,14 @@ function KalagTab({moduleId,auth}){
       :/*#__PURE__*/React.createElement(React.Fragment,null,
         /* בחירת דרישות לאיחוד */
         /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
-          /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10}},"דרישות ממתינות · "+_pending.length),
+          /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:2}},"דרישות ממתינות — כל הפלוגות · "+_pending.length),
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:10}},"שורה מסומנת (כחול) תיכלל בהזמנה הגדודית · עמודת \"פלוגה\" מציינת את המקור"),
           _pending.length===0
             ?/*#__PURE__*/React.createElement("div",{style:{padding:16,textAlign:"center",color:"var(--color-text-secondary)"}},"אין דרישות ממתינות")
             :/*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
               /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:560,fontSize:"var(--text-sm)"}},
                 /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["כלול","פלוגה","תאריך","פריטים","נשלח ע\"י"].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
-                /*#__PURE__*/React.createElement("tbody",null,_pending.map(function(po){var key=po.moduleId+"/"+po.orderId;var inc=included[key]!==false;return/*#__PURE__*/React.createElement("tr",{key:key},
+                /*#__PURE__*/React.createElement("tbody",null,_pending.map(function(po){var key=po.moduleId+"/"+po.orderId;var inc=included[key]!==false;return/*#__PURE__*/React.createElement("tr",{key:key,style:inc?{background:"var(--color-accent-bg)",borderRight:"3px solid var(--color-accent-fg)"}:null},
                   /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},/*#__PURE__*/React.createElement("input",{type:"checkbox",checked:inc,onChange:function(e){var ck=e.target.checked;setIncluded(function(p){var o={...p};o[key]=ck;return o;});}})),
                   /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},po.o.unit||SHORT[po.moduleId]||po.moduleId),
                   /*#__PURE__*/React.createElement("td",{style:S.td},po.o.date||"—"),
