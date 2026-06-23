@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.141";
+const APP_VERSION = "2.3.142";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8107,7 +8107,7 @@ function KalagTab({moduleId,auth}){
       var ts=Date.now();var orderId="o"+ts;var date=new Date().toLocaleDateString("he-IL");
       var rec={moduleId:moduleId,unit:UNITMAP[moduleId]||moduleId,date:date,ts:ts,status:"ממתין",createdBy:(auth&&auth.name)||"",items:items};
       await fbSet("db/kalagOrders/"+moduleId+"/"+orderId,rec);
-      try{logAction("הזמנת_קלג",(rec.unit)+" שלחה דרישת קל\"ג ("+n+" פריטים)",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[kalag-order-log]",_e);}
+      try{logAction("הזמנת_קלג",(rec.unit)+" שלחה דרישת קליר קרביץ ("+n+" פריטים)",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[kalag-order-log]",_e);}
       setQtys({});setMsg("✅ הדרישה נשלחה ("+n+" פריטים)");
     }catch(e){console.error("[kalag-order]",e);setMsg("⚠️ שגיאה בשליחה: "+(e.message||e));}
     finally{setBusy(false);}
@@ -8120,7 +8120,7 @@ function KalagTab({moduleId,auth}){
   var selCount=0,selTotal=0;Object.keys(qtys).forEach(function(cid){var q=parseInt(qtys[cid])||0;if(q>0&&catalog[cid]){selCount++;selTotal+=packPrice(catalog[cid],q);}});
   var orderList=Object.keys(orders).map(function(oid){return {id:oid,o:orders[oid]||{}};}).sort(function(a,b){return (b.o.ts||0)-(a.o.ts||0);});
   return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1000,margin:"0 auto"}},
-    /*#__PURE__*/React.createElement("h2",{style:{margin:"0 0 12px",fontSize:"var(--text-xl)",fontWeight:800}},"📝 הזמנת קל\"ג — "+(UNITMAP[moduleId]||moduleId)),
+    /*#__PURE__*/React.createElement("h2",{style:{margin:"0 0 12px",fontSize:"var(--text-xl)",fontWeight:800}},"📝 הזמנות קליר קרביץ — "+(UNITMAP[moduleId]||moduleId)),
     msg&&/*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},msg),
     /* ===== ניהול קטלוג (אדמין) ===== */
     isAdmin&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
@@ -8218,7 +8218,7 @@ function KalagTab({moduleId,auth}){
 }
 function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
-  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],support:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"הזמנת קל\"ג",icon:"📝"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"},{id:"dash",label:"דשבורד",icon:"📊"}]};
+  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],support:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"},{id:"dash",label:"דשבורד",icon:"📊"}]};
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
   /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
