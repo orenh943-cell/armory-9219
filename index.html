@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.145";
+const APP_VERSION = "2.3.146";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8145,33 +8145,74 @@ function KalagTab({moduleId,auth}){
     finally{setBusy(false);}
   }
   /* ===== שלב 3: ייצוא הזמנה גדודית (וואטסאפ + אקסל) — קריאה בלבד מ-b ===== */
-  function kalagWhatsApp(b){
+  /* v2.3.146: דף הזמנה גדודית מעוצב להדפסה/PDF (שלד מטפסי 1008/ערבות, RTL). קריאה בלבד מ-b. */
+  function buildKalagPage(b){
     var lines=(b&&b.lines)||[];
+    var units=ORDER_MODULES.filter(function(mid){return lines.some(function(ln){return ln.perUnit&&ln.perUnit[mid];});});
     var byGroup={};lines.forEach(function(ln){var g=ln.group||"כללי";(byGroup[g]=byGroup[g]||[]).push(ln);});
-    var txt="🏛️ הזמנה גדודית — קליר קרביץ\n📅 "+((b&&b.date)||"")+"\n";
-    Object.keys(byGroup).sort(function(a,b2){return a.localeCompare(b2,"he");}).forEach(function(g){
-      txt+="\n▪️ "+g+"\n";var gSum=0;
+    var groupNames=Object.keys(byGroup).sort(function(a,b2){return a.localeCompare(b2,"he");});
+    var ncols=2+units.length+2;
+    var unitHead=units.map(function(mid){return '<th>'+(SHORT[mid]||mid)+'</th>';}).join("");
+    var body="";
+    groupNames.forEach(function(g){
+      var gSum=0;
+      body+='<tr class="grp"><td colspan="'+ncols+'">'+g+'</td></tr>';
       byGroup[g].forEach(function(ln){
-        var pu=ORDER_MODULES.filter(function(mid){return ln.perUnit&&ln.perUnit[mid];}).map(function(mid){return (SHORT[mid]||mid)+":"+ln.perUnit[mid];}).join(" ");
-        txt+="• "+ln.name+" · "+(ln.totalApproved||0)+" יח'"+(pu?(" ("+pu+")"):"")+" — ₪"+fmt(ln.lineTotal)+"\n";gSum+=ln.lineTotal||0;
+        var puCells=units.map(function(mid){return '<td class="c">'+((ln.perUnit&&ln.perUnit[mid])||"")+'</td>';}).join("");
+        body+='<tr><td>'+(ln.name||"")+'</td>'+puCells+'<td class="c b">'+(ln.totalApproved||0)+'</td><td class="c">'+fmt(ln.pricePack)+'₪</td><td class="c">'+fmt(ln.lineTotal)+'₪</td></tr>';
+        gSum+=ln.lineTotal||0;
       });
-      txt+="סיכום "+g+": ₪"+fmt(gSum)+"\n";
+      body+='<tr class="sub"><td colspan="'+(ncols-1)+'">סיכום '+g+'</td><td class="c">'+fmt(gSum)+'₪</td></tr>';
     });
-    txt+="\n💰 סה\"כ גדודי: ₪"+fmt((b&&b.grandTotal)||0);
-    window.open("https://wa.me/?text="+encodeURIComponent(txt),"_blank");
+    body+='<tr class="tot"><td colspan="'+(ncols-1)+'">סה"כ גדודי</td><td class="c">'+fmt((b&&b.grandTotal)||0)+'₪</td></tr>';
+    return '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">'
++'<title>הזמנה גדודית — קליר קרביץ</title>'
++'<style>'
++'*{box-sizing:border-box;margin:0;padding:0}'
++'body{font-family:Arial,sans-serif;direction:rtl;padding:18px;color:#000;font-size:12px;max-width:900px;margin:0 auto}'
++'.form-title{text-align:center;font-size:17px;font-weight:bold;padding:10px;border:2px solid #000;background:#f0f0f0;letter-spacing:1px}'
++'.sub-title{text-align:center;font-size:12px;padding:6px;border:1px solid #000;border-top:none;background:#fafafa}'
++'table{width:100%;border-collapse:collapse;margin-top:10px}'
++'th{background:#1a3a6b;color:#fff;padding:6px 8px;border:1px solid #000;text-align:center;font-size:11px;font-weight:bold}'
++'td{border:1px solid #000;padding:4px 8px;font-size:11px}'
++'.c{text-align:center}.b{font-weight:bold}'
++'tr.grp td{background:#d0d8e4;font-weight:bold;font-size:12px}'
++'tr.sub td{background:#eef2f8;font-weight:bold}'
++'tr.tot td{background:#1a3a6b;color:#fff;font-weight:bold;font-size:13px}'
++'@media print{.noprint{display:none}}'
++'</style></head><body>'
++'<button class="noprint" onclick="window.print()" style="margin-bottom:10px;padding:6px 18px;cursor:pointer;font-size:12px;background:#1a3a6b;color:#fff;border:none;border-radius:4px">🖨️ הדפסה / שמירה כ-PDF</button>'
++'<div class="form-title">הזמנה גדודית — קליר קרביץ</div>'
++'<div class="sub-title">📅 '+((b&&b.date)||"")+' · גדוד 9219 · פילוח פלוגתי</div>'
++'<table><thead><tr><th style="text-align:right">פריט</th>'+unitHead+'<th>סה"כ מאושר</th><th>מחיר לאריזה</th><th>סה"כ שורה</th></tr></thead>'
++'<tbody>'+(body||'<tr><td colspan="'+ncols+'" style="text-align:center">אין פריטים</td></tr>')+'</tbody></table>'
++'</body></html>';
   }
+  function openKalagPage(b){try{var w=window.open("","_blank");if(w){w.document.write(buildKalagPage(b));w.document.close();}else{alert("חסימת חלונות קופצים — אפשר חלונות קופצים ונסה שוב");}}catch(e){console.error("[kalag-page]",e);alert("שגיאה בהפקת הדף");}}
   async function kalagExcel(b){
     try{
       if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. בדוק חיבור ונסה שוב.");return;}
       var lines=(b&&b.lines)||[];
       var units=ORDER_MODULES.filter(function(mid){return lines.some(function(ln){return ln.perUnit&&ln.perUnit[mid];});});
-      var wb=new ExcelJS.Workbook();var ws=wb.addWorksheet("הזמנה גדודית");ws.views=[{rightToLeft:true}];
+      var wb=new ExcelJS.Workbook();var ws=wb.addWorksheet("ריכוז גדודי");ws.views=[{rightToLeft:true}];
       var head=["פריט","קבוצה"].concat(units.map(function(mid){return SHORT[mid]||mid;})).concat(["סה\"כ מאושר","מחיר ליחידה","מחיר לאריזה","סה\"כ שורה"]);
       var header=ws.addRow(head);header.font={bold:true,color:{argb:"FFFFFFFF"}};header.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
       lines.forEach(function(ln){var r=[ln.name||"",ln.group||""];units.forEach(function(mid){r.push((ln.perUnit&&ln.perUnit[mid])||0);});r.push(ln.totalApproved||0,ln.priceUnit||0,ln.pricePack||0,ln.lineTotal||0);ws.addRow(r);});
       var sumArr=["סה\"כ גדודי",""];units.forEach(function(){sumArr.push("");});sumArr.push("","","",(b&&b.grandTotal)||0);
       var totalRow=ws.addRow(sumArr);totalRow.font={bold:true};totalRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE0E8F0"}};
       ws.columns=[{width:26},{width:16}].concat(units.map(function(){return {width:9};})).concat([{width:13},{width:13},{width:13},{width:14}]);
+      /* גיליון נפרד לכל פלוגה — לפיזור סחורה (רק הפריטים שאותה פלוגה ביקשה + הכמות שלה) */
+      units.forEach(function(mid){
+        var uLines=lines.filter(function(ln){return ln.perUnit&&ln.perUnit[mid];});
+        if(!uLines.length)return;
+        var uws=wb.addWorksheet(SHORT[mid]||mid);uws.views=[{rightToLeft:true}];
+        var uh=uws.addRow(["פריט","קבוצה","כמות","מחיר ליחידה","מחיר לאריזה","סה\"כ"]);
+        uh.font={bold:true,color:{argb:"FFFFFFFF"}};uh.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
+        var uTot=0;
+        uLines.forEach(function(ln){var q=ln.perUnit[mid]||0;var lt=packPrice({qtyPack:ln.qtyPack,pricePack:ln.pricePack,priceUnit:ln.priceUnit},q);uTot+=lt;uws.addRow([ln.name||"",ln.group||"",q,ln.priceUnit||0,ln.pricePack||0,lt]);});
+        var utr=uws.addRow(["סה\"כ","","","","",uTot]);utr.font={bold:true};utr.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE0E8F0"}};
+        uws.columns=[{width:26},{width:16},{width:10},{width:13},{width:13},{width:14}];
+      });
       var buf=await wb.xlsx.writeBuffer();var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;
       var dt=String((b&&b.date)||new Date().toLocaleDateString("he-IL")).replace(/[.\/\\]/g,"-");
@@ -8352,8 +8393,8 @@ function KalagTab({moduleId,auth}){
                     /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},b.createdBy||"—"),
                     /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
                       /*#__PURE__*/React.createElement("button",{onClick:function(){setViewBId(viewBId===x.id?null:x.id);},style:{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)"}},viewBId===x.id?"סגור":"👁️ צפה"),
-                      /*#__PURE__*/React.createElement("button",{onClick:function(){kalagWhatsApp(b);},style:{...S.btn("green"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📱 וואטסאפ"),
-                      /*#__PURE__*/React.createElement("button",{onClick:function(){kalagExcel(b);},style:{...S.btn("blue"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📊 אקסל")
+                      /*#__PURE__*/React.createElement("button",{onClick:function(){openKalagPage(b);},style:{...S.btn("green"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📄 דף מסודר"),
+                      /*#__PURE__*/React.createElement("button",{onClick:function(){kalagExcel(b);},style:{...S.btn("blue"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📊 אקסל מרוכז")
                     ))
                   ),
                   viewBId===x.id&&/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:5,style:{...S.td,background:"var(--color-bg-subtle)",padding:10}},
