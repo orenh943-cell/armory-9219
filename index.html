@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.149";
+const APP_VERSION = "2.3.150";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8611,9 +8611,151 @@ function KalagTab({moduleId,auth}){
     catModal&&/*#__PURE__*/React.createElement(KalagCatalogModal,{mode:catModal.mode,item:catModal.item,onClose:function(){setCatModal(null);},onSave:function(f){saveCatRow(catModal.mode,catModal.id,f);}})
   );
 }
+/* ===== מעקב טיפולים — רכבי חימוש (v2.3.150). ענף db/vehicleMaintenance בלבד. דפוס LogisticsTab. אפס נגיעה בנשק/ארמון. ===== */
+var VEH_TABLES=[{type:"fixed",label:"רכבים קבועים",icon:"🚗"},{type:"rented",label:"רכבים שכורים",icon:"🚙"},{type:"yarmach",label:"רכבי ירמ\"ח",icon:"🚐"},{type:"external",label:"רכב יחידת חוץ",icon:"🚚"}];
+var VEH_STATUSES=["תקין","בטיפול","דרוש טיפול","מושבת"];
+function _vehStatusColor(st){return st==="תקין"?"green":st==="בטיפול"?"orange":st==="דרוש טיפול"?"red":"gray";}
+function _vehToISO(s){if(!s)return"";s=String(s).trim();if(/^\d{4}-\d{1,2}-\d{1,2}/.test(s))return s.slice(0,10);var m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);if(m)return m[3]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");return s;}
+function _vehFromISO(s){if(!s)return"";s=String(s).trim();var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"."+m[2]+"."+m[1];return s;}
+function _vehParseDate(s){if(!s)return null;s=String(s).trim();var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);return null;}
+function _vehOverdue(r){var d=_vehParseDate(r.nextService);var byDate=false;if(d){var t=new Date();t.setHours(0,0,0,0);byDate=d.getTime()<t.getTime();}var kt=parseInt(r.kmToService)||0;var km=parseInt(r.km)||0;var byKm=kt>0&&km>=kt;return byDate||byKm;}
+function VehicleModal({table,mode,item,onSave,onClose}){
+  const [plate,setPlate]=React.useState((item&&item.plate)||"");
+  const [model,setModel]=React.useState((item&&item.model)||"");
+  const [lastService,setLastService]=React.useState(_vehToISO(item&&item.lastService));
+  const [nextService,setNextService]=React.useState(_vehToISO(item&&item.nextService));
+  const [km,setKm]=React.useState(item?String(item.km||""):"");
+  const [kmToService,setKmToService]=React.useState(item?String(item.kmToService||""):"");
+  const [status,setStatus]=React.useState((item&&item.status)||"תקין");
+  const [notes,setNotes]=React.useState((item&&item.notes)||"");
+  var tdef=VEH_TABLES.find(function(t){return t.type===table;})||{label:""};
+  return/*#__PURE__*/React.createElement("div",{style:{...S.overlay},onClick:onClose},
+    /*#__PURE__*/React.createElement("div",{style:{...S.card,maxWidth:440,width:"100%",maxHeight:"92vh",overflowY:"auto"},onClick:function(e){e.stopPropagation();}},
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+        /*#__PURE__*/React.createElement("h3",{style:{margin:0,fontWeight:800,fontSize:"var(--text-lg)"}},(mode==="edit"?"✏️ עריכת":"➕ הוספת")+" רכב · "+tdef.label),
+        /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"var(--color-text-secondary)"}},"✕")
+      ),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"מספר רכב / לוחית"),
+      /*#__PURE__*/React.createElement("input",{value:plate,onChange:function(e){setPlate(e.target.value);},placeholder:"מספר רכב",style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"סוג / דגם"),
+      /*#__PURE__*/React.createElement("input",{value:model,onChange:function(e){setModel(e.target.value);},placeholder:"דגם",style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"תאריך טיפול אחרון"),
+      /*#__PURE__*/React.createElement("input",{type:"date",value:lastService,onChange:function(e){setLastService(e.target.value);},style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"תאריך טיפול הבא"),
+      /*#__PURE__*/React.createElement("input",{type:"date",value:nextService,onChange:function(e){setNextService(e.target.value);},style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"ק\"מ נוכחי"),
+      /*#__PURE__*/React.createElement("input",{value:km,onChange:function(e){setKm(e.target.value);},placeholder:"0",inputMode:"numeric",style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"ק\"מ לטיפול"),
+      /*#__PURE__*/React.createElement("input",{value:kmToService,onChange:function(e){setKmToService(e.target.value);},placeholder:"0",inputMode:"numeric",style:{...S.input}}),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"סטטוס"),
+      /*#__PURE__*/React.createElement("select",{value:status,onChange:function(e){setStatus(e.target.value);},style:{...S.input}},VEH_STATUSES.map(function(s){return/*#__PURE__*/React.createElement("option",{key:s,value:s},s);})),
+      /*#__PURE__*/React.createElement("label",{style:S.label},"הערות"),
+      /*#__PURE__*/React.createElement("input",{value:notes,onChange:function(e){setNotes(e.target.value);},placeholder:"הערות",style:{...S.input}}),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:10}},
+        /*#__PURE__*/React.createElement("button",{onClick:function(){onSave({plate:plate,model:model,lastService:lastService,nextService:nextService,km:km,kmToService:kmToService,status:status,notes:notes});},style:{...S.btn("green"),flex:2}},"💾 שמור"),
+        /*#__PURE__*/React.createElement("button",{onClick:onClose,style:{...S.btn("gray"),flex:1}},"ביטול")
+      )
+    )
+  );
+}
+function VehicleMaintenanceTab({moduleId,auth}){
+  const [inv,setInv]=React.useState(null);
+  const [busy,setBusy]=React.useState(false);
+  const [msg,setMsg]=React.useState("");
+  const [modal,setModal]=React.useState(null);
+  const refFixed=React.useRef(null);const refRented=React.useRef(null);const refYarmach=React.useRef(null);const refExternal=React.useRef(null);
+  var REFS={fixed:refFixed,rented:refRented,yarmach:refYarmach,external:refExternal};
+  React.useEffect(function(){let alive=true;var off=fbOn("db/vehicleMaintenance",function(v){if(alive)setInv({fixed:(v&&v.fixed)||{},rented:(v&&v.rented)||{},yarmach:(v&&v.yarmach)||{},external:(v&&v.external)||{}});});return function(){alive=false;if(typeof off==="function")off();};},[]);
+  function _key(s){return String(s||"").replace(/[.#$/\[\]\s]+/g,"_").trim();}
+  function cv(row,col){var v=row.getCell(col).value;if(v==null)return"";if(typeof v==="object"){if(v.text!=null)return String(v.text).trim();if(v.result!=null)return String(v.result).trim();if(Array.isArray(v.richText))return v.richText.map(function(r){return r.text;}).join("").trim();return"";}return String(v).trim();}
+  function colOf(hdr){var kws=Array.prototype.slice.call(arguments,1);var found=null;hdr.eachCell(function(cell,col){if(found!==null)return;var raw=cell.value==null?"":(typeof cell.value==="object"?(cell.value.text||cell.value.result||""):cell.value);var t=String(raw).replace(/["'״׳\s]/g,"");if(kws.every(function(k){return t.indexOf(k)>=0;}))found=col;});return found;}
+  async function handleImport(e,type){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    setBusy(true);setMsg("📖 קורא קובץ...");
+    try{
+      var buf=await file.arrayBuffer();
+      if(!(await _loadExcelJS())){setMsg("⚠️ ספריית Excel לא נטענה. בדוק חיבור ונסה שוב.");setBusy(false);return;}
+      var wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+      var ws=wb.worksheets[0];if(!ws){setMsg("⚠️ הקובץ ריק — לא נמצא גיליון");setBusy(false);return;}
+      var h=ws.getRow(1);
+      var cP=colOf(h,"רכב")||colOf(h,"לוחית")||1,cM=colOf(h,"דגם")||colOf(h,"סוג")||2,cLS=colOf(h,"אחרון")||3,cNS=colOf(h,"הבא")||4,cKm=colOf(h,"נוכחי")||5,cKt=colOf(h,"לטיפול")||6,cSt=colOf(h,"סטטוס")||7,cNo=colOf(h,"הער")||8;
+      var existing=(inv&&inv[type])||{};var upd={};var n=0;
+      ws.eachRow(function(row,idx){if(idx===1)return;var plate=cv(row,cP);if(!plate)return;var id=_key(plate);var cur=upd[id]||existing[id]||{};
+        upd[id]={plate:plate,model:cv(row,cM)||cur.model||"",lastService:_vehToISO(cv(row,cLS))||cur.lastService||"",nextService:_vehToISO(cv(row,cNS))||cur.nextService||"",km:cv(row,cKm)||cur.km||"",kmToService:cv(row,cKt)||cur.kmToService||"",status:cv(row,cSt)||cur.status||"תקין",notes:cv(row,cNo)||cur.notes||""};n++;});
+      if(Object.keys(upd).length)await rtdb.ref("db/vehicleMaintenance/"+type).update(upd);
+      try{logAction("מעקב_טיפולים","ייבוא רכבים ("+type+"): "+n+" שורות (upsert)",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[veh-log]",_e);}
+      setMsg("✅ יובאו/עודכנו "+n+" רכבים");
+    }catch(err){console.error("[veh-import]",err);setMsg("⚠️ שגיאה בייבוא: "+(err.message||err));}
+    finally{setBusy(false);if(e.target)e.target.value="";}
+  }
+  async function saveItem(table,mode,oldId,f){
+    var plate=(f.plate||"").trim();if(!plate){alert("חסר מספר רכב");return;}
+    var newId=_key(plate);if(!newId){alert("מזהה רכב לא תקין");return;}
+    var rec={plate:plate,model:(f.model||"").trim(),lastService:f.lastService||"",nextService:f.nextService||"",km:String(f.km||"").trim(),kmToService:String(f.kmToService||"").trim(),status:f.status||"תקין",notes:(f.notes||"").trim()};
+    try{
+      if(mode==="edit"&&oldId&&oldId!==newId)await fbSet("db/vehicleMaintenance/"+table+"/"+oldId,null);
+      await fbSet("db/vehicleMaintenance/"+table+"/"+newId,rec);
+      try{logAction("מעקב_טיפולים",(mode==="edit"?"עריכת":"הוספת")+" רכב — "+plate+" ("+table+")",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[veh-log]",_e);}
+      setModal(null);
+    }catch(e){console.error("[veh-save]",e);alert("שגיאה בשמירה: "+(e.message||e));}
+  }
+  async function delItem(table,id,plate){
+    if(!window.confirm("למחוק את הרכב \""+plate+"\"?"))return;
+    try{await fbSet("db/vehicleMaintenance/"+table+"/"+id,null);try{logAction("מעקב_טיפולים","מחיקת רכב — "+plate+" ("+table+")",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[veh-log]",_e);}}catch(e){console.error("[veh-del]",e);alert("שגיאה במחיקה: "+(e.message||e));}
+  }
+  if(inv===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען...");
+  function renderTable(tdef){
+    var type=tdef.type;var data=(inv&&inv[type])||{};
+    var rows=Object.keys(data).map(function(id){return {id:id,r:data[id]||{}};}).sort(function(a,b){return (a.r.plate||"").localeCompare(b.r.plate||"","he");});
+    var overdueCount=rows.filter(function(x){return _vehOverdue(x.r);}).length;
+    var cols=["מספר רכב","סוג/דגם","טיפול אחרון","טיפול הבא","ק\"מ נוכחי","ק\"מ לטיפול","סטטוס","הערות",""];
+    var fref=REFS[type];
+    return/*#__PURE__*/React.createElement("div",{key:type,style:{...S.card,padding:0,overflow:"hidden",marginBottom:16}},
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",flexWrap:"wrap",gap:8}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:800}},tdef.icon+" "+tdef.label+" · "+rows.length+" רכבים"+(overdueCount>0?(" · ⚠️ "+overdueCount+" דרוש טיפול"):"")),
+        /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+          /*#__PURE__*/React.createElement("button",{onClick:function(){if(fref.current)fref.current.click();},disabled:busy,style:{...S.btn("blue"),padding:"5px 12px",fontSize:"var(--text-sm)",opacity:busy?0.6:1}},"📥 ייבוא"),
+          /*#__PURE__*/React.createElement("input",{ref:fref,type:"file",accept:".xlsx",onChange:function(e){handleImport(e,type);},style:{display:"none"}}),
+          /*#__PURE__*/React.createElement("button",{onClick:function(){setModal({table:type,mode:"add"});},style:{...S.btn("green"),padding:"5px 12px",fontSize:"var(--text-sm)"}},"➕ הוסף")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+        /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:760,fontSize:"var(--text-sm)"}},
+          /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,cols.map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+          /*#__PURE__*/React.createElement("tbody",null,
+            rows.length===0?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:cols.length,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין רכבים")):
+            rows.map(function(x){var r=x.r;var over=_vehOverdue(r);return/*#__PURE__*/React.createElement("tr",{key:x.id,style:over?{background:"var(--color-danger-bg)"}:null},
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:700,fontFamily:"monospace"}},r.plate||"—"),
+              /*#__PURE__*/React.createElement("td",{style:S.td},r.model||"—"),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},_vehFromISO(r.lastService)||"—"),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:over?700:400,color:over?"var(--color-danger-fg)":"inherit"}},_vehFromISO(r.nextService)||"—"),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},r.km||"—"),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},r.kmToService||"—"),
+              /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start"}},/*#__PURE__*/React.createElement(Badge,{color:_vehStatusColor(r.status||"תקין"),small:true},r.status||"תקין"),over&&/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-danger-fg)",fontWeight:700}},"⚠️ עבר תאריך טיפול"))),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},r.notes||"—"),
+              /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4}},
+                /*#__PURE__*/React.createElement("button",{onClick:function(){setModal({table:type,mode:"edit",id:x.id,item:r});},style:{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"✏️"),
+                /*#__PURE__*/React.createElement("button",{onClick:function(){delItem(type,x.id,r.plate);},style:{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"🗑️")
+              ))
+            );})
+          )
+        )
+      )
+    );
+  }
+  return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1100,margin:"0 auto"}},
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:12}},
+      /*#__PURE__*/React.createElement("h2",{style:{margin:0,fontSize:"var(--text-xl)",fontWeight:800}},"🔧 מעקב טיפולים — רכבים"),
+      /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"שורה אדומה = עבר תאריך טיפול או הגיע לק\"מ לטיפול")
+    ),
+    msg&&/*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},msg),
+    VEH_TABLES.map(function(tdef){return renderTable(tdef);}),
+    modal&&/*#__PURE__*/React.createElement(VehicleModal,{table:modal.table,mode:modal.mode,item:modal.item,onClose:function(){setModal(null);},onSave:function(f){saveItem(modal.table,modal.mode,modal.id,f);}})
+  );
+}
 function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
   const MODULES=[{id:"armory",label:"ארמון",icon:"🛡️"},{id:"uniforms",label:"ביגוד טקטי",icon:"👕"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"adjutancy",label:"שלישות",icon:"📋"},{id:"armament",label:"חימוש",icon:"🔧"},{id:"ammo",label:"תחמושת",icon:"💥"},{id:"company_a",label:"פלוגה א",icon:"🅰️"},{id:"company_b",label:"פלוגה ב",icon:"🅱️"},{id:"company_c",label:"פלוגה ג",icon:"🇨"},{id:"support",label:"מסייעת",icon:"🦏"},{id:"agam",label:"אג\"מ",icon:"🗺️"},{id:"plasm",label:"פלס\"מ",icon:"🕷️"}];
-  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],support:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"},{id:"dash",label:"דשבורד",icon:"📊"}]};
+  const MODULE_TABS={company_a:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_b:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],company_c:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],support:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],agam:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}],plasm:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],armament:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"vehmaint",label:"מעקב טיפולים",icon:"🔧"}],logistics:[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"},{id:"kalag",label:"קליר קרביץ",icon:"📝"}],adjutancy:[{id:"presence",label:"דוח 1 גדודי",icon:"📋"},{id:"dash",label:"דשבורד",icon:"📊"}]};
   const ADMIN_USERS=["אורן","מתן","יעקב"];
   const isAdmin=!!(auth&&(auth.role==="admin"||ADMIN_USERS.indexOf(auth.username)>=0||ADMIN_USERS.indexOf(auth.name)>=0));
   /* v2.3.132: BattalionShell טוען userPerms חי בעצמו — db של App הוא snapshot לא-חי, ה-fbOn ל-userPerms יושב בתוך ManagerApp. בלי זה canViewModule לא מוצא הרשאות מודול שהוענקו. */
@@ -8636,7 +8778,7 @@ function BattalionShell({auth,onLogout,db,setDb,theme,toggleTheme}){
     var _tabs=MODULE_TABS[_cur]||[{id:"presence",label:"דוח 1",icon:"📋"},{id:"logistics",label:"לוגיסטיקה",icon:"📦"},{id:"logsign",label:"החתמת ציוד",icon:"✍️"}];
     var _curTab=(subTabs[_cur]&&_tabs.some(function(t){return t.id===subTabs[_cur];}))?subTabs[_cur]:(_tabs[0]&&_tabs[0].id);
     var _modMeta=MODULES.find(function(m){return m.id===_cur;})||{label:_cur,icon:"🏗️"};
-    var _renderTab=function(tid){if(tid==="presence")return/*#__PURE__*/React.createElement(PresenceTab,{key:_cur,moduleId:_cur,auth:auth});if(tid==="dash")return/*#__PURE__*/React.createElement(PresenceDashboard,{key:_cur+"-dash",auth:auth});if(tid==="logistics")return/*#__PURE__*/React.createElement(LogisticsTab,{key:_cur+"-log",moduleId:_cur,auth:auth});if(tid==="logsign")return/*#__PURE__*/React.createElement(LogisticsSignTab,{key:_cur+"-sign",moduleId:_cur,auth:auth});if(tid==="kalag")return/*#__PURE__*/React.createElement(KalagTab,{key:_cur+"-kalag",moduleId:_cur,auth:auth});return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"בקרוב");};
+    var _renderTab=function(tid){if(tid==="presence")return/*#__PURE__*/React.createElement(PresenceTab,{key:_cur,moduleId:_cur,auth:auth});if(tid==="dash")return/*#__PURE__*/React.createElement(PresenceDashboard,{key:_cur+"-dash",auth:auth});if(tid==="logistics")return/*#__PURE__*/React.createElement(LogisticsTab,{key:_cur+"-log",moduleId:_cur,auth:auth});if(tid==="logsign")return/*#__PURE__*/React.createElement(LogisticsSignTab,{key:_cur+"-sign",moduleId:_cur,auth:auth});if(tid==="kalag")return/*#__PURE__*/React.createElement(KalagTab,{key:_cur+"-kalag",moduleId:_cur,auth:auth});if(tid==="vehmaint")return/*#__PURE__*/React.createElement(VehicleMaintenanceTab,{key:_cur+"-veh",moduleId:_cur,auth:auth});return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"בקרוב");};
     var _pickSub=function(id){setSubTabs(function(p){var n={...p};n[_cur]=id;return n;});};
     var _sideBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"10px 16px",background:on?"var(--btn-primary-bg)":"none",border:"none",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",cursor:"pointer",fontSize:"var(--text-sm)",fontWeight:600,borderRight:on?"3px solid var(--color-accent-fg)":"3px solid transparent",textAlign:"right",fontFamily:"inherit"}},t.icon+" "+t.label);};
     var _mobBtn=function(t){var on=t.id===_curTab;return/*#__PURE__*/React.createElement("button",{key:t.id,onClick:function(){_pickSub(t.id);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+(on?"var(--color-accent-fg)":"var(--color-border-default)"),background:on?"var(--color-accent-bg)":"transparent",color:on?"var(--color-accent-fg)":"var(--color-text-secondary)",fontSize:"var(--text-sm)",fontWeight:on?800:600,fontFamily:"inherit",whiteSpace:"nowrap"}},t.icon+" "+t.label);};
