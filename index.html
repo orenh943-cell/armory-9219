@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.144";
+const APP_VERSION = "2.3.145";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8144,6 +8144,42 @@ function KalagTab({moduleId,auth}){
     }catch(e){console.error("[kalag-batt]",e);setMsg("⚠️ שגיאה ביצירת הזמנה גדודית: "+(e.message||e));}
     finally{setBusy(false);}
   }
+  /* ===== שלב 3: ייצוא הזמנה גדודית (וואטסאפ + אקסל) — קריאה בלבד מ-b ===== */
+  function kalagWhatsApp(b){
+    var lines=(b&&b.lines)||[];
+    var byGroup={};lines.forEach(function(ln){var g=ln.group||"כללי";(byGroup[g]=byGroup[g]||[]).push(ln);});
+    var txt="🏛️ הזמנה גדודית — קליר קרביץ\n📅 "+((b&&b.date)||"")+"\n";
+    Object.keys(byGroup).sort(function(a,b2){return a.localeCompare(b2,"he");}).forEach(function(g){
+      txt+="\n▪️ "+g+"\n";var gSum=0;
+      byGroup[g].forEach(function(ln){
+        var pu=ORDER_MODULES.filter(function(mid){return ln.perUnit&&ln.perUnit[mid];}).map(function(mid){return (SHORT[mid]||mid)+":"+ln.perUnit[mid];}).join(" ");
+        txt+="• "+ln.name+" · "+(ln.totalApproved||0)+" יח'"+(pu?(" ("+pu+")"):"")+" — ₪"+fmt(ln.lineTotal)+"\n";gSum+=ln.lineTotal||0;
+      });
+      txt+="סיכום "+g+": ₪"+fmt(gSum)+"\n";
+    });
+    txt+="\n💰 סה\"כ גדודי: ₪"+fmt((b&&b.grandTotal)||0);
+    window.open("https://wa.me/?text="+encodeURIComponent(txt),"_blank");
+  }
+  async function kalagExcel(b){
+    try{
+      if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. בדוק חיבור ונסה שוב.");return;}
+      var lines=(b&&b.lines)||[];
+      var units=ORDER_MODULES.filter(function(mid){return lines.some(function(ln){return ln.perUnit&&ln.perUnit[mid];});});
+      var wb=new ExcelJS.Workbook();var ws=wb.addWorksheet("הזמנה גדודית");ws.views=[{rightToLeft:true}];
+      var head=["פריט","קבוצה"].concat(units.map(function(mid){return SHORT[mid]||mid;})).concat(["סה\"כ מאושר","מחיר ליחידה","מחיר לאריזה","סה\"כ שורה"]);
+      var header=ws.addRow(head);header.font={bold:true,color:{argb:"FFFFFFFF"}};header.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
+      lines.forEach(function(ln){var r=[ln.name||"",ln.group||""];units.forEach(function(mid){r.push((ln.perUnit&&ln.perUnit[mid])||0);});r.push(ln.totalApproved||0,ln.priceUnit||0,ln.pricePack||0,ln.lineTotal||0);ws.addRow(r);});
+      var sumArr=["סה\"כ גדודי",""];units.forEach(function(){sumArr.push("");});sumArr.push("","","",(b&&b.grandTotal)||0);
+      var totalRow=ws.addRow(sumArr);totalRow.font={bold:true};totalRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE0E8F0"}};
+      ws.columns=[{width:26},{width:16}].concat(units.map(function(){return {width:9};})).concat([{width:13},{width:13},{width:13},{width:14}]);
+      var buf=await wb.xlsx.writeBuffer();var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;
+      var dt=String((b&&b.date)||new Date().toLocaleDateString("he-IL")).replace(/[.\/\\]/g,"-");
+      a.download="הזמנה_גדודית_"+dt+".xlsx";document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(function(){URL.revokeObjectURL(url);},3000);
+      try{logAction("הזמנת_קלג","ייצוא אקסל הזמנה גדודית — "+((b&&b.date)||""),(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[kalag-xls-log]",_e);}
+    }catch(err){console.error("[kalag-excel]",err);alert("שגיאה בייצוא: "+((err&&err.message)||err));}
+  }
   if(catalog===null||orders===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען...");
   var catList=Object.keys(catalog).map(function(id){return {id:id,c:catalog[id]||{}};}).sort(function(a,b){return ((a.c.ord||0)-(b.c.ord||0))||((a.c.name||"").localeCompare(b.c.name||"","he"));});
   var groups={};catList.forEach(function(x){var g=x.c.group||"כללי";(groups[g]=groups[g]||[]).push(x);});
@@ -8314,7 +8350,11 @@ function KalagTab({moduleId,auth}){
                     /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},nl),
                     /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:600}},fmt(b.grandTotal)+"₪"),
                     /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},b.createdBy||"—"),
-                    /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("button",{onClick:function(){setViewBId(viewBId===x.id?null:x.id);},style:{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)"}},viewBId===x.id?"סגור":"👁️ צפה"))
+                    /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
+                      /*#__PURE__*/React.createElement("button",{onClick:function(){setViewBId(viewBId===x.id?null:x.id);},style:{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)"}},viewBId===x.id?"סגור":"👁️ צפה"),
+                      /*#__PURE__*/React.createElement("button",{onClick:function(){kalagWhatsApp(b);},style:{...S.btn("green"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📱 וואטסאפ"),
+                      /*#__PURE__*/React.createElement("button",{onClick:function(){kalagExcel(b);},style:{...S.btn("blue"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"📊 אקסל")
+                    ))
                   ),
                   viewBId===x.id&&/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:5,style:{...S.td,background:"var(--color-bg-subtle)",padding:10}},
                     /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)"}},
