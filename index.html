@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.142";
+const APP_VERSION = "2.3.143";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8056,10 +8056,19 @@ function KalagTab({moduleId,auth}){
   const [catModal,setCatModal]=React.useState(null);
   const [viewId,setViewId]=React.useState(null);
   const fileRef=React.useRef(null);
+  /* v2.3.143 שלב 2 (צד לוגיסטיקה) */
+  const [view,setView]=React.useState("order");
+  const [allOrders,setAllOrders]=React.useState(null);
+  const [battOrders,setBattOrders]=React.useState(null);
+  const [approvedTotals,setApprovedTotals]=React.useState({});
+  const [included,setIncluded]=React.useState({});
+  const [viewBId,setViewBId]=React.useState(null);
+  var isLogistics=moduleId==="logistics";
   var ADMINS=["אורן","מתן","יעקב"];
   var isAdmin=!!(auth&&(auth.role==="admin"||ADMINS.indexOf(auth.username)>=0||ADMINS.indexOf(auth.name)>=0));
   var UNITMAP={company_a:"פלוגה א",company_b:"פלוגה ב",company_c:"פלוגה ג",support:"מסייעת",plasm:"פלס\"מ",logistics:"לוגיסטיקה"};
   React.useEffect(function(){let alive=true;var o1=fbOn("db/kalagCatalog",function(v){if(alive)setCatalog(v||{});});var o2=fbOn("db/kalagOrders/"+moduleId,function(v){if(alive)setOrders(v||{});});return function(){alive=false;if(typeof o1==="function")o1();if(typeof o2==="function")o2();};},[moduleId]);
+  React.useEffect(function(){if(moduleId!=="logistics")return;let alive=true;var oA=fbOn("db/kalagOrders",function(v){if(alive)setAllOrders(v||{});});var oB=fbOn("db/kalagBattalionOrders",function(v){if(alive)setBattOrders(v||{});});return function(){alive=false;if(typeof oA==="function")oA();if(typeof oB==="function")oB();};},[moduleId]);
   function _key(s){return String(s||"").replace(/[.#$/\[\]\s]+/g,"_").trim();}
   function cv(row,col){var v=row.getCell(col).value;if(v==null)return"";if(typeof v==="object"){if(v.text!=null)return String(v.text).trim();if(v.result!=null)return String(v.result).trim();if(Array.isArray(v.richText))return v.richText.map(function(r){return r.text;}).join("").trim();return"";}return String(v).trim();}
   function colOf(hdr){var kws=Array.prototype.slice.call(arguments,1);var found=null;hdr.eachCell(function(cell,col){if(found!==null)return;var raw=cell.value==null?"":(typeof cell.value==="object"?(cell.value.text||cell.value.result||""):cell.value);var t=String(raw).replace(/["'״׳\s]/g,"");if(kws.every(function(k){return t.indexOf(k)>=0;}))found=col;});return found;}
@@ -8113,17 +8122,49 @@ function KalagTab({moduleId,auth}){
     finally{setBusy(false);}
   }
   async function delOrder(orderId,status){if(status!=="ממתין"){alert("ניתן למחוק רק דרישה בסטטוס ממתין");return;}if(!window.confirm("למחוק את הדרישה?"))return;try{await fbSet("db/kalagOrders/"+moduleId+"/"+orderId,null);}catch(e){console.error("[kalag-order-del]",e);alert("שגיאה: "+(e.message||e));}}
+  /* ===== שלב 2: איחוד דרישות פלוגתיות (לוגיסטיקה) ===== */
+  var ORDER_MODULES=["company_a","company_b","company_c","support","plasm","logistics"];
+  var SHORT={company_a:"א",company_b:"ב",company_c:"ג",support:"מסייעת",plasm:"פלס\"מ",logistics:"לוג'"};
+  function buildPending(){var out=[];if(!allOrders)return out;ORDER_MODULES.forEach(function(mid){var byId=allOrders[mid]||{};Object.keys(byId).forEach(function(oid){var o=byId[oid]||{};if(o.status==="ממתין")out.push({moduleId:mid,orderId:oid,o:o});});});return out;}
+  function buildAgg(pending){var agg={};pending.forEach(function(po){if(included[po.moduleId+"/"+po.orderId]===false)return;var items=po.o.items||{};Object.keys(items).forEach(function(cid){var it=items[cid];var a=agg[cid]||{cid:cid,name:it.name,group:it.group,priceUnit:it.priceUnit||0,pricePack:it.pricePack||0,qtyPack:it.qtyPack||0,perUnit:{},totalReq:0};var qr=parseInt(it.qtyRequested)||0;a.perUnit[po.moduleId]=(a.perUnit[po.moduleId]||0)+qr;a.totalReq+=qr;agg[cid]=a;});});return Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return ((a.group||"").localeCompare(b.group||"","he"))||((a.name||"").localeCompare(b.name||"","he"));});}
+  async function createBattalionOrder(){
+    var pending=buildPending();var aggL=buildAgg(pending);
+    var lines=[];var grandTotal=0;var sourceOrders={};
+    aggL.forEach(function(a){var appr=approvedTotals[a.cid]!=null?(parseInt(approvedTotals[a.cid])||0):a.totalReq;if(appr<=0)return;var lt=packPrice({qtyPack:a.qtyPack,pricePack:a.pricePack,priceUnit:a.priceUnit},appr);grandTotal+=lt;lines.push({catalogId:a.cid,group:a.group||"",name:a.name||"",priceUnit:a.priceUnit||0,qtyPack:a.qtyPack||0,pricePack:a.pricePack||0,perUnit:a.perUnit,totalApproved:appr,lineTotal:lt});});
+    if(!lines.length){alert("אין פריטים מאושרים לאיחוד");return;}
+    pending.forEach(function(po){if(included[po.moduleId+"/"+po.orderId]!==false){(sourceOrders[po.moduleId]=sourceOrders[po.moduleId]||[]).push(po.orderId);}});
+    if(!window.confirm("ליצור הזמנה גדודית מ-"+lines.length+" פריטים? הדרישות שנכללו יסומנו 'אושר'."))return;
+    setBusy(true);setMsg("");
+    try{
+      var ts=Date.now();var orderId="b"+ts;var date=new Date().toLocaleDateString("he-IL");
+      await fbSet("db/kalagBattalionOrders/"+orderId,{date:date,ts:ts,createdBy:(auth&&auth.name)||"",grandTotal:grandTotal,lines:lines,sourceOrders:sourceOrders});
+      for(var mid in sourceOrders){for(var i=0;i<sourceOrders[mid].length;i++){await fbSet("db/kalagOrders/"+mid+"/"+sourceOrders[mid][i]+"/status","אושר");}}
+      try{logAction("הזמנת_קלג","נוצרה הזמנה גדודית — "+lines.length+" פריטים · "+fmt(grandTotal)+"₪",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[kalag-batt-log]",_e);}
+      setApprovedTotals({});setIncluded({});setMsg("✅ נוצרה הזמנה גדודית ("+lines.length+" פריטים · "+fmt(grandTotal)+"₪)");
+    }catch(e){console.error("[kalag-batt]",e);setMsg("⚠️ שגיאה ביצירת הזמנה גדודית: "+(e.message||e));}
+    finally{setBusy(false);}
+  }
   if(catalog===null||orders===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען...");
   var catList=Object.keys(catalog).map(function(id){return {id:id,c:catalog[id]||{}};}).sort(function(a,b){return ((a.c.ord||0)-(b.c.ord||0))||((a.c.name||"").localeCompare(b.c.name||"","he"));});
   var groups={};catList.forEach(function(x){var g=x.c.group||"כללי";(groups[g]=groups[g]||[]).push(x);});
   var groupNames=Object.keys(groups);
   var selCount=0,selTotal=0;Object.keys(qtys).forEach(function(cid){var q=parseInt(qtys[cid])||0;if(q>0&&catalog[cid]){selCount++;selTotal+=packPrice(catalog[cid],q);}});
   var orderList=Object.keys(orders).map(function(oid){return {id:oid,o:orders[oid]||{}};}).sort(function(a,b){return (b.o.ts||0)-(a.o.ts||0);});
+  var _pending=isLogistics?buildPending():[];
+  var _aggList=isLogistics?buildAgg(_pending):[];
+  var _activeUnits=ORDER_MODULES.filter(function(mid){return _aggList.some(function(a){return a.perUnit[mid];});});
+  var _grandPreview=0;_aggList.forEach(function(a){var appr=approvedTotals[a.cid]!=null?(parseInt(approvedTotals[a.cid])||0):a.totalReq;_grandPreview+=packPrice({qtyPack:a.qtyPack,pricePack:a.pricePack,priceUnit:a.priceUnit},appr);});
+  var battList=(isLogistics&&battOrders)?Object.keys(battOrders).map(function(bid){return {id:bid,b:battOrders[bid]||{}};}).sort(function(a,b){return (b.b.ts||0)-(a.b.ts||0);}):[];
   return/*#__PURE__*/React.createElement("div",{style:{maxWidth:1000,margin:"0 auto"}},
     /*#__PURE__*/React.createElement("h2",{style:{margin:"0 0 12px",fontSize:"var(--text-xl)",fontWeight:800}},"📝 הזמנות קליר קרביץ — "+(UNITMAP[moduleId]||moduleId)),
     msg&&/*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},msg),
+    /* ===== מתג תצוגה (לוגיסטיקה בלבד) ===== */
+    isLogistics&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:14}},
+      /*#__PURE__*/React.createElement("button",{onClick:function(){setView("order");},style:{...S.btn(view==="order"?"blue":"gray")}},"📝 הזמנה שלי"),
+      /*#__PURE__*/React.createElement("button",{onClick:function(){setView("approve");},style:{...S.btn(view==="approve"?"blue":"gray")}},"🏛️ אישור גדודי")
+    ),
     /* ===== ניהול קטלוג (אדמין) ===== */
-    isAdmin&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
+    (view==="order")&&isAdmin&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
       /*#__PURE__*/React.createElement("button",{onClick:function(){setShowMgmt(!showMgmt);},style:{background:"none",border:"none",fontWeight:800,fontSize:"var(--text-md)",cursor:"pointer",color:"var(--color-text-primary)",fontFamily:"inherit",padding:0}},(showMgmt?"▼":"◀")+" ⚙️ ניהול קטלוג (אדמין) · "+catList.length+" פריטים"),
       showMgmt&&/*#__PURE__*/React.createElement("div",{style:{marginTop:10}},
         /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}},
@@ -8153,7 +8194,7 @@ function KalagTab({moduleId,auth}){
       )
     ),
     /* ===== הזמנה (פלוגה) ===== */
-    /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
+    (view==="order")&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10}},"בחירת פריטים מהקטלוג"),
       catList.length===0?/*#__PURE__*/React.createElement("div",{style:{padding:20,textAlign:"center",color:"var(--color-text-secondary)"}},"הקטלוג ריק. "+(isAdmin?"ייבא קטלוג למעלה.":"פנה לאדמין להזנת הקטלוג.")):
       /*#__PURE__*/React.createElement(React.Fragment,null,
@@ -8179,7 +8220,7 @@ function KalagTab({moduleId,auth}){
       )
     ),
     /* ===== היסטוריה ===== */
-    /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
+    (view==="order")&&/*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
       /*#__PURE__*/React.createElement("div",{style:{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",fontWeight:800}},"היסטוריית דרישות · "+orderList.length),
       /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
         /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:520,fontSize:"var(--text-sm)"}},
@@ -8209,6 +8250,85 @@ function KalagTab({moduleId,auth}){
                 )
               ))
             );})
+          )
+        )
+      )
+    ),
+    /* ===== שלב 2: צד לוגיסטיקה — אישור גדודי ===== */
+    (isLogistics&&view==="approve")&&(allOrders===null
+      ?/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען דרישות...")
+      :/*#__PURE__*/React.createElement(React.Fragment,null,
+        /* בחירת דרישות לאיחוד */
+        /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
+          /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10}},"דרישות ממתינות · "+_pending.length),
+          _pending.length===0
+            ?/*#__PURE__*/React.createElement("div",{style:{padding:16,textAlign:"center",color:"var(--color-text-secondary)"}},"אין דרישות ממתינות")
+            :/*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+              /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:560,fontSize:"var(--text-sm)"}},
+                /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["כלול","פלוגה","תאריך","פריטים","נשלח ע\"י"].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+                /*#__PURE__*/React.createElement("tbody",null,_pending.map(function(po){var key=po.moduleId+"/"+po.orderId;var inc=included[key]!==false;return/*#__PURE__*/React.createElement("tr",{key:key},
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},/*#__PURE__*/React.createElement("input",{type:"checkbox",checked:inc,onChange:function(e){var ck=e.target.checked;setIncluded(function(p){var o={...p};o[key]=ck;return o;});}})),
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},po.o.unit||SHORT[po.moduleId]||po.moduleId),
+                  /*#__PURE__*/React.createElement("td",{style:S.td},po.o.date||"—"),
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},Object.keys(po.o.items||{}).length),
+                  /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},po.o.createdBy||"—")
+                );}))
+              )
+            )
+        ),
+        /* טבלת איחוד פר-פריט (פילוח פלוגתי) */
+        _aggList.length>0&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
+          /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10}},"איחוד פר-פריט (פילוח פלוגתי)"),
+          /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+            /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:680,fontSize:"var(--text-sm)"}},
+              /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
+                ["פריט","קבוצה"].concat(_activeUnits.map(function(mid){return SHORT[mid]||mid;})).concat(["סה\"כ מבוקש","כמות מאושרת","מחיר משוער"]).map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);})
+              )),
+              /*#__PURE__*/React.createElement("tbody",null,_aggList.map(function(a){var appr=approvedTotals[a.cid]!=null?(parseInt(approvedTotals[a.cid])||0):a.totalReq;return/*#__PURE__*/React.createElement("tr",{key:a.cid},
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},a.name||"—"),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},a.group||"—"),
+                _activeUnits.map(function(mid){return/*#__PURE__*/React.createElement("td",{key:mid,style:{...S.td,textAlign:"center"}},a.perUnit[mid]||"—");}),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:700}},a.totalReq),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},/*#__PURE__*/React.createElement("input",{type:"number",min:0,value:approvedTotals[a.cid]!=null?approvedTotals[a.cid]:a.totalReq,onChange:function(e){var val=e.target.value;setApprovedTotals(function(p){var o={...p};o[a.cid]=val;return o;});},style:{width:70,...S.input,padding:"3px 6px",textAlign:"center"}})),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:600}},fmt(packPrice({qtyPack:a.qtyPack,pricePack:a.pricePack,priceUnit:a.priceUnit},appr))+"₪")
+              );}))
+            )
+          ),
+          /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginTop:12,paddingTop:12,borderTop:"2px solid var(--color-border-muted)"}},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:700}},"סה\"כ משוער "+fmt(_grandPreview)+"₪"),
+            /*#__PURE__*/React.createElement("button",{onClick:createBattalionOrder,disabled:busy,style:{...S.btn("green"),opacity:busy?0.5:1}},busy?"מאחד...":"🏛️ צור הזמנה גדודית")
+          )
+        ),
+        /* היסטוריית הזמנות גדודיות */
+        /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
+          /*#__PURE__*/React.createElement("div",{style:{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",fontWeight:800}},"הזמנות גדודיות · "+battList.length),
+          /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+            /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:520,fontSize:"var(--text-sm)"}},
+              /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["תאריך","פריטים","סה\"כ","נוצר ע\"י",""].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+              /*#__PURE__*/React.createElement("tbody",null,
+                battList.length===0?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:5,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין הזמנות גדודיות עדיין")):
+                battList.map(function(x){var b=x.b;var nl=(b.lines||[]).length;return/*#__PURE__*/React.createElement(React.Fragment,{key:x.id},
+                  /*#__PURE__*/React.createElement("tr",null,
+                    /*#__PURE__*/React.createElement("td",{style:S.td},b.date||"—"),
+                    /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},nl),
+                    /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:600}},fmt(b.grandTotal)+"₪"),
+                    /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},b.createdBy||"—"),
+                    /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("button",{onClick:function(){setViewBId(viewBId===x.id?null:x.id);},style:{...S.btn("gray"),padding:"3px 8px",fontSize:"var(--text-xs)"}},viewBId===x.id?"סגור":"👁️ צפה"))
+                  ),
+                  viewBId===x.id&&/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:5,style:{...S.td,background:"var(--color-bg-subtle)",padding:10}},
+                    /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"var(--text-xs)"}},
+                      /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["קבוצה","פריט","מאושר","מחיר"].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+                      /*#__PURE__*/React.createElement("tbody",null,(b.lines||[]).map(function(ln,li){return/*#__PURE__*/React.createElement("tr",{key:li},
+                        /*#__PURE__*/React.createElement("td",{style:S.td},ln.group||"—"),
+                        /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},ln.name||"—"),
+                        /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},ln.totalApproved||0),
+                        /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},fmt(ln.lineTotal)+"₪")
+                      );}))
+                    )
+                  ))
+                );})
+              )
+            )
           )
         )
       )
