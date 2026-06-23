@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.150";
+const APP_VERSION = "2.3.151";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8619,6 +8619,37 @@ function _vehToISO(s){if(!s)return"";s=String(s).trim();if(/^\d{4}-\d{1,2}-\d{1,
 function _vehFromISO(s){if(!s)return"";s=String(s).trim();var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"."+m[2]+"."+m[1];return s;}
 function _vehParseDate(s){if(!s)return null;s=String(s).trim();var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);return null;}
 function _vehOverdue(r){var d=_vehParseDate(r.nextService);var byDate=false;if(d){var t=new Date();t.setHours(0,0,0,0);byDate=d.getTime()<t.getTime();}var kt=parseInt(r.kmToService)||0;var km=parseInt(r.km)||0;var byKm=kt>0&&km>=kt;return byDate||byKm;}
+function _vehDaysLeft(r){var d=_vehParseDate(r&&r.nextService);if(!d)return null;var t=new Date();t.setHours(0,0,0,0);d.setHours(0,0,0,0);return Math.floor((d.getTime()-t.getTime())/86400000);}
+function _vehPeriod(days){if(days===null)return{key:"none",label:"ללא תאריך",mark:"◻️"};if(days<0)return{key:"overdue",label:"באיחור",mark:"🔴"};if(days<=7)return{key:"week",label:"השבוע",mark:"🟠"};if(days<=30)return{key:"month",label:"החודש",mark:"🟡"};return{key:"later",label:"בהמשך",mark:"⚪"};}
+function _vehDaysTxt(d){return d===null?"ללא תאריך":d<0?("באיחור "+Math.abs(d)+" ימים"):d===0?"היום":(d+" ימים");}
+/* v2.3.151: ייצוא טיפולים צפויים — גיליון יחיד ממוין לפי nextService. דפוס navy/RTL מועתק. קריאה בלבד מ-db.vehicleMaintenance. */
+async function _generateVehicleScheduleReport(db,authName){
+  if(typeof _loadExcelJS!=="function"||!(await _loadExcelJS())){alert("ספריית Excel לא נטענה. נסה שוב.");return;}
+  try{
+    var vm=(db&&db.vehicleMaintenance)||{};
+    var rows=[];
+    VEH_TABLES.forEach(function(t){var data=vm[t.type]||{};Object.keys(data).forEach(function(id){rows.push({t:t,r:data[id]||{}});});});
+    if(rows.length===0){alert("אין רכבים לייצוא");return;}
+    rows.sort(function(a,b){var da=_vehParseDate(a.r.nextService);var db2=_vehParseDate(b.r.nextService);if(!da&&!db2)return 0;if(!da)return 1;if(!db2)return -1;return da.getTime()-db2.getTime();});
+    var wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";wb.created=new Date();
+    var NAVY="FF1a3a6b";
+    var ws=wb.addWorksheet("טיפולים צפויים");ws.views=[{rightToLeft:true}];
+    var header=ws.addRow(["תאריך טיפול","מספר רכב","סוג/דגם","סוג טבלה","ק\"מ נוכחי","ק\"מ לטיפול","סטטוס","ימים שנותרו","תקופה"]);
+    header.font={bold:true,color:{argb:"FFFFFFFF"}};header.fill={type:"pattern",pattern:"solid",fgColor:{argb:NAVY}};
+    var PCOL={overdue:"FFFCE0E0",week:"FFFFEAD6",month:"FFFFF8C5",later:"FFEFF7EF",none:"FFEEEEEE"};
+    rows.forEach(function(x){var r=x.r;var days=_vehDaysLeft(r);var per=_vehPeriod(days);
+      var row=ws.addRow([_vehFromISO(r.nextService)||"—",r.plate||"—",r.model||"—",x.t.label,r.km||"—",r.kmToService||"—",r.status||"תקין",_vehDaysTxt(days),per.mark+" "+per.label]);
+      var fg=PCOL[per.key];if(fg){row.eachCell(function(c){c.fill={type:"pattern",pattern:"solid",fgColor:{argb:fg}};});}
+    });
+    ws.columns=[{width:14},{width:14},{width:20},{width:16},{width:12},{width:12},{width:14},{width:18},{width:14}];
+    var buf=await wb.xlsx.writeBuffer();var blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;
+    var d=new Date().toLocaleDateString("he-IL").replace(/[.\/]/g,"-");
+    a.download="מעקב_טיפולים_"+d+".xlsx";document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},3000);
+    try{logAction("מעקב_טיפולים","ייצוא טיפולים צפויים — "+rows.length+" רכבים",authName||"מערכת");}catch(e){console.warn("[veh-sched-export]",e);}
+  }catch(err){console.error("[VehicleScheduleReport]",err);alert("שגיאה בייצוא: "+((err&&err.message)||err));}
+}
 function VehicleModal({table,mode,item,onSave,onClose}){
   const [plate,setPlate]=React.useState((item&&item.plate)||"");
   const [model,setModel]=React.useState((item&&item.model)||"");
@@ -8663,6 +8694,7 @@ function VehicleMaintenanceTab({moduleId,auth}){
   const [busy,setBusy]=React.useState(false);
   const [msg,setMsg]=React.useState("");
   const [modal,setModal]=React.useState(null);
+  const [view,setView]=React.useState("tables");
   const refFixed=React.useRef(null);const refRented=React.useRef(null);const refYarmach=React.useRef(null);const refExternal=React.useRef(null);
   var REFS={fixed:refFixed,rented:refRented,yarmach:refYarmach,external:refExternal};
   React.useEffect(function(){let alive=true;var off=fbOn("db/vehicleMaintenance",function(v){if(alive)setInv({fixed:(v&&v.fixed)||{},rented:(v&&v.rented)||{},yarmach:(v&&v.yarmach)||{},external:(v&&v.external)||{}});});return function(){alive=false;if(typeof off==="function")off();};},[]);
@@ -8704,6 +8736,19 @@ function VehicleMaintenanceTab({moduleId,auth}){
     try{await fbSet("db/vehicleMaintenance/"+table+"/"+id,null);try{logAction("מעקב_טיפולים","מחיקת רכב — "+plate+" ("+table+")",(auth&&auth.name)||"מערכת");}catch(_e){console.warn("[veh-log]",_e);}}catch(e){console.error("[veh-del]",e);alert("שגיאה במחיקה: "+(e.message||e));}
   }
   if(inv===null)return/*#__PURE__*/React.createElement("div",{style:{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}},"טוען...");
+  function dcard(num,label,fg,bg){return/*#__PURE__*/React.createElement("div",{key:label,style:{background:bg,borderRadius:12,padding:"14px 12px",textAlign:"center",border:"1px solid var(--color-border-muted)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:24,fontWeight:800,color:fg,lineHeight:1.1}},num),/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:4}},label));}
+  /* ===== חישובי דשבורד (קריאה בלבד) ===== */
+  var _allVeh=[];VEH_TABLES.forEach(function(t){var data=(inv&&inv[t.type])||{};Object.keys(data).forEach(function(id){_allVeh.push({t:t,id:id,r:data[id]||{}});});});
+  var _active=_allVeh.filter(function(x){return x.r.status!=="מושבת";});
+  var _kTotal=_allVeh.length;
+  var _kOverdue=_active.filter(function(x){return _vehOverdue(x.r);}).length;
+  var _kWeek=_active.filter(function(x){var d=_vehDaysLeft(x.r);return d!==null&&d>=0&&d<=7;}).length;
+  var _kMonth=_active.filter(function(x){var d=_vehDaysLeft(x.r);return d!==null&&d>=0&&d<=30;}).length;
+  var _kOk=_allVeh.filter(function(x){return (x.r.status||"תקין")==="תקין";}).length;
+  var _kInService=_allVeh.filter(function(x){return x.r.status==="בטיפול";}).length;
+  var _kDisabled=_allVeh.filter(function(x){return x.r.status==="מושבת";}).length;
+  var _perTable=VEH_TABLES.map(function(t){var arr=_allVeh.filter(function(x){return x.t.type===t.type;});return {t:t,total:arr.length,overdue:arr.filter(function(x){return x.r.status!=="מושבת"&&_vehOverdue(x.r);}).length,ok:arr.filter(function(x){return (x.r.status||"תקין")==="תקין";}).length,inService:arr.filter(function(x){return x.r.status==="בטיפול";}).length,disabled:arr.filter(function(x){return x.r.status==="מושבת";}).length};});
+  var _upcoming=_active.slice().sort(function(a,b){var da=_vehParseDate(a.r.nextService);var db2=_vehParseDate(b.r.nextService);if(!da&&!db2)return 0;if(!da)return 1;if(!db2)return -1;return da.getTime()-db2.getTime();});
   function renderTable(tdef){
     var type=tdef.type;var data=(inv&&inv[type])||{};
     var rows=Object.keys(data).map(function(id){return {id:id,r:data[id]||{}};}).sort(function(a,b){return (a.r.plate||"").localeCompare(b.r.plate||"","he");});
@@ -8748,8 +8793,61 @@ function VehicleMaintenanceTab({moduleId,auth}){
       /*#__PURE__*/React.createElement("h2",{style:{margin:0,fontSize:"var(--text-xl)",fontWeight:800}},"🔧 מעקב טיפולים — רכבים"),
       /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},"שורה אדומה = עבר תאריך טיפול או הגיע לק\"מ לטיפול")
     ),
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:14}},
+      /*#__PURE__*/React.createElement("button",{onClick:function(){setView("tables");},style:{...S.btn(view==="tables"?"blue":"gray")}},"📋 טבלאות"),
+      /*#__PURE__*/React.createElement("button",{onClick:function(){setView("dash");},style:{...S.btn(view==="dash"?"blue":"gray")}},"📊 דשבורד")
+    ),
     msg&&/*#__PURE__*/React.createElement("div",{style:{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:"var(--text-sm)",fontWeight:600,background:"var(--color-bg-subtle)",border:"1px solid var(--color-border-muted)"}},msg),
-    VEH_TABLES.map(function(tdef){return renderTable(tdef);}),
+    (view==="tables")&&VEH_TABLES.map(function(tdef){return renderTable(tdef);}),
+    (view==="dash")&&/*#__PURE__*/React.createElement(React.Fragment,null,
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"flex-end",marginBottom:12}},
+        /*#__PURE__*/React.createElement("button",{onClick:async function(){setBusy(true);try{await _generateVehicleScheduleReport({vehicleMaintenance:inv},(auth&&auth.name)||"");}finally{setBusy(false);}},disabled:busy,style:{...S.btn("green"),opacity:busy?0.6:1}},busy?"⏳ יוצר…":"📊 ייצוא Excel")
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:14}},
+        dcard(_kTotal,"🚗 סה\"כ רכבים","var(--color-text-primary)","var(--color-bg-subtle)"),
+        dcard(_kOverdue,"⚠️ דרוש טיפול","var(--color-danger-fg)","var(--color-danger-bg)"),
+        dcard(_kWeek,"📅 השבוע","#9a6700","#fff8c5"),
+        dcard(_kMonth,"🗓️ החודש","var(--color-warning-fg)","var(--color-warning-bg)"),
+        dcard(_kOk,"✅ תקין","var(--color-success-fg)","var(--color-success-bg)"),
+        dcard(_kInService,"🔧 בטיפול","var(--color-accent-fg)","var(--color-accent-bg)"),
+        dcard(_kDisabled,"⛔ מושבת","var(--color-text-secondary)","var(--color-bg-subtle)")
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,marginBottom:10}},"פילוח לפי סוג רכב"),
+        /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+          /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:520,fontSize:"var(--text-sm)"}},
+            /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["סוג","סה\"כ","דרוש טיפול","תקין","בטיפול","מושבת"].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+            /*#__PURE__*/React.createElement("tbody",null,_perTable.map(function(p){return/*#__PURE__*/React.createElement("tr",{key:p.t.type},
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},p.t.icon+" "+p.t.label),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},p.total),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:p.overdue>0?700:400,color:p.overdue>0?"var(--color-danger-fg)":"inherit"}},p.overdue),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},p.ok),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},p.inService),
+              /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center"}},p.disabled)
+            );}))
+          )
+        )
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
+        /*#__PURE__*/React.createElement("div",{style:{padding:"10px 14px",borderBottom:"1px solid var(--color-border-muted)",fontWeight:800}},"טיפולים קרובים · "+_upcoming.length),
+        /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
+          /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:640,fontSize:"var(--text-sm)"}},
+            /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,["מספר רכב","סוג/דגם","סוג טבלה","תאריך הבא","ימים שנותרו","סטטוס"].map(function(h,i){return/*#__PURE__*/React.createElement("th",{key:i,style:S.th},h);}))),
+            /*#__PURE__*/React.createElement("tbody",null,
+              _upcoming.length===0?/*#__PURE__*/React.createElement("tr",null,/*#__PURE__*/React.createElement("td",{colSpan:6,style:{...S.td,textAlign:"center",color:"var(--color-text-secondary)",padding:24}},"אין רכבים פעילים")):
+              _upcoming.map(function(x){var r=x.r;var days=_vehDaysLeft(r);var over=_vehOverdue(r);return/*#__PURE__*/React.createElement("tr",{key:x.t.type+"/"+x.id,style:over?{background:"var(--color-danger-bg)"}:null},
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:700,fontFamily:"monospace"}},r.plate||"—"),
+                /*#__PURE__*/React.createElement("td",{style:S.td},r.model||"—"),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)",color:"var(--color-text-secondary)"}},x.t.label),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:over?700:400,color:over?"var(--color-danger-fg)":"inherit"}},_vehFromISO(r.nextService)||"—"),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,textAlign:"center",fontWeight:over?700:400,color:over?"var(--color-danger-fg)":"inherit"}},_vehDaysTxt(days)),
+                /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:_vehStatusColor(r.status||"תקין"),small:true},r.status||"תקין"))
+              );})
+            )
+          )
+        )
+      )
+    ),
     modal&&/*#__PURE__*/React.createElement(VehicleModal,{table:modal.table,mode:modal.mode,item:modal.item,onClose:function(){setModal(null);},onSave:function(f){saveItem(modal.table,modal.mode,modal.id,f);}})
   );
 }
