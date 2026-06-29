@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.156";
+const APP_VERSION = "2.3.157";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1277,11 +1277,12 @@ async function _exportLabelsXlsx(rows,labelName){
     {header:"פלוגה",key:"unit",width:8},
     {header:"מחלקה",key:"squad",width:10},
     {header:"פלאפון",key:"phone",width:14},
-    {header:"פריט",key:"type",width:24}
+    {header:"פריט",key:"type",width:24},
+    {header:"צ׳/סידורי",key:"serial",width:18}
   ];
   ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
   ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a2e"}};
-  rows.forEach(r=>ws.addRow({id:r.id,name:r.name,unit:r.unit,squad:r.squad,phone:r.phone,type:r.type}));
+  rows.forEach(r=>ws.addRow({id:r.id,name:r.name,unit:r.unit,squad:r.squad,phone:r.phone,type:r.type,serial:r.serial||"—"}));
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   const url=URL.createObjectURL(blob);
