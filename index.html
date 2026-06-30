@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.159";
+const APP_VERSION = "2.3.160";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1654,8 +1654,8 @@ function CompanyReturnTab({db,setDb,soldiers,auth}){
   /* איפוס בחירה רק בהחלפת פלוגה (לא על כל setDb — זו הייתה הסיבה שהסימון קפץ) */
   React.useEffect(()=>{setChecked({});},[unit]);
   const _done=r=>!r.signed;/* זוכה / ללא-חתימה = אין מה לזכות */
-  const _chk=r=>{const kk=r.sid+"|"+r.key;return kk in checked?checked[kk]:true;};/* ברירת מחדל: מסומן */
-  function toggleCheck(r){if(_done(r))return;const kk=r.sid+"|"+r.key;setChecked(p=>({...p,[kk]:!(kk in p?p[kk]:true)}));}
+  const _chk=r=>{const kk=r.sid+"|"+r.key;return kk in checked?checked[kk]:false;};/* v2.3.160: ברירת מחדל: לא מסומן (מניעת זיכוי בטעות) */
+  function toggleCheck(r){if(_done(r))return;const kk=r.sid+"|"+r.key;setChecked(p=>({...p,[kk]:!(kk in p?p[kk]:false)}));}
   function ret(r){if(_done(r))return;returnSingleItem(db,setDb,r.sid,r.key,auth);}
   /* v2.3.104/106: זיכוי בלוק — batch-safe (cap משרשר workDb); מזכה רק שורות חתומות+מסומנות; פידבק alert בסוף */
   function returnBlock(blockRows){let workDb=db;const cap=u=>{workDb=(typeof u==="function")?u(workDb):u;};let n=0;blockRows.forEach(r=>{if(r.signed&&_chk(r)){const ok=returnSingleItem(workDb,cap,r.sid,r.key,auth);if(ok)n++;}});setDb(workDb);if(n>0)alert("✓ זוכו "+n+" פריטים");}
@@ -1679,7 +1679,7 @@ function CompanyReturnTab({db,setDb,soldiers,auth}){
     React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap",alignItems:"center"}},
       React.createElement("select",{value:unit,onChange:e=>setUnit(e.target.value),style:{...S.input,marginBottom:0,width:"auto"}},UNITS.map(u=>React.createElement("option",{key:u,value:u},"פלוגה "+u))),
       React.createElement("button",{onClick:()=>setMode("weapons"),style:{...S.btn(mode==="weapons"?"blue":"neutral","sm")}},"🔫 נשקים"),
-      React.createElement("button",{onClick:()=>setMode("other"),style:{...S.btn(mode==="other"?"blue":"neutral","sm")}},"📦 שונה מנשק")),
+      React.createElement("button",{onClick:()=>setMode("other"),style:{...S.btn(mode==="other"?"blue":"neutral","sm")}},"📦 שונה מנשק"),/* v2.3.160: סמן/נקה הכל — נגזר מ-_chk, לא נוגע בלוגיקת הזיכוי */(()=>{const disp=(mode==="weapons"?weaponBlocks.flatMap(b=>b.rows):otherRows).filter(r=>r.signed);const allSel=disp.length>0&&disp.every(r=>_chk(r));return React.createElement("button",{onClick:()=>{if(allSel){setChecked({});}else{const c={};disp.forEach(r=>{c[r.sid+"|"+r.key]=true;});setChecked(c);}},disabled:disp.length===0,style:{...S.btn(allSel?"neutral":"teal","sm"),opacity:disp.length===0?0.5:1},title:allSel?"בטל סימון מכל השורות המוצגות":"סמן את כל השורות החתומות המוצגות"},allSel?"✕ נקה הכל":"✓ סמן הכל ("+disp.length+")");})()),
     React.createElement("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:mode==="other"?"🔍 חפש פריט / צ (חובה)":"🔍 חפש שם / פריט / צ",style:{...S.input,marginBottom:10}}),
     mode==="weapons"
       ? (weaponBlocks.length===0
