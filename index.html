@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.158";
+const APP_VERSION = "2.3.159";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5058,7 +5058,7 @@ function saveCabNames(unit,names){fbSet("db/cabinetNames/"+unit,names).catch(e=>
 const BUNDLE_ACCS=React.useMemo(()=>{const s=new Set();Object.values(WEAPON_BUNDLES).forEach(b=>{const arr=Array.isArray(b)?b:b?.fixed||[];const dyn=b?.dynamic?.map(d=>d.name)||[];[...arr,...dyn].forEach(n=>s.add(cleanItemName(n)));});return s;},[]);// ── All items for this unit (not signed out) ────────────
 const unitItems=React.useMemo(()=>{/* v2.3.48: cabinet -> unit map for location-based filter */const cabToUnit={};Object.keys(DEFAULT_CABS||{}).forEach(unit=>{const cabsForUnit=getCabNames(unit);(cabsForUnit||[]).forEach(c=>{cabToUnit[String(c).trim()]=unit;});});const signedIds=new Set(Object.keys(db.signatures||{}));const items=[];// {id, name, serial, cabName, soldierName, soldierId, source}
 const seen=new Set();// 1. unitItems (פנויים בארמון)
-const assignedSerials=new Set();getSoldiers(db).forEach(s=>{Object.values(db.assignments?.[s.id]||{}).forEach(v=>{if(v&&v!==1)assignedSerials.add(String(v));});});Object.entries(db.unitItems||{}).forEach(([uid,v])=>{const u=v.u||v.unit||"";const t=v.t||v.assignedType||"unit";if(t!=="unit")return;/* v2.3.50: physical location (cabName) wins over ownership */const cab=String(v.cabName||"").trim();if(cab){if(cabToUnit[cab]!==selUnit)return;}else{if(u!==selUnit)return;}const n=cleanItemName(v.n||v.name||"");if(BUNDLE_ACCS.has(n))return;const srl=v.s||v.serial?String(v.s||v.serial):null;if(srl&&assignedSerials.has(srl))return;// אצל חייל
+/* v2.3.159: assignedKeys תלוי-פריט (מק"ט/שם-נקי + סידורי) — מתקן התנגשות סידורי בין סוגי פריט שונים (חוק ברזל #4: אותו צ' מותר על פריטים שונים) */const assignedKeys=new Set();getSoldiers(db).forEach(s=>{Object.entries(db.assignments?.[s.id]||{}).forEach(([an,v])=>{if(v&&v!==1){const acn=cleanItemName(an);const amk=getMakat(acn,db)||acn;assignedKeys.add(amk+"|"+String(v));}});});Object.entries(db.unitItems||{}).forEach(([uid,v])=>{const u=v.u||v.unit||"";const t=v.t||v.assignedType||"unit";if(t!=="unit")return;/* v2.3.50: physical location (cabName) wins over ownership */const cab=String(v.cabName||"").trim();if(cab){if(cabToUnit[cab]!==selUnit)return;}else{if(u!==selUnit)return;}const n=cleanItemName(v.n||v.name||"");if(BUNDLE_ACCS.has(n))return;const srl=v.s||v.serial?String(v.s||v.serial):null;const _imk=getMakat(n,db)||n;if(srl&&assignedKeys.has(_imk+"|"+srl))return;// אצל חייל (v2.3.159: רק אם אותו מק"ט/שם-נקי — לא התנגשות בין-פריטית)
 const key=srl||"ui_"+uid;if(seen.has(key))return;seen.add(key);items.push({id:"ui_"+uid,uid,name:n,serial:srl,cabName:v.cabName||"",soldierName:"בארמון",soldierId:null,source:"unit",unit:u/* v2.3.48 */});});// 2. פריטים של חיילים לא חתומים + פריטים שלא נחתמו אצל חתומים חלקית
 getSoldiers(db).forEach(sol=>{const sUnit=sol.unit||"";const isOwnUnit=(sUnit===selUnit);/* v2.3.49: include all soldiers; filter by ownership OR cabinet location below */const sig=db.signatures?.[sol.id];// אם חתום מלא (לא partial) — דלג, הפריטים יצאו מהארמון
 if(_isSoldierFullySigned(db,sol))return;// אם חתום חלקית — קבל רשימת הפריטים שכן נחתמו (וחסר אותם)
