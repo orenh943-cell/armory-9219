@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.164";
+const APP_VERSION = "2.3.165";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1014,7 +1014,7 @@ function BattalionDashTab({db,setDb,soldiers,auth}){
   }
   /* v2.3.164: ייצוא ציוד (מק"ט/שם/צ'/כמות/שם חייל) — קריאה בלבד (assignments/groupAssigned), אפס כתיבה (בלי logAction). דפוס מועתק מ-downloadExcelBattalion; לא נוגע בייצוא הסטטוס הקיים. */
   const _EQUIP_COLS=[{header:"מק\"ט",key:"makat",width:14},{header:"שם פריט",key:"name",width:26},{header:"צ'",key:"serial",width:14},{header:"כמות",key:"qty",width:8},{header:"שם חייל",key:"soldier",width:22}];
-  function _equipRowsForUnit(unitName){const rows=[];allSols.filter(s=>(s.unit||"לא משויכת")===unitName&&db.signatures?.[s.id]).forEach(s=>{groupAssigned(db.assignments?.[s.id]||{},db).forEach(([,g])=>{rows.push({makat:g.makat||"",name:g.name,serial:g.serial||"",qty:g.qty,soldier:s.name});});});rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||String(a.serial).localeCompare(String(b.serial))||a.soldier.localeCompare(b.soldier,"he"));return rows;}
+  function _equipRowsForUnit(unitName){const rows=[];allSols.filter(s=>(s.unit||"לא משויכת")===unitName&&db.signatures?.[s.id]).forEach(s=>{/* v2.3.165: לספור רק פריטים חתומים (per-instance) — לא כל המשויכים. חתום מלא → הכל; חתום חלקית → רק signature.items */const _asgn=db.assignments?.[s.id]||{};const _signed={};Object.keys(_asgn).forEach(k=>{if(_isItemSignedFor(db,s.id,k))_signed[k]=_asgn[k];});groupAssigned(_signed,db).forEach(([,g])=>{rows.push({makat:g.makat||"",name:g.name,serial:g.serial||"",qty:g.qty,soldier:s.name});});});rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||String(a.serial).localeCompare(String(b.serial))||a.soldier.localeCompare(b.soldier,"he"));return rows;}
   function _equipFillHeader(ws){ws.views=[{rightToLeft:true}];ws.columns=_EQUIP_COLS;ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};}
   async function _equipDownload(wb,fname){const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),3000);}
   async function downloadEquipForUnit(unitName){if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה");return;}setExporting(true);try{const wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";const ws=wb.addWorksheet("ציוד "+unitName);_equipFillHeader(ws);_equipRowsForUnit(unitName).forEach(r=>ws.addRow(r));await _equipDownload(wb,"ציוד_פלוגה_"+unitName+"_"+new Date().toLocaleDateString("he-IL").replace(/[\/]/g,"-")+".xlsx");}catch(e){console.error(e);alert("שגיאה בייצוא");}setExporting(false);}
