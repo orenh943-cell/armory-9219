@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.163";
+const APP_VERSION = "2.3.164";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1012,6 +1012,13 @@ function BattalionDashTab({db,setDb,soldiers,auth}){
     }catch(e){console.error(e);alert("שגיאה בייצוא");}
     setExporting(false);
   }
+  /* v2.3.164: ייצוא ציוד (מק"ט/שם/צ'/כמות/שם חייל) — קריאה בלבד (assignments/groupAssigned), אפס כתיבה (בלי logAction). דפוס מועתק מ-downloadExcelBattalion; לא נוגע בייצוא הסטטוס הקיים. */
+  const _EQUIP_COLS=[{header:"מק\"ט",key:"makat",width:14},{header:"שם פריט",key:"name",width:26},{header:"צ'",key:"serial",width:14},{header:"כמות",key:"qty",width:8},{header:"שם חייל",key:"soldier",width:22}];
+  function _equipRowsForUnit(unitName){const rows=[];allSols.filter(s=>(s.unit||"לא משויכת")===unitName&&db.signatures?.[s.id]).forEach(s=>{groupAssigned(db.assignments?.[s.id]||{},db).forEach(([,g])=>{rows.push({makat:g.makat||"",name:g.name,serial:g.serial||"",qty:g.qty,soldier:s.name});});});rows.sort((a,b)=>a.name.localeCompare(b.name,"he")||String(a.serial).localeCompare(String(b.serial))||a.soldier.localeCompare(b.soldier,"he"));return rows;}
+  function _equipFillHeader(ws){ws.views=[{rightToLeft:true}];ws.columns=_EQUIP_COLS;ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};}
+  async function _equipDownload(wb,fname){const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),3000);}
+  async function downloadEquipForUnit(unitName){if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה");return;}setExporting(true);try{const wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";const ws=wb.addWorksheet("ציוד "+unitName);_equipFillHeader(ws);_equipRowsForUnit(unitName).forEach(r=>ws.addRow(r));await _equipDownload(wb,"ציוד_פלוגה_"+unitName+"_"+new Date().toLocaleDateString("he-IL").replace(/[\/]/g,"-")+".xlsx");}catch(e){console.error(e);alert("שגיאה בייצוא");}setExporting(false);}
+  async function downloadEquipBattalion(){if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה");return;}setExporting(true);try{const wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";unitNames.forEach(u=>{const ws=wb.addWorksheet("פלוגה "+u);_equipFillHeader(ws);_equipRowsForUnit(u).forEach(r=>ws.addRow(r));});await _equipDownload(wb,"ציוד_מרוכז_"+new Date().toLocaleDateString("he-IL").replace(/[\/]/g,"-")+".xlsx");}catch(e){console.error(e);alert("שגיאה בייצוא");}setExporting(false);}
   async function downloadExcelBattalion(){
     if(!(await _loadExcelJS())){alert("ספריית Excel לא נטענה");return;}
     setExporting(true);
@@ -1060,7 +1067,7 @@ function BattalionDashTab({db,setDb,soldiers,auth}){
     /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:14,marginBottom:14,border:"2px solid var(--color-accent-fg)"}},
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)"}},"🏢 סיכום גדוד 9219"),
-        /*#__PURE__*/React.createElement("button",{onClick:downloadExcelBattalion,disabled:exporting,style:{...S.btn("blue","sm")},title:"הורד אקסל גדודי"},exporting?"⏳ מייצא...":"📄 הורד אקסל גדודי")
+        /*#__PURE__*/React.createElement("button",{onClick:downloadExcelBattalion,disabled:exporting,style:{...S.btn("blue","sm")},title:"הורד אקסל גדודי"},exporting?"⏳ מייצא...":"📄 הורד אקסל גדודי"),/*#__PURE__*/React.createElement("button",{onClick:downloadEquipBattalion,disabled:exporting,style:{...S.btn("purple","sm")},title:"ייצוא ציוד — גיליון לכל פלוגה (מק\"ט/שם/צ'/כמות/שם חייל)"},exporting?"⏳ מייצא...":"📊 ייצוא ציוד מרוכז")
       ),
       /*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}},
         /* v2.3.57: signed = active sig (partial+full). test/exit denom = signed. */
@@ -1086,7 +1093,7 @@ function BattalionDashTab({db,setDb,soldiers,auth}){
           StatPill({label:"🟥 לא חתום בלי בוחן",val:st.unsignedNoTest,total:st.unsigned,color:"var(--color-danger-fg)",onClick:()=>setDetail({unit:u,kind:"unsignedNoTest"})}),
           StatPill({label:"🟧 לא חתום בלי יציאה",val:st.unsignedNoExit,total:st.unsigned,color:"var(--color-warning-fg)",onClick:()=>setDetail({unit:u,kind:"unsignedNoExit"})})
         ),
-        /*#__PURE__*/React.createElement("button",{onClick:()=>downloadExcelForUnit(u),disabled:exporting,style:{...S.btn("blue","sm"),width:"100%"}},exporting?"⏳ מייצא...":"📄 הורד אקסל פלוגה "+u)
+        /*#__PURE__*/React.createElement("button",{onClick:()=>downloadExcelForUnit(u),disabled:exporting,style:{...S.btn("blue","sm"),width:"100%"}},exporting?"⏳ מייצא...":"📄 הורד אקסל פלוגה "+u),/*#__PURE__*/React.createElement("button",{onClick:()=>downloadEquipForUnit(u),disabled:exporting,style:{...S.btn("purple","sm"),width:"100%",marginTop:6},title:"ייצוא ציוד הפלוגה (מק\"ט/שם/צ'/כמות/שם חייל)"},exporting?"⏳ מייצא...":"📥 ייצוא ציוד פלוגה "+u)
       );})
     ),
     // Detail modal
