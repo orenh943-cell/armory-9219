@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.174";
+const APP_VERSION = "2.3.175";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3602,7 +3602,9 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
   const [mode,setMode]=React.useState("serial");
   const WS_UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
   const [qName,setQName]=React.useState("");
-  const [qNameFree,setQNameFree]=React.useState(false);
+  const [qNameSug,setQNameSug]=React.useState([]);
+  const [qSolSearch,setQSolSearch]=React.useState("");
+  const [qSolSug,setQSolSug]=React.useState([]);
   const [qHolderType,setQHolderType]=React.useState("soldier");
   const [qSoldierId,setQSoldierId]=React.useState("");
   const [qUnit,setQUnit]=React.useState("א");
@@ -3656,7 +3658,7 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     setBusy(true);
     const id="ws_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
     const rec={id,serial:"",itemName:cleanItemName(nm),makat:getMakat(nm,db)||"",soldierName,unit,qty,hasSerial:false,holderType:qHolderType,returnedQty:0,sentAt:todayStr()+" "+nowStr(),sentBy:auth?.name||"—",status:"בסדנא",returned:false,returnedAt:"",foundInSystem:true};
-    try{await fbSet("db/workshopItems/"+id,rec);setRows(p=>({...p,[id]:rec}));logAction("שליחה_לסדנא","נשלח לסדנא (כמותי ×"+qty+"): "+rec.itemName+" — "+soldierName+(unit&&unit!=="—"?" ("+unit+")":""),auth?.name);setQName("");setQNameFree(false);setQSoldierId("");setQQty("1");}
+    try{await fbSet("db/workshopItems/"+id,rec);setRows(p=>({...p,[id]:rec}));logAction("שליחה_לסדנא","נשלח לסדנא (כמותי ×"+qty+"): "+rec.itemName+" — "+soldierName+(unit&&unit!=="—"?" ("+unit+")":""),auth?.name);setQName("");setQNameSug([]);setQSolSearch("");setQSolSug([]);setQSoldierId("");setQQty("1");}
     catch(e){console.error("[workshop-add-qty]",e);alert("שגיאה בשמירה: "+((e&&e.message)||e));}
     setBusy(false);
   }
@@ -3735,12 +3737,10 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
         /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
           /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:160}},
             /*#__PURE__*/React.createElement("label",{style:S.label},"שם פריט"),
-            qNameFree
-              ? /*#__PURE__*/React.createElement("input",{value:qName,onChange:e=>setQName(e.target.value),placeholder:"הקלד שם פריט",style:{...S.input,marginBottom:0}})
-              : /*#__PURE__*/React.createElement("select",{value:qName,onChange:e=>{if(e.target.value==="__other__"){setQNameFree(true);setQName("");}else setQName(e.target.value);},style:{...S.input,marginBottom:0}},
-                  /*#__PURE__*/React.createElement("option",{value:""},"— בחר פריט —"),
-                  _wsNames.map(n=>/*#__PURE__*/React.createElement("option",{key:n,value:n},n)),
-                  /*#__PURE__*/React.createElement("option",{value:"__other__"},"➕ אחר (הקלד ידנית)"))
+            /*#__PURE__*/React.createElement("div",{style:{position:"relative"}},
+              /*#__PURE__*/React.createElement("input",{value:qName,onChange:e=>{const v=e.target.value;setQName(v);const q=v.trim().toLowerCase();setQNameSug(q?_wsNames.filter(n=>n.toLowerCase().includes(q)).slice(0,8):[]);},placeholder:"🔍 הקלד שם פריט...",style:{...S.input,marginBottom:0}}),
+              qNameSug.length>0&&/*#__PURE__*/React.createElement("div",{style:{position:"absolute",top:"100%",right:0,left:0,zIndex:50,background:"var(--color-bg-canvas)",border:"1px solid #388bfd",borderRadius:8,marginTop:2,maxHeight:220,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.4)"}},qNameSug.map(n=>/*#__PURE__*/React.createElement("div",{key:n,onClick:()=>{setQName(n);setQNameSug([]);},style:{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-base)",borderBottom:"1px solid var(--color-border-muted)"},onMouseEnter:e=>e.currentTarget.style.background="#1f3a5f",onMouseLeave:e=>e.currentTarget.style.background="transparent"},n)))
+            )
           ),
           /*#__PURE__*/React.createElement("div",{style:{width:130}},
             /*#__PURE__*/React.createElement("label",{style:S.label},"מק\"ט"),
@@ -3755,11 +3755,10 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
               /*#__PURE__*/React.createElement("option",{value:"unit"},"פלוגה"),
               /*#__PURE__*/React.createElement("option",{value:"armory"},"ארמון"))
           ),
-          qHolderType==="soldier"&&/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+          qHolderType==="soldier"&&/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150,position:"relative"}},
             /*#__PURE__*/React.createElement("label",{style:S.label},"חייל"),
-            /*#__PURE__*/React.createElement("select",{value:qSoldierId,onChange:e=>setQSoldierId(e.target.value),style:{...S.input,marginBottom:0}},
-              /*#__PURE__*/React.createElement("option",{value:""},"— בחר חייל —"),
-              getSoldiers(db).slice().sort((a,b)=>a.name.localeCompare(b.name,"he")).map(s=>/*#__PURE__*/React.createElement("option",{key:s.id,value:s.id},s.name+" ("+(s.unit||"?")+")")))
+            /*#__PURE__*/React.createElement("input",{value:qSolSearch,onChange:e=>{const v=e.target.value;setQSolSearch(v);setQSoldierId("");const q=v.trim().toLowerCase();setQSolSug(q?getSoldiers(db).filter(s=>s.name.toLowerCase().includes(q)||String(s.id).includes(q)).slice(0,8):[]);},placeholder:"🔍 שם או מ.א...",style:{...S.input,marginBottom:0}}),
+            qSolSug.length>0&&!qSoldierId&&/*#__PURE__*/React.createElement("div",{style:{position:"absolute",top:"100%",right:0,left:0,zIndex:50,background:"var(--color-bg-canvas)",border:"1px solid #388bfd",borderRadius:8,marginTop:2,maxHeight:220,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.4)"}},qSolSug.map(s=>/*#__PURE__*/React.createElement("div",{key:s.id,onClick:()=>{setQSolSearch(s.name);setQSoldierId(s.id);setQSolSug([]);},style:{padding:"8px 12px",cursor:"pointer",fontSize:"var(--text-sm)",borderBottom:"1px solid var(--color-border-muted)"},onMouseEnter:e=>e.currentTarget.style.background="#1f3a5f",onMouseLeave:e=>e.currentTarget.style.background="transparent"},s.name+" · "+s.id+" · פל' "+(s.unit||"?"))))
           ),
           qHolderType==="unit"&&/*#__PURE__*/React.createElement("div",null,
             /*#__PURE__*/React.createElement("label",{style:S.label},"פלוגה"),
