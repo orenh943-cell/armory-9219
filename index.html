@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.173";
+const APP_VERSION = "2.3.174";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3598,6 +3598,16 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
   const [manualUnit,setManualUnit]=React.useState("");
   const [busy,setBusy]=React.useState(false);
   const [filter,setFilter]=React.useState("all");
+  /* v2.3.174: מצב ב' — פריט כמותי (ללא צ') */
+  const [mode,setMode]=React.useState("serial");
+  const WS_UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  const [qName,setQName]=React.useState("");
+  const [qNameFree,setQNameFree]=React.useState(false);
+  const [qHolderType,setQHolderType]=React.useState("soldier");
+  const [qSoldierId,setQSoldierId]=React.useState("");
+  const [qUnit,setQUnit]=React.useState("א");
+  const [qQty,setQQty]=React.useState("1");
+  const _wsNames=React.useMemo(()=>Object.keys(db.armoryMaster||{}).sort((a,b)=>a.localeCompare(b,"he")),[db.armoryMaster]);
   React.useEffect(()=>{const off=fbOn("db/workshopItems",v=>setRows(v||{}));return()=>{if(typeof off==="function")off();};},[]);
   /* שליפה לפי צ' — קריאה בלבד */
   function doLookup(){
@@ -3622,15 +3632,50 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     const un=lookup.found?lookup.unit:(manualUnit.trim()||"—");
     setBusy(true);
     const id="ws_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
-    const rec={id,serial:s,itemName:nm,makat:lookup.makat||getMakat(nm,db)||"",soldierName:lookup.found?lookup.soldierName:"—",unit:un,sentAt:todayStr()+" "+nowStr(),sentBy:auth?.name||"—",status:"בסדנא",returned:false,returnedAt:"",foundInSystem:!!lookup.found};
+    const rec={id,serial:s,itemName:nm,makat:lookup.makat||getMakat(nm,db)||"",soldierName:lookup.found?lookup.soldierName:"—",unit:un,sentAt:todayStr()+" "+nowStr(),sentBy:auth?.name||"—",qty:1,hasSerial:true,holderType:(lookup.found?(lookup.source==="soldier"?"soldier":"armory"):"soldier"),returnedQty:0,status:"בסדנא",returned:false,returnedAt:"",foundInSystem:!!lookup.found};
     try{await fbSet("db/workshopItems/"+id,rec);setRows(p=>({...p,[id]:rec}));logAction("שליחה_לסדנא","נשלח לסדנא: "+nm+(s?" ("+s+")":"")+" — "+rec.soldierName,auth?.name);setSerial("");setLookup(null);setManualName("");setManualUnit("");}
     catch(e){console.error("[workshop-add]",e);alert("שגיאה בשמירה: "+((e&&e.message)||e));}
     setBusy(false);
   }
+  /* v2.3.174: ולידציה קריאה-בלבד — כמה זמין למחזיק (אזהרה בלבד) */
+  function qtyAvailable(){
+    const nm=cleanItemName(qName||"");if(!nm)return null;
+    if(qHolderType==="soldier"){if(!qSoldierId)return null;const asgn=db.assignments?.[qSoldierId]||{};return Object.keys(asgn).filter(k=>cleanItemName(k)===nm).length;}
+    const avail=getAvailableUnits(db,soldiers,nm)||[];
+    if(qHolderType==="unit"){const e=avail.find(a=>a.unit===qUnit);return e?e.free:0;}
+    return avail.reduce((s,a)=>s+(a.free||0),0);/* armory = סה"כ פנוי */
+  }
+  /* v2.3.174: הוספת פריט כמותי (ללא צ') — כתיבה רק ל-db/workshopItems */
+  async function addQtyToWorkshop(){
+    const nm=(qName||"").trim();if(!nm){alert("בחר/הזן שם פריט");return;}
+    const qty=Math.max(1,parseInt(qQty)||1);
+    let soldierName="—",unit="—";
+    if(qHolderType==="soldier"){if(!qSoldierId){alert("בחר חייל");return;}const sol=getSoldiers(db).find(s=>s.id===qSoldierId);soldierName=sol?.name||"—";unit=sol?.unit||"—";}
+    else if(qHolderType==="unit"){soldierName="—";unit=qUnit;}
+    else{soldierName="בארמון";unit="בארמון";}
+    setBusy(true);
+    const id="ws_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
+    const rec={id,serial:"",itemName:cleanItemName(nm),makat:getMakat(nm,db)||"",soldierName,unit,qty,hasSerial:false,holderType:qHolderType,returnedQty:0,sentAt:todayStr()+" "+nowStr(),sentBy:auth?.name||"—",status:"בסדנא",returned:false,returnedAt:"",foundInSystem:true};
+    try{await fbSet("db/workshopItems/"+id,rec);setRows(p=>({...p,[id]:rec}));logAction("שליחה_לסדנא","נשלח לסדנא (כמותי ×"+qty+"): "+rec.itemName+" — "+soldierName+(unit&&unit!=="—"?" ("+unit+")":""),auth?.name);setQName("");setQNameFree(false);setQSoldierId("");setQQty("1");}
+    catch(e){console.error("[workshop-add-qty]",e);alert("שגיאה בשמירה: "+((e&&e.message)||e));}
+    setBusy(false);
+  }
   async function markReturned(id){
     const rec=rows[id];if(!rec)return;
-    const upd={...rec,returned:true,returnedAt:todayStr()+" "+nowStr(),status:"חזר"};
-    try{await fbSet("db/workshopItems/"+id,upd);setRows(p=>({...p,[id]:upd}));logAction("חזרה_מסדנא","חזר מסדנא: "+rec.itemName+(rec.serial?" ("+rec.serial+")":""),auth?.name);}
+    let upd;
+    if(rec.hasSerial===false&&(rec.qty||1)>1){
+      /* פריט כמותי — החזרה חלקית */
+      const already=rec.returnedQty||0;const remain=(rec.qty||1)-already;
+      const ans=window.prompt("כמה יחידות חזרו מהסדנא? (נותרו "+remain+" מתוך "+(rec.qty||1)+")",String(remain));
+      if(ans===null)return;
+      let x=parseInt(ans);if(isNaN(x)||x<=0){alert("כמות לא תקינה");return;}
+      if(x>remain)x=remain;
+      const newRet=already+x;const full=newRet>=(rec.qty||1);
+      upd={...rec,returnedQty:newRet,returned:full,returnedAt:todayStr()+" "+nowStr(),status:full?"חזר":"חזר חלקית"};
+    }else{
+      upd={...rec,returned:true,returnedQty:(rec.qty||1),returnedAt:todayStr()+" "+nowStr(),status:"חזר"};
+    }
+    try{await fbSet("db/workshopItems/"+id,upd);setRows(p=>({...p,[id]:upd}));logAction("חזרה_מסדנא","חזר מסדנא: "+rec.itemName+(rec.serial?" ("+rec.serial+")":"")+(upd.status==="חזר חלקית"?" (חלקי "+upd.returnedQty+"/"+(rec.qty||1)+")":""),auth?.name);}
     catch(e){console.error("[workshop-return]",e);alert("שגיאה");}
   }
   async function delRow(id){
@@ -3651,9 +3696,9 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     try{
       const wb=new ExcelJS.Workbook();wb.creator="ארמון 9219";
       const ws=wb.addWorksheet("נשלח לסדנא");ws.views=[{rightToLeft:true}];
-      ws.columns=[{header:"צ'",key:"serial",width:14},{header:"שם פריט",key:"itemName",width:24},{header:"מק\"ט",key:"makat",width:14},{header:"חייל",key:"soldierName",width:20},{header:"פלוגה",key:"unit",width:10},{header:"תאריך שליחה",key:"sentAt",width:18},{header:"נשלח ע\"י",key:"sentBy",width:16},{header:"סטטוס",key:"status",width:10},{header:"חזר",key:"ret",width:8},{header:"תאריך חזרה",key:"returnedAt",width:18}];
+      ws.columns=[{header:"צ'",key:"serial",width:14},{header:"שם פריט",key:"itemName",width:24},{header:"מק\"ט",key:"makat",width:14},{header:"חייל",key:"soldierName",width:20},{header:"פלוגה",key:"unit",width:10},{header:"כמות",key:"qty",width:8},{header:"תאריך שליחה",key:"sentAt",width:18},{header:"נשלח ע\"י",key:"sentBy",width:16},{header:"סטטוס",key:"status",width:12},{header:"חזרו",key:"retQty",width:8},{header:"חזר",key:"ret",width:8},{header:"תאריך חזרה",key:"returnedAt",width:18}];
       ws.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a3a6b"}};
-      Object.values(rows||{}).sort((a,b)=>String(b.id||"").localeCompare(String(a.id||""))).forEach(r=>ws.addRow({serial:r.serial,itemName:r.itemName,makat:r.makat,soldierName:r.soldierName,unit:r.unit,sentAt:r.sentAt,sentBy:r.sentBy,status:r.status,ret:r.returned?"כן":"לא",returnedAt:r.returnedAt||""}));
+      Object.values(rows||{}).sort((a,b)=>String(b.id||"").localeCompare(String(a.id||""))).forEach(r=>ws.addRow({serial:r.serial,itemName:r.itemName,makat:r.makat,soldierName:r.soldierName,unit:r.unit,qty:r.qty||1,sentAt:r.sentAt,sentBy:r.sentBy,status:r.status||(r.returned?"חזר":"בסדנא"),retQty:r.returnedQty||0,ret:r.returned?"כן":"לא",returnedAt:r.returnedAt||""}));
       const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="נשלח_לסדנא_"+new Date().toLocaleDateString("he-IL").replace(/[\/]/g,"-")+".xlsx";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),3000);
     }catch(e){console.error("[workshop-excel]",e);alert("שגיאה בייצוא");}
   }
@@ -3667,6 +3712,8 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     ),
     canEdit&&/*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:12}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:8,fontSize:"var(--text-sm)"}},"➕ שליחת פריט לסדנא"),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:10}},[["serial","🔢 לפי צ'"],["qty","📦 כמותי (ללא צ')"]].map(o=>/*#__PURE__*/React.createElement("button",{key:o[0],onClick:()=>setMode(o[0]),style:{...S.btn(mode===o[0]?"blue":"neutral","sm")}},o[1]))),
+      mode==="serial"&&/*#__PURE__*/React.createElement(React.Fragment,null,
       /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}},
         /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:160}},
           /*#__PURE__*/React.createElement("label",{style:S.label},"צ' / מספר סידורי"),
@@ -3683,7 +3730,49 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
               /*#__PURE__*/React.createElement("input",{value:manualUnit,onChange:e=>setManualUnit(e.target.value),placeholder:"פלוגה",style:{...S.input,marginBottom:0,width:100}})
             ))
       ),
-      lookup&&/*#__PURE__*/React.createElement("button",{onClick:addToWorkshop,disabled:busy,style:{...S.btn("green"),marginTop:10,opacity:busy?0.6:1}},busy?"⏳ שומר…":"🛠️ שלח לסדנא")
+      lookup&&/*#__PURE__*/React.createElement("button",{onClick:addToWorkshop,disabled:busy,style:{...S.btn("green"),marginTop:10,opacity:busy?0.6:1}},busy?"⏳ שומר…":"🛠️ שלח לסדנא")),
+      mode==="qty"&&/*#__PURE__*/React.createElement("div",null,
+        /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
+          /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:160}},
+            /*#__PURE__*/React.createElement("label",{style:S.label},"שם פריט"),
+            qNameFree
+              ? /*#__PURE__*/React.createElement("input",{value:qName,onChange:e=>setQName(e.target.value),placeholder:"הקלד שם פריט",style:{...S.input,marginBottom:0}})
+              : /*#__PURE__*/React.createElement("select",{value:qName,onChange:e=>{if(e.target.value==="__other__"){setQNameFree(true);setQName("");}else setQName(e.target.value);},style:{...S.input,marginBottom:0}},
+                  /*#__PURE__*/React.createElement("option",{value:""},"— בחר פריט —"),
+                  _wsNames.map(n=>/*#__PURE__*/React.createElement("option",{key:n,value:n},n)),
+                  /*#__PURE__*/React.createElement("option",{value:"__other__"},"➕ אחר (הקלד ידנית)"))
+          ),
+          /*#__PURE__*/React.createElement("div",{style:{width:130}},
+            /*#__PURE__*/React.createElement("label",{style:S.label},"מק\"ט"),
+            /*#__PURE__*/React.createElement("input",{value:qName?(getMakat(qName,db)||""):"",readOnly:true,style:{...S.input,marginBottom:0,background:"var(--color-bg-subtle)"}})
+          )
+        ),
+        /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8,alignItems:"flex-end"}},
+          /*#__PURE__*/React.createElement("div",null,
+            /*#__PURE__*/React.createElement("label",{style:S.label},"מחזיק"),
+            /*#__PURE__*/React.createElement("select",{value:qHolderType,onChange:e=>setQHolderType(e.target.value),style:{...S.input,marginBottom:0,width:"auto"}},
+              /*#__PURE__*/React.createElement("option",{value:"soldier"},"חייל"),
+              /*#__PURE__*/React.createElement("option",{value:"unit"},"פלוגה"),
+              /*#__PURE__*/React.createElement("option",{value:"armory"},"ארמון"))
+          ),
+          qHolderType==="soldier"&&/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+            /*#__PURE__*/React.createElement("label",{style:S.label},"חייל"),
+            /*#__PURE__*/React.createElement("select",{value:qSoldierId,onChange:e=>setQSoldierId(e.target.value),style:{...S.input,marginBottom:0}},
+              /*#__PURE__*/React.createElement("option",{value:""},"— בחר חייל —"),
+              getSoldiers(db).slice().sort((a,b)=>a.name.localeCompare(b.name,"he")).map(s=>/*#__PURE__*/React.createElement("option",{key:s.id,value:s.id},s.name+" ("+(s.unit||"?")+")")))
+          ),
+          qHolderType==="unit"&&/*#__PURE__*/React.createElement("div",null,
+            /*#__PURE__*/React.createElement("label",{style:S.label},"פלוגה"),
+            /*#__PURE__*/React.createElement("select",{value:qUnit,onChange:e=>setQUnit(e.target.value),style:{...S.input,marginBottom:0,width:"auto"}},WS_UNITS.map(u=>/*#__PURE__*/React.createElement("option",{key:u,value:u},u)))
+          ),
+          /*#__PURE__*/React.createElement("div",{style:{width:90}},
+            /*#__PURE__*/React.createElement("label",{style:S.label},"כמות"),
+            /*#__PURE__*/React.createElement("input",{value:qQty,onChange:e=>setQQty(e.target.value),type:"number",min:"1",style:{...S.input,marginBottom:0}})
+          )
+        ),
+        (()=>{const av=qtyAvailable();const q=parseInt(qQty)||1;if(qName&&av!==null&&(av===0||q>av))return /*#__PURE__*/React.createElement("div",{style:{padding:"6px 10px",background:"var(--color-warning-bg)",border:"1px solid var(--color-warning-fg)",borderRadius:8,fontSize:"var(--text-xs)",marginBottom:8}},"⚠️ אין כמות מספקת ("+av+" זמין"+(qHolderType==="soldier"?" לחייל":qHolderType==="unit"?" בפלוגה":" בארמון")+") — לשלוח בכל זאת?");return null;})(),
+        /*#__PURE__*/React.createElement("button",{onClick:addQtyToWorkshop,disabled:busy,style:{...S.btn("green"),opacity:busy?0.6:1}},busy?"⏳ שומר…":"🛠️ שלח לסדנא (כמותי)")
+      )
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},
       [["all","הכל"],["out","בסדנא"],["returned","חזרו"]].map(o=>/*#__PURE__*/React.createElement("button",{key:o[0],onClick:()=>setFilter(o[0]),style:{padding:"6px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:"var(--text-base)",fontWeight:600,borderColor:filter===o[0]?"var(--color-accent-fg)":"var(--color-border-default)",background:filter===o[0]?"var(--color-accent-bg)":"transparent",color:filter===o[0]?"var(--color-accent-fg)":"var(--color-text-secondary)"}},o[1]))
@@ -3693,16 +3782,17 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
       : /*#__PURE__*/React.createElement("div",{style:{...S.card,padding:0,overflow:"hidden"}},
           /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
             /*#__PURE__*/React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",minWidth:660}},
-              /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",{style:{background:"var(--color-bg-canvas)"}},["צ'","שם פריט","מק\"ט","חייל","פלוגה","נשלח","ע\"י","סטטוס",""].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h)))),
+              /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",{style:{background:"var(--color-bg-canvas)"}},["צ'","שם פריט","מק\"ט","חייל","פלוגה","כמות","נשלח","ע\"י","סטטוס",""].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:S.th},h)))),
               /*#__PURE__*/React.createElement("tbody",null,list.map(r=>/*#__PURE__*/React.createElement("tr",{key:r.id,style:{background:r.returned?"var(--color-success-bg)":"var(--color-bg-default)"}},
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontFamily:"monospace"}},r.serial),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600}},r.itemName),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,color:"var(--color-text-secondary)"}},r.makat||"—"),
                 /*#__PURE__*/React.createElement("td",{style:S.td},r.soldierName),
                 /*#__PURE__*/React.createElement("td",{style:S.td},r.unit),
+                /*#__PURE__*/React.createElement("td",{style:{...S.td,fontWeight:600,textAlign:"center"}},(r.qty||1)+((r.returnedQty||0)>0&&!r.returned?" (חזרו "+r.returnedQty+")":"")),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},r.sentAt),
                 /*#__PURE__*/React.createElement("td",{style:{...S.td,fontSize:"var(--text-xs)"}},r.sentBy),
-                /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:r.returned?"green":"orange",small:true},r.returned?"חזר "+(r.returnedAt||""):"בסדנא")),
+                /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement(Badge,{color:r.returned?"green":"orange",small:true},r.returned?"✅ חזר":(r.status==="חזר חלקית"?("↩️ חלקי "+(r.returnedQty||0)+"/"+(r.qty||1)):"🛠️ בסדנא"))),
                 /*#__PURE__*/React.createElement("td",{style:S.td},/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4}},
                   canEdit&&!r.returned&&/*#__PURE__*/React.createElement("button",{onClick:()=>markReturned(r.id),style:{...S.btn("green"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"↩️ חזר מהסדנא"),
                   isAdmin&&/*#__PURE__*/React.createElement("button",{onClick:()=>delRow(r.id),style:{...S.btn("red"),padding:"3px 8px",fontSize:"var(--text-xs)"}},"🗑️")
