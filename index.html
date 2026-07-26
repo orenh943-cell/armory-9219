@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.185";
+const APP_VERSION = "2.3.186";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1479,6 +1479,11 @@ function SoldierManageTab({db,soldiers,auth,setDb}){
   const [view,setView]=React.useState("status");
   const [custId,setCustId]=React.useState(null);/* v2.3.185: חייל במצב "הקלד מחלקה חדשה" */
   const [custTxt,setCustTxt]=React.useState("");
+  const [impBusy,setImpBusy]=React.useState(false);/* v2.3.186: ייבוא רוסטר */
+  const [impErr,setImpErr]=React.useState("");
+  const [impRows,setImpRows]=React.useState(null);
+  const [impDone,setImpDone]=React.useState({});
+  const [impUnitSel,setImpUnitSel]=React.useState({});
   const allFull=React.useMemo(()=>getSoldiers(db),[db.soldiers,db.customSoldiers,db.deletedSoldiers]);
   const inactive=React.useMemo(()=>allFull.filter(s=>s.active===false).slice().sort((a,b)=>String(a.unit||"").localeCompare(String(b.unit||""),"he")||String(a.name||"").localeCompare(String(b.name||""),"he")),[allFull]);
   const suggestions=React.useMemo(()=>{const q=query.trim();if(q.length<2)return[];return allFull.filter(s=>s.active!==false&&(String(s.id||"").startsWith(q)||String(s.name||"").includes(q))).slice(0,8);},[query,allFull]);
@@ -1511,10 +1516,21 @@ function SoldierManageTab({db,soldiers,auth,setDb}){
   const noSquad=React.useMemo(()=>getActiveSoldiers(db).filter(s=>s.unit&&String(s.unit).trim()&&(!s.squad||s.squad==="—"||!String(s.squad).trim())),[db.soldiers,db.customSoldiers,db.deletedSoldiers]);
   const noSquadGroups=React.useMemo(()=>{const by={};noSquad.forEach(s=>{const u=s.unit;(by[u]=by[u]||[]).push(s);});const ord=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];const keys=ord.filter(u=>by[u]).concat(Object.keys(by).filter(u=>!ord.includes(u)).sort((a,b)=>String(a).localeCompare(String(b),"he")));return keys.map(u=>[u,by[u].slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))]);},[noSquad]);
   function setSquad(sol,val){const v=String(val||"").trim();if(!v)return;const id=sol.id;/* כתיבה per-id בלבד — לא bulk */if(db.soldiers?.[id])fbSet("db/soldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));if(db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));if(!db.soldiers?.[id]&&!db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));setDb(prev=>{const nx={...prev};if(prev.soldiers?.[id])nx.soldiers={...prev.soldiers,[id]:{...prev.soldiers[id],squad:v}};if(prev.customSoldiers?.[id])nx.customSoldiers={...prev.customSoldiers,[id]:{...prev.customSoldiers[id],squad:v}};if(!prev.soldiers?.[id]&&!prev.customSoldiers?.[id])nx.customSoldiers={...(prev.customSoldiers||{}),[id]:{id:id,name:sol.name,unit:sol.unit,squad:v}};return nx;});setCustId(null);setCustTxt("");try{logAction("השלמת_מחלקה",sol.name+" ("+id+") → מחלקה "+v,auth?.name||"מערכת");}catch(_e){console.warn("[squad-log]",_e);}}
+  /* v2.3.186: ייבוא רוסטר Excel + השוואה — קריאה (xlsx) + כתיבת חיילים per-id בלבד */
+  const IMP_UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
+  function _impCellText(v){if(v==null)return "";if(typeof v==="object"){if(Array.isArray(v.richText))return v.richText.map(t=>t.text).join("");if(v.text!=null)return String(v.text);if(v.result!=null)return String(v.result);return "";}return String(v);}
+  function _impFindCol(headers,aliases){for(const a of aliases){const k=a.replace(/\s+/g,"");if(headers[k])return headers[k];}for(const a of aliases){const k=a.replace(/\s+/g,"");for(const h in headers){if(h.includes(k)||k.includes(h))return headers[h];}}return null;}
+  function _impMapUnit(raw){const t=String(raw||"").replace(/["'׳״]/g,"").replace(/\s+/g," ").trim();if(!t)return "";if(/^רוב/.test(t)){const last=t.slice(-1);if("אבג".includes(last))return last;}if(/מסייעת|מסיעת/.test(t))return "מסייעת";if(/פלס/.test(t))return "פלסמ";if(/אגמ/.test(t))return "אגמ";if(/מפקד|מפקדה/.test(t))return "גדודי";if(/גדוד/.test(t))return "גדודי";if(IMP_UNITS.includes(t))return t;return "";}
+  function handleImportFile(e){const file=e.target.files&&e.target.files[0];if(!file)return;setImpErr("");setImpBusy(true);setImpRows(null);setImpDone({});setImpUnitSel({});const reader=new FileReader();reader.onload=async ev=>{try{if(typeof _loadExcelJS!=="function"||!(await _loadExcelJS())){setImpErr("ספריית Excel לא נטענה");setImpBusy(false);return;}const wb=new ExcelJS.Workbook();await wb.xlsx.load(ev.target.result);const ws=wb.getWorksheet("כלל הגדוד")||wb.worksheets[0];if(!ws){setImpErr("לא נמצא גיליון בקובץ");setImpBusy(false);return;}const headers={};ws.getRow(1).eachCell((cell,col)=>{const h=_impCellText(cell.value).replace(/\s+/g,"").trim();if(h)headers[h]=col;});const colUnit=_impFindCol(headers,["יחידתרישום","יחידה"]);const colFirst=_impFindCol(headers,["שםפרטי","פרטי"]);const colLast=_impFindCol(headers,["שםמשפחה","משפחה"]);const colId=_impFindCol(headers,["מספראישי","מא","מ.א","מספרסידורי"]);if(!colId){setImpErr("לא זוהתה עמודת 'מספר אישי' בשורת הכותרת");setImpBusy(false);return;}const rows=[];const seen=new Set();ws.eachRow((row,rn)=>{if(rn===1)return;const gc=c=>c?_impCellText(row.getCell(c).value).trim():"";const id=gc(colId).replace(/\D/g,"");if(!id||seen.has(id))return;seen.add(id);const first=gc(colFirst),last=gc(colLast);const name=(first+" "+last).trim();const rawUnit=gc(colUnit);rows.push({id:id,firstName:first,lastName:last,name:name||("מ.א "+id),rawUnit:rawUnit,unit:_impMapUnit(rawUnit)});});if(rows.length===0){setImpErr("לא נמצאו שורות עם מספר אישי בקובץ");setImpBusy(false);return;}setImpRows(rows);setImpBusy(false);}catch(err){console.error("[import-xlsx]",err);setImpErr("שגיאה בקריאת הקובץ: "+((err&&err.message)||err));setImpBusy(false);}};reader.onerror=()=>{setImpErr("שגיאה בטעינת הקובץ");setImpBusy(false);};reader.readAsArrayBuffer(file);e.target.value="";}
+  const impCompare=React.useMemo(()=>{if(!impRows)return null;const sysAll=getSoldiers(db);const sysById=new Map();sysAll.forEach(s=>sysById.set(String(s.id),s));const excelIds=new Set(impRows.map(r=>r.id));const matched=[],newbies=[];impRows.forEach(r=>{const sys=sysById.get(r.id);if(sys)matched.push({...r,sys:sys});else newbies.push(r);});const surplus=getActiveSoldiers(db).filter(s=>!excelIds.has(String(s.id)));const mismatches=matched.filter(m=>m.unit&&m.sys.unit&&m.unit!==m.sys.unit);return {matched:matched,newbies:newbies,surplus:surplus,mismatches:mismatches};},[impRows,db.soldiers,db.customSoldiers,db.deletedSoldiers]);
+  function addNewSoldier(r){const unit=String(impUnitSel[r.id]||r.unit||"").trim();if(!unit){setImpErr("בחר פלוגה לחייל "+r.name+" (פלוגה לא זוהתה)");return;}const id=r.id;if(getSoldiers(db).some(s=>String(s.id)===id)){setImpErr("מ.א "+id+" כבר קיים במערכת");setImpDone(p=>({...p,[id]:"exists"}));return;}const rec={id:id,name:r.name,unit:unit,squad:"",phone:""};fbSet("db/customSoldiers/"+id,rec).catch(e=>console.warn("[fb-err]",e));if(db.deletedSoldiers?.[id])fbSet("db/deletedSoldiers/"+id,null).catch(e=>console.warn("[fb-err]",e));setDb(prev=>{const nx={...prev,customSoldiers:{...(prev.customSoldiers||{}),[id]:rec}};if(prev.deletedSoldiers?.[id]){const d={...prev.deletedSoldiers};delete d[id];nx.deletedSoldiers=d;}return nx;});setImpDone(p=>({...p,[id]:"added"}));try{logAction("ייבוא_הוספת_חייל",r.name+" ("+id+") נוסף — פלוגה "+unit,auth?.name||"מערכת");}catch(_e){console.warn("[imp-add-log]",_e);}}
+  function addAllNew(){((impCompare&&impCompare.newbies)||[]).forEach(r=>{const unit=String(impUnitSel[r.id]||r.unit||"").trim();if(unit&&!impDone[r.id])addNewSoldier(r);});}
+  function markSurplusInactive(sol){const eq=hasEquip(sol.id);const warn=eq?("⚠️ לחייל "+sol.name+" יש ציוד חתום — יש לזכות אותו קודם.\n\nלסמן כלא-פעיל בכל זאת? (הציוד לא יזוכה)"):("לסמן את "+sol.name+" כלא-פעיל?");if(!window.confirm(warn))return;setActive(sol,false);setImpDone(p=>({...p,[sol.id]:"deactivated"}));}
+  function updateMatchUnit(sol,newUnit){const v=String(newUnit||"").trim();if(!v)return;const id=sol.id;if(!window.confirm("לעדכן פלוגה של "+sol.name+" מ-"+(sol.unit||"—")+" ל-"+v+"?"))return;if(db.soldiers?.[id])fbSet("db/soldiers/"+id+"/unit",v).catch(e=>console.warn("[fb-err]",e));if(db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/unit",v).catch(e=>console.warn("[fb-err]",e));if(!db.soldiers?.[id]&&!db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/unit",v).catch(e=>console.warn("[fb-err]",e));setDb(prev=>{const nx={...prev};if(prev.soldiers?.[id])nx.soldiers={...prev.soldiers,[id]:{...prev.soldiers[id],unit:v}};if(prev.customSoldiers?.[id])nx.customSoldiers={...prev.customSoldiers,[id]:{...prev.customSoldiers[id],unit:v}};if(!prev.soldiers?.[id]&&!prev.customSoldiers?.[id])nx.customSoldiers={...(prev.customSoldiers||{}),[id]:{id:id,name:sol.name,unit:v,squad:sol.squad||""}};return nx;});setImpDone(p=>({...p,["u_"+id]:true}));try{logAction("ייבוא_עדכון_פלוגה",sol.name+" ("+id+") פלוגה → "+v,auth?.name||"מערכת");}catch(_e){console.warn("[imp-unit-log]",_e);}}
   return /*#__PURE__*/React.createElement("div",{style:{padding:"4px",maxWidth:680,margin:"0 auto"}},
     /*#__PURE__*/React.createElement("h3",{style:{margin:"0 0 6px",fontSize:"var(--text-lg)",fontWeight:800}},"🧑‍✈️ ניהול חיילים"),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:14}},
-      [["status","🟢 סטטוס"],["nosquad","🏷️ ללא מחלקה"]].map(([v,lbl])=>/*#__PURE__*/React.createElement("button",{key:v,onClick:()=>setView(v),style:{...S.btn(view===v?"blue":"neutral","sm"),flex:1}},lbl))
+      [["status","🟢 סטטוס"],["nosquad","🏷️ ללא מחלקה"],["import","📥 ייבוא רוסטר"]].map(([v,lbl])=>/*#__PURE__*/React.createElement("button",{key:v,onClick:()=>setView(v),style:{...S.btn(view===v?"blue":"neutral","sm"),flex:1}},lbl))
     ),
     view==="status"&&/*#__PURE__*/React.createElement(React.Fragment,null,
     /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:14,lineHeight:1.6}},"חייל לא-פעיל לא מופיע ברשימות/ספירות/חתימות אך נשמר במערכת (לא נמחק). הציוד שלו נשאר משויך — הזיכוי ידני."),
@@ -1580,6 +1596,86 @@ function SoldierManageTab({db,soldiers,auth,setDb}){
             )
           ))
         )
+    ),
+    view==="import"&&/*#__PURE__*/React.createElement(React.Fragment,null,
+      !impRows&&/*#__PURE__*/React.createElement("div",{style:{...S.card}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)",marginBottom:6}},"העלה קובץ רוסטר (Excel)"),
+        /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:10,lineHeight:1.6}},"עמודות בשורה הראשונה: יחידת רישום · שם פרטי · שם משפחה · דרגה · מספר אישי. הגיליון \"כלל הגדוד\" ייקרא אם קיים, אחרת הראשון. ההשוואה מול המערכת (כולל לא-פעילים) — כל פעולה מאושרת בנפרד."),
+        /*#__PURE__*/React.createElement("label",{style:{...S.btn("blue"),display:"inline-block",cursor:impBusy?"default":"pointer",opacity:impBusy?0.6:1}},impBusy?"⏳ קורא…":"📁 בחר קובץ .xlsx",
+          /*#__PURE__*/React.createElement("input",{type:"file",accept:".xlsx",onChange:handleImportFile,disabled:impBusy,style:{display:"none"}})
+        ),
+        impErr&&/*#__PURE__*/React.createElement("div",{style:{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginTop:10}},impErr)
+      ),
+      impRows&&impCompare&&/*#__PURE__*/React.createElement("div",null,
+        /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",marginBottom:12}},
+          /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-sm)",fontWeight:700}},"📊 באקסל: "+impRows.length+" · ✓ תואמים: "+impCompare.matched.length+" · ➕ חדשים: "+impCompare.newbies.length+" · ➖ עודפים: "+impCompare.surplus.length),
+          /*#__PURE__*/React.createElement("label",{style:{...S.btn("neutral","sm"),cursor:"pointer"}},"📁 קובץ אחר",/*#__PURE__*/React.createElement("input",{type:"file",accept:".xlsx",onChange:handleImportFile,style:{display:"none"}}))
+        ),
+        impErr&&/*#__PURE__*/React.createElement("div",{style:{color:"var(--color-danger-fg)",fontSize:"var(--text-sm)",marginBottom:10}},impErr),
+        /*#__PURE__*/React.createElement("div",{style:{marginBottom:16}},
+          /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,gap:8,flexWrap:"wrap"}},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-success-fg)"}},"➕ חדשים — להוספה ("+impCompare.newbies.length+")"),
+            impCompare.newbies.length>0&&/*#__PURE__*/React.createElement("button",{onClick:addAllNew,style:{...S.btn("green","sm")}},"הוסף הכל (מזוהים)")
+          ),
+          impCompare.newbies.length===0
+            ?/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",padding:"4px 0"}},"אין חיילים חדשים")
+            :/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+              impCompare.newbies.map(r=>{const done=impDone[r.id];const picked=impUnitSel[r.id]||r.unit;return/*#__PURE__*/React.createElement("div",{key:r.id,style:{...S.card,marginBottom:0,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
+                /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+                  /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},r.name),
+                  /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},"מ.א "+r.id+" · יחידת רישום: "+(r.rawUnit||"—"))
+                ),
+                done==="added"?/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-success-fg)"}},"✓ נוסף")
+                :done==="exists"?/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)"}},"כבר קיים")
+                :/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}},
+                  r.unit?/*#__PURE__*/React.createElement("span",{style:{fontSize:11,fontWeight:700,color:"var(--color-accent-fg)"}},"→ "+r.unit)
+                    :/*#__PURE__*/React.createElement("select",{value:impUnitSel[r.id]||"",onChange:e=>setImpUnitSel(p=>({...p,[r.id]:e.target.value})),style:{...S.input,marginBottom:0,width:"auto",fontSize:11,padding:"4px 6px",border:"1px solid var(--color-danger-fg)"}},
+                      /*#__PURE__*/React.createElement("option",{value:""},"⚠️ בחר פלוגה"),
+                      IMP_UNITS.map(u=>/*#__PURE__*/React.createElement("option",{key:u,value:u},u))
+                    ),
+                  /*#__PURE__*/React.createElement("button",{onClick:()=>addNewSoldier(r),disabled:!picked,style:{...S.btn("green","sm"),opacity:picked?1:0.5}},"הוסף")
+                )
+              );})
+            )
+        ),
+        /*#__PURE__*/React.createElement("div",{style:{marginBottom:16}},
+          /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,gap:8,flexWrap:"wrap"}},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)",color:"var(--color-warning-fg)"}},"➖ עודפים — במערכת ולא באקסל ("+impCompare.surplus.length+")"),
+            impCompare.surplus.length>0&&/*#__PURE__*/React.createElement("button",{onClick:()=>{if(!window.confirm("לסמן את כל "+impCompare.surplus.length+" העודפים כלא-פעילים? (מי שיש לו ציוד יידרש אישור נפרד)"))return;impCompare.surplus.forEach(s=>{if(impDone[s.id])return;if(hasEquip(s.id))return;setActive(s,false);setImpDone(p=>({...p,[s.id]:"deactivated"}));});},style:{...S.btn("orange","sm")}},"סמן הכל (ללא ציוד)")
+          ),
+          /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginBottom:6}},"עודף = מסומן לא-פעיל, לא נמחק. הזיכוי נשאר ידני."),
+          impCompare.surplus.length===0
+            ?/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-sm)",color:"var(--color-text-muted)",padding:"4px 0"}},"אין עודפים")
+            :/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+              impCompare.surplus.map(s=>{const done=impDone[s.id];const eq=hasEquip(s.id);return/*#__PURE__*/React.createElement("div",{key:s.id,style:{...S.card,marginBottom:0,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
+                /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+                  /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},s.name,eq?/*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:"var(--color-danger-fg)",borderRadius:10,padding:"2px 8px",marginRight:8,whiteSpace:"nowrap"}},"⚠️ ציוד חתום"):null),
+                  /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},"פלוגה "+(s.unit||"—")+(s.squad?" · מחלקה "+s.squad:"")+" · מ.א "+(s.id||"—"))
+                ),
+                done==="deactivated"?/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-warning-fg)"}},"✓ סומן לא-פעיל")
+                :/*#__PURE__*/React.createElement("button",{onClick:()=>markSurplusInactive(s),style:{...S.btn("orange","sm"),whiteSpace:"nowrap"}},"סמן לא-פעיל")
+              );})
+            )
+        ),
+        /*#__PURE__*/React.createElement("div",null,
+          /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)",marginBottom:6}},"✓ תואמים ("+impCompare.matched.length+")"),
+          impCompare.mismatches.length===0
+            ?/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-sm)",color:"var(--color-text-muted)"}},"אין אי-התאמות פלוגה")
+            :/*#__PURE__*/React.createElement("div",null,
+              /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-warning-fg)",marginBottom:6}},"⚠️ אי-התאמת פלוגה ("+impCompare.mismatches.length+") — לאישור ידני:"),
+              /*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+                impCompare.mismatches.map(m=>{const done=impDone["u_"+m.id];return/*#__PURE__*/React.createElement("div",{key:m.id,style:{...S.card,marginBottom:0,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
+                  /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+                    /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},m.name||m.sys.name),
+                    /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},"מ.א "+m.id+" · במערכת: "+(m.sys.unit||"—")+" · באקסל: "+m.unit)
+                  ),
+                  done?/*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-sm)",fontWeight:700,color:"var(--color-success-fg)"}},"✓ עודכן")
+                  :/*#__PURE__*/React.createElement("button",{onClick:()=>updateMatchUnit(m.sys,m.unit),style:{...S.btn("orange","sm"),whiteSpace:"nowrap"}},"עדכן ל-"+m.unit)
+                );})
+              )
+            )
+        )
+      )
     )
   );
 }
