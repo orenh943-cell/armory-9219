@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.184";
+const APP_VERSION = "2.3.185";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1476,6 +1476,9 @@ function LabelExportTab({db,soldiers,auth}){
 /* v2.3.184: מודול ניהול חיילים — שלב 1: סטטוס פעיל/לא-פעיל. גישה B — קורא getSoldiers המלא (כדי להציג גם לא-פעילים), כתיבה per-id בלבד. אפס נגיעה בהחתמה/assignments/ציוד — הזיכוי ידני. */
 function SoldierManageTab({db,soldiers,auth,setDb}){
   const [query,setQuery]=React.useState("");
+  const [view,setView]=React.useState("status");
+  const [custId,setCustId]=React.useState(null);/* v2.3.185: חייל במצב "הקלד מחלקה חדשה" */
+  const [custTxt,setCustTxt]=React.useState("");
   const allFull=React.useMemo(()=>getSoldiers(db),[db.soldiers,db.customSoldiers,db.deletedSoldiers]);
   const inactive=React.useMemo(()=>allFull.filter(s=>s.active===false).slice().sort((a,b)=>String(a.unit||"").localeCompare(String(b.unit||""),"he")||String(a.name||"").localeCompare(String(b.name||""),"he")),[allFull]);
   const suggestions=React.useMemo(()=>{const q=query.trim();if(q.length<2)return[];return allFull.filter(s=>s.active!==false&&(String(s.id||"").startsWith(q)||String(s.name||"").includes(q))).slice(0,8);},[query,allFull]);
@@ -1502,8 +1505,18 @@ function SoldierManageTab({db,soldiers,auth,setDb}){
     if(!window.confirm(warn))return;
     setActive(sol,false);setQuery("");
   }
+  /* v2.3.185: מחלקות קיימות בפלוגה — הדפוס מ-LabelExportTab (~1363). מסנן ריק/"—". */
+  function squadsForUnit(unit){return [...new Set(allFull.filter(s=>s.unit===unit).map(s=>s.squad).filter(sq=>sq&&String(sq).trim()&&sq!=="—"))].sort((a,b)=>String(a).localeCompare(String(b),"he"));}
+  /* חיילים פעילים עם פלוגה אך ללא מחלקה (ריק/null/"—") */
+  const noSquad=React.useMemo(()=>getActiveSoldiers(db).filter(s=>s.unit&&String(s.unit).trim()&&(!s.squad||s.squad==="—"||!String(s.squad).trim())),[db.soldiers,db.customSoldiers,db.deletedSoldiers]);
+  const noSquadGroups=React.useMemo(()=>{const by={};noSquad.forEach(s=>{const u=s.unit;(by[u]=by[u]||[]).push(s);});const ord=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];const keys=ord.filter(u=>by[u]).concat(Object.keys(by).filter(u=>!ord.includes(u)).sort((a,b)=>String(a).localeCompare(String(b),"he")));return keys.map(u=>[u,by[u].slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))]);},[noSquad]);
+  function setSquad(sol,val){const v=String(val||"").trim();if(!v)return;const id=sol.id;/* כתיבה per-id בלבד — לא bulk */if(db.soldiers?.[id])fbSet("db/soldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));if(db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));if(!db.soldiers?.[id]&&!db.customSoldiers?.[id])fbSet("db/customSoldiers/"+id+"/squad",v).catch(e=>console.warn("[fb-err]",e));setDb(prev=>{const nx={...prev};if(prev.soldiers?.[id])nx.soldiers={...prev.soldiers,[id]:{...prev.soldiers[id],squad:v}};if(prev.customSoldiers?.[id])nx.customSoldiers={...prev.customSoldiers,[id]:{...prev.customSoldiers[id],squad:v}};if(!prev.soldiers?.[id]&&!prev.customSoldiers?.[id])nx.customSoldiers={...(prev.customSoldiers||{}),[id]:{id:id,name:sol.name,unit:sol.unit,squad:v}};return nx;});setCustId(null);setCustTxt("");try{logAction("השלמת_מחלקה",sol.name+" ("+id+") → מחלקה "+v,auth?.name||"מערכת");}catch(_e){console.warn("[squad-log]",_e);}}
   return /*#__PURE__*/React.createElement("div",{style:{padding:"4px",maxWidth:680,margin:"0 auto"}},
-    /*#__PURE__*/React.createElement("h3",{style:{margin:"0 0 6px",fontSize:"var(--text-lg)",fontWeight:800}},"🧑‍✈️ ניהול חיילים — סטטוס פעיל/לא-פעיל"),
+    /*#__PURE__*/React.createElement("h3",{style:{margin:"0 0 6px",fontSize:"var(--text-lg)",fontWeight:800}},"🧑‍✈️ ניהול חיילים"),
+    /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:14}},
+      [["status","🟢 סטטוס"],["nosquad","🏷️ ללא מחלקה"]].map(([v,lbl])=>/*#__PURE__*/React.createElement("button",{key:v,onClick:()=>setView(v),style:{...S.btn(view===v?"blue":"neutral","sm"),flex:1}},lbl))
+    ),
+    view==="status"&&/*#__PURE__*/React.createElement(React.Fragment,null,
     /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:14,lineHeight:1.6}},"חייל לא-פעיל לא מופיע ברשימות/ספירות/חתימות אך נשמר במערכת (לא נמחק). הציוד שלו נשאר משויך — הזיכוי ידני."),
     /*#__PURE__*/React.createElement("div",{style:{...S.card,marginBottom:14}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)",marginBottom:8}},"סמן חייל כלא-פעיל"),
@@ -1534,7 +1547,40 @@ function SoldierManageTab({db,soldiers,auth,setDb}){
           ),
           /*#__PURE__*/React.createElement("button",{onClick:()=>setActive(s,true),style:{...S.btn("green","sm"),whiteSpace:"nowrap"}},"↩️ החזר לפעיל")
         );})
-      )
+      )),
+    view==="nosquad"&&/*#__PURE__*/React.createElement(React.Fragment,null,
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-base)"}},"חיילים ללא מחלקה"),
+        /*#__PURE__*/React.createElement("span",{style:{fontSize:"var(--text-sm)",fontWeight:700,color:noSquad.length>0?"var(--color-warning-fg)":"var(--color-success-fg)"}},noSquad.length>0?(noSquad.length+" ללא מחלקה"):"כולם משויכים")
+      ),
+      /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:12,lineHeight:1.6}},"רק חיילים פעילים עם פלוגה אך ללא מחלקה. ה-dropdown מציג את מחלקות הפלוגה של החייל בלבד. אחרי בחירה — החייל יוסר מהרשימה."),
+      noSquad.length===0
+        ?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:20,color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8,fontSize:"var(--text-sm)"}},"כל החיילים הפעילים משויכים למחלקה 🎉")
+        :/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14}},
+          noSquadGroups.map(([u,list])=>/*#__PURE__*/React.createElement("div",{key:u},
+            /*#__PURE__*/React.createElement("div",{style:{fontWeight:800,fontSize:"var(--text-base)",marginBottom:6,paddingBottom:4,borderBottom:"1px solid var(--color-border-muted)"}},"פלוגה "+u+" ("+list.length+")"),
+            /*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+              list.map(s=>/*#__PURE__*/React.createElement("div",{key:s.id,style:{...S.card,marginBottom:0,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
+                /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:150}},
+                  /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)"}},s.name),
+                  /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginTop:2}},"מ.א "+(s.id||"—"))
+                ),
+                custId===s.id
+                  ?/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}},
+                    /*#__PURE__*/React.createElement("input",{autoFocus:true,value:custTxt,onChange:e=>setCustTxt(e.target.value),placeholder:"שם מחלקה…",style:{...S.input,marginBottom:0,width:120,padding:"5px 8px"}}),
+                    /*#__PURE__*/React.createElement("button",{onClick:()=>setSquad(s,custTxt),disabled:!custTxt.trim(),style:{...S.btn("green","sm"),opacity:custTxt.trim()?1:0.5}},"שמור"),
+                    /*#__PURE__*/React.createElement("button",{onClick:()=>{setCustId(null);setCustTxt("");},style:{...S.btn("neutral","sm")}},"✕")
+                  )
+                  :/*#__PURE__*/React.createElement("select",{value:"",onChange:e=>{const val=e.target.value;if(val==="__new__"){setCustId(s.id);setCustTxt("");}else if(val){setSquad(s,val);}},style:{...S.input,marginBottom:0,width:"auto",minWidth:150}},
+                    /*#__PURE__*/React.createElement("option",{value:""},"בחר מחלקה…"),
+                    squadsForUnit(s.unit).map(sq=>/*#__PURE__*/React.createElement("option",{key:sq,value:sq},sq)),
+                    /*#__PURE__*/React.createElement("option",{value:"__new__"},"➕ מחלקה חדשה…")
+                  )
+              ))
+            )
+          ))
+        )
+    )
   );
 }
 
