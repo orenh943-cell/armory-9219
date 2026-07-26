@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.186";
+const APP_VERSION = "2.3.187";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3893,6 +3893,7 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
   const [manualUnit,setManualUnit]=React.useState("");
   const [busy,setBusy]=React.useState(false);
   const [filter,setFilter]=React.useState("all");
+  const [wsQuery,setWsQuery]=React.useState("");/* v2.3.187: חיפוש חכם בלוח */
   /* v2.3.174: מצב ב' — פריט כמותי (ללא צ') */
   const [mode,setMode]=React.useState("serial");
   const WS_UNITS=["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"];
@@ -3985,8 +3986,11 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     let arr=Object.values(rows||{});
     if(filter==="out")arr=arr.filter(r=>!r.returned);
     else if(filter==="returned")arr=arr.filter(r=>r.returned);
+    /* v2.3.187: חיפוש חכם — צ'/שם פריט/חייל/מק"ט, includes case-insensitive, בנוסף לפילטר הסטטוס */
+    const q=wsQuery.trim().toLowerCase();
+    if(q)arr=arr.filter(r=>[r.serial,r.itemName,r.soldierName,r.makat].some(v=>String(v||"").toLowerCase().includes(q)));
     return arr.sort((a,b)=>{if(!!a.returned!==!!b.returned)return a.returned?1:-1;return String(b.id||"").localeCompare(String(a.id||""));});
-  },[rows,filter]);
+  },[rows,filter,wsQuery]);
   const outCount=Object.values(rows||{}).filter(r=>!r.returned).length;
   async function exportExcel(){
     if(typeof _loadExcelJS!=="function"||!(await _loadExcelJS())){alert("ספריית Excel לא נטענה");return;}
@@ -4070,6 +4074,10 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},
       [["all","הכל"],["out","בסדנא"],["returned","חזרו"]].map(o=>/*#__PURE__*/React.createElement("button",{key:o[0],onClick:()=>setFilter(o[0]),style:{padding:"6px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:"var(--text-base)",fontWeight:600,borderColor:filter===o[0]?"var(--color-accent-fg)":"var(--color-border-default)",background:filter===o[0]?"var(--color-accent-bg)":"transparent",color:filter===o[0]?"var(--color-accent-fg)":"var(--color-text-secondary)"}},o[1]))
+    ),
+    /*#__PURE__*/React.createElement("div",{style:{marginBottom:12}},
+      /*#__PURE__*/React.createElement("input",{value:wsQuery,onChange:e=>setWsQuery(e.target.value),placeholder:"🔍 חפש לפי צ' / שם פריט / חייל / מק\"ט…",style:{...S.input,marginBottom:0,width:"100%"}}),
+      wsQuery.trim()&&/*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginTop:4}},"מציג "+list.length+" תוצאות")
     ),
     list.length===0
       ? /*#__PURE__*/React.createElement("div",{style:{...S.card,textAlign:"center",padding:24,color:"var(--color-text-muted)"}},"אין פריטים בלוח הסדנא")
