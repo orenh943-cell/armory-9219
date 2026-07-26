@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.182";
+const APP_VERSION = "2.3.183";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1353,26 +1353,37 @@ function LabelExportTab({db,soldiers,auth}){
   const [unit,setUnit]=React.useState("א");
   const [squad,setSquad]=React.useState("");
   const [busy,setBusy]=React.useState(false);
+  /* v2.3.183: רשימת חיילים מרובים + פילטר סוג ציוד — קריאה בלבד */
+  const [roster,setRoster]=React.useState([]);
+  const [equipFilter,setEquipFilter]=React.useState("all");
+  const _searchRef=React.useRef(null);
   /* תיבת חיפוש משולבת — שם או מ.א (mirror של AddSoldierModal) */
   const suggestions=React.useMemo(()=>{const q=query.trim();if(q.length<2)return[];return allSols.filter(s=>String(s.id||"").startsWith(q)||String(s.name||"").includes(q)).slice(0,8);},[query,allSols]);
   /* מחלקות נגזרות דינמית מהפלוגה הנבחרת */
   const squadsForUnit=React.useMemo(()=>[...new Set(allSols.filter(s=>s.unit===unit).map(s=>s.squad).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),"he")),[allSols,unit]);
   React.useEffect(()=>{if(squad&&!squadsForUnit.includes(squad))setSquad("");},[squadsForUnit]);// eslint-disable-line
   function pickSoldier(s){setPicked(s);setQuery(s.name+" · "+s.id);const c={};Object.keys(db.assignments?.[s.id]||{}).forEach(k=>{if(!EXCLUDED_LABEL_ITEMS.has(cleanItemName(k)))c[k]=true;});setChecked(c);}
+  /* v2.3.183: מיחזור החיפוש החכם — הוספה לרשימה מצטברת (בדיקת כפילות לפי id), ניקוי החיפוש והחזרת פוקוס */
+  function addToRoster(s){setRoster(r=>r.some(x=>String(x.id)===String(s.id))?r:[...r,s]);setQuery("");setPicked(null);setTimeout(()=>{try{_searchRef.current&&_searchRef.current.focus();}catch(_e){}},0);}
+  function removeFromRoster(id){setRoster(r=>r.filter(x=>String(x.id)!==String(id)));}
   /* פריטי החייל הנבחר שאינם מוחרגים — להצגה בבחירה הכחולה */
   const pickedItems=React.useMemo(()=>picked?Object.entries(db.assignments?.[picked.id]||{}).filter(([k])=>!EXCLUDED_LABEL_ITEMS.has(cleanItemName(k))):[],[picked,db.assignments]);
   /* שורות סופיות דרך הפונקציה המשותפת (כולל סינון מוחרגים + נרמול טלפון + מיון unit→squad→name→type) */
   const rows=React.useMemo(()=>{
-    let targets=[];
-    if(mode==="soldier")targets=picked?[picked]:[];
-    else if(mode==="squad")targets=squad?allSols.filter(s=>s.unit===unit&&s.squad===squad):[];
-    else targets=allSols.filter(s=>s.unit===unit);
-    return _buildLabelRows(db,targets,{mode,checked});
-  },[mode,picked,checked,unit,squad,allSols,db]);
+    let targets=[],opts;
+    if(mode==="soldier"){targets=picked?[picked]:[];opts={mode:"soldier",checked};}
+    else if(mode==="roster"){targets=roster;opts={mode:"soldier"};}/* ללא checked → כל הפריטים הלא-מוחרגים */
+    else if(mode==="squad"){targets=squad?allSols.filter(s=>s.unit===unit&&s.squad===squad):[];opts={mode:"squad"};}
+    else {targets=allSols.filter(s=>s.unit===unit);opts={mode:"unit"};}
+    const built=_buildLabelRows(db,targets,opts);
+    if(equipFilter==="weapon")return built.filter(r=>WEAPON_KEYS.includes(r.type));
+    if(equipFilter==="other")return built.filter(r=>!WEAPON_KEYS.includes(r.type));
+    return built;
+  },[mode,picked,checked,unit,squad,roster,equipFilter,allSols,db]);
   async function doExport(){
     if(busy)return;
     setBusy(true);
-    try{const label=mode==="soldier"?(picked?picked.name:"חייל"):mode==="squad"?(unit+"_"+squad):("פלוגה_"+unit);await _exportLabelsXlsx(rows,label);}
+    try{const label=mode==="soldier"?(picked?picked.name:"חייל"):mode==="roster"?("רשימה_"+roster.length):mode==="squad"?(unit+"_"+squad):("פלוגה_"+unit);await _exportLabelsXlsx(rows,label);}
     catch(e){console.error("[label-export]",e);alert("שגיאה בייצוא מדבקות: "+(e?.message||e));}
     finally{setBusy(false);}
   }
@@ -1380,7 +1391,7 @@ function LabelExportTab({db,soldiers,auth}){
     /*#__PURE__*/React.createElement("h3",{style:{margin:"0 0 6px",fontSize:"var(--text-lg)",fontWeight:800}},"🏷️ ייצוא מדבקות NIIMBOT"),
     /*#__PURE__*/React.createElement("p",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:12,lineHeight:1.6}},"כל שורה = מדבקה אחת לפריט (מא · שם · פלוגה · מחלקה · פלאפון · פריט). אביזרי kit (מתפסים / כוונות גיבוי / דורגל / חסם) מוחרגים אוטומטית."),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6,marginBottom:14}},
-      [["soldier","👤 חייל בודד"],["squad","🪖 מחלקה"],["unit","🏢 פלוגה"]].map(([m,lbl])=>/*#__PURE__*/React.createElement("button",{key:m,onClick:()=>setMode(m),style:{...S.btn(mode===m?"blue":"neutral","sm"),flex:1}},lbl))
+      [["soldier","👤 חייל בודד"],["roster","📋 רשימה"],["squad","🪖 מחלקה"],["unit","🏢 פלוגה"]].map(([m,lbl])=>/*#__PURE__*/React.createElement("button",{key:m,onClick:()=>setMode(m),style:{...S.btn(mode===m?"blue":"neutral","sm"),flex:1}},lbl))
     ),
     mode==="soldier"&&/*#__PURE__*/React.createElement("div",{style:{marginBottom:12}},
       /*#__PURE__*/React.createElement("input",{value:query,onChange:e=>{setQuery(e.target.value);setPicked(null);},placeholder:"חפש לפי שם או מספר אישי…",style:{...S.input,marginBottom:0}}),
@@ -1409,6 +1420,30 @@ function LabelExportTab({db,soldiers,auth}){
         })()
       )
     ),
+    mode==="roster"&&/*#__PURE__*/React.createElement("div",{style:{marginBottom:12}},
+      /*#__PURE__*/React.createElement("input",{ref:_searchRef,value:query,onChange:e=>{setQuery(e.target.value);},placeholder:"חפש חייל להוספה — שם או מספר אישי…",style:{...S.input,marginBottom:0}}),
+      query.trim().length>=2&&suggestions.length>0&&/*#__PURE__*/React.createElement("div",{style:{border:"1px solid var(--color-border-muted)",borderRadius:8,marginTop:4,overflow:"hidden"}},
+        suggestions.map(s=>/*#__PURE__*/React.createElement("div",{key:s.id,onClick:()=>addToRoster(s),style:{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--color-border-muted)",fontSize:"var(--text-sm)"}},
+          /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}},s.name),
+          /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-text-secondary)",fontSize:"var(--text-xs)",marginRight:6}},"· "+(s.id||"—")+" · פלוגה "+(s.unit||"—")+(s.squad?" · מחלקה "+s.squad:"")),
+          /*#__PURE__*/React.createElement("span",{style:{float:"left",color:"var(--color-success-fg)",fontWeight:700,fontSize:"var(--text-xs)"}},"➕ הוסף")
+        ))
+      ),
+      /*#__PURE__*/React.createElement("div",{style:{marginTop:10}},
+        roster.length===0
+          ?/*#__PURE__*/React.createElement("div",{style:{padding:14,textAlign:"center",color:"var(--color-text-muted)",border:"1px dashed var(--color-border-muted)",borderRadius:8,fontSize:"var(--text-sm)"}},"הרשימה ריקה — חפש חייל ולחץ ➕ הוסף")
+          :/*#__PURE__*/React.createElement("div",null,
+            /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-secondary)",marginBottom:6}},"📋 "+roster.length+" חיילים ברשימה"),
+            /*#__PURE__*/React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+              roster.map(s=>/*#__PURE__*/React.createElement("span",{key:s.id,style:{display:"inline-flex",alignItems:"center",gap:6,background:"var(--color-bg-canvas)",border:"1px solid var(--color-border-muted)",borderRadius:16,padding:"4px 6px 4px 12px",fontSize:"var(--text-xs)"}},
+                /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}},s.name),
+                /*#__PURE__*/React.createElement("span",{style:{color:"var(--color-text-secondary)"}},"· "+(s.id||"—")+" · "+(s.unit||"—")+(s.squad?" · "+s.squad:"")),
+                /*#__PURE__*/React.createElement("button",{onClick:()=>removeFromRoster(s.id),title:"הסר מהרשימה",style:{border:"1px solid var(--color-border-muted)",background:"transparent",color:"var(--color-danger-fg)",borderRadius:"50%",width:18,height:18,cursor:"pointer",fontSize:11,lineHeight:"14px",padding:0}},"✕")
+              ))
+            )
+          )
+      )
+    ),
     (mode==="squad"||mode==="unit")&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},
       /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:120}},
         /*#__PURE__*/React.createElement("label",{style:{...S.label,fontWeight:700}},"פלוגה"),
@@ -1420,6 +1455,12 @@ function LabelExportTab({db,soldiers,auth}){
           /*#__PURE__*/React.createElement("option",{value:""},"בחר מחלקה…"),
           squadsForUnit.map(sq=>/*#__PURE__*/React.createElement("option",{key:sq,value:sq},sq))
         )
+      )
+    ),
+    /*#__PURE__*/React.createElement("div",{style:{marginTop:8}},
+      /*#__PURE__*/React.createElement("label",{style:{...S.label,fontWeight:700}},"סוג ציוד"),
+      /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:6}},
+        [["all","הכל"],["weapon","רק נשק"],["other","אחר מנשק"]].map(([f,lbl])=>/*#__PURE__*/React.createElement("button",{key:f,onClick:()=>setEquipFilter(f),style:{...S.btn(equipFilter===f?"blue":"neutral","sm"),flex:1}},lbl))
       )
     ),
     /*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,paddingTop:12,borderTop:"1px solid var(--color-border-muted)"}},
