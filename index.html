@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.188";
+const APP_VERSION = "2.3.189";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1344,6 +1344,24 @@ async function _exportLabelsXlsx(rows,labelName){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),3000);
   return true;
+}
+/* v2.3.189: בניית שורות מדבקה לפריטי ארון — item-centric. משלים את _buildLabelRows ה-soldier-centric בלי לגעת בו (הוא בונה מרשימת חיילים; כאן בונים מרשימת פריטי הארון). פריט אצל חייל → מדבקה רגילה (שם חייל+פרטיו); פריט לא-משויך → "לא מוקצה" + פלוגת הפריט. כולל פריטי סדנא (הם כבר ב-items). אותו פורמט שורה של _buildLabelRows → מוזן ל-_exportLabelsXlsx. קריאה בלבד, אפס כתיבה. */
+function _buildCabinetLabelRows(db,items){
+  const out=[];
+  const solMap={};(getSoldiers(db)||[]).forEach(s=>{if(s&&s.id!=null)solMap[String(s.id)]=s;});
+  (items||[]).forEach(it=>{
+    const type=cleanItemName(it.name||"");
+    if(!type||EXCLUDED_LABEL_ITEMS.has(type))return;
+    const serial=(it.serial!=null&&it.serial!==1&&isSerial(it.serial))?String(it.serial):"";
+    const sol=(it.source==="soldier"&&it.soldierId!=null)?solMap[String(it.soldierId)]:null;
+    if(sol){
+      out.push({_name:sol.name||"",id:String(sol.id||""),name:sol.name||"",unit:sol.unit||it.unit||"",squad:sol.squad||"",phone:String(sol.phone||"").replace(/-/g,""),type,serial});
+    }else{
+      out.push({_name:"לא מוקצה",id:"",name:"לא מוקצה",unit:it.unit||"",squad:"",phone:"",type,serial});
+    }
+  });
+  const _c=(a,b)=>String(a).localeCompare(String(b),"he");
+  return out.sort((a,b)=>_c(a.unit,b.unit)||_c(a._name,b._name)||_c(a.type,b.type));
 }
 /* v2.3.92: ייצוא מדבקות NIIMBOT B21S — קריאה בלבד. 3 מצבים. בחירה כחולה (לא checkboxes). משתמש בפונקציות המשותפות _buildLabelRows/_exportLabelsXlsx (גם הכפתור בפרופיל החייל). */
 function LabelExportTab({db,soldiers,auth}){
@@ -5750,7 +5768,7 @@ Object.entries(db.unitItems||{}).forEach(([uid,v])=>{if(v.cabName===cabName){fbS
                     <tbody>${rows}</tbody></table>
                     <p class="sum">סה"כ פריטים בארון: ${total} · מס' סוגים: ${sortedGroups.length}</p>${(()=>{const _w=items.filter(it=>it.serial&&_wsIdxCab.serialSet.has(String(it.serial)));if(!_w.length)return "";const _wr=_w.map(it=>"<tr><td>"+(it.name||"")+"</td><td>"+(it.serial||"")+"</td><td>"+(it.soldierName||"")+"</td></tr>").join("");return "<h3 style='margin-top:16px;color:#b26a00'>🛠️ בסדנא (לא נספר) — "+_w.length+"</h3><table><thead><tr><th>פריט</th><th>צ'</th><th>מחזיק</th></tr></thead><tbody>"+_wr+"</tbody></table>";})()}
                     <button onclick="window.print()" style="margin-top:12px;padding:8px 20px">🖨️ הדפס</button>
-                    </body></html>`);win.document.close();},style:{...S.btn(""),padding:"3px 8px",fontSize:11},title:"\u05D4\u05D3\u05E4\u05E1\u05D4 \u05DE\u05E4\u05D5\u05E8\u05D8\u05EA \u2014 \u05E4\u05D9\u05E8\u05D5\u05D8 \u05DE\u05DC\u05D0 \u05DC\u05E4\u05D9 \u05E4\u05E8\u05D9\u05D8 + \u05E1\u05D9\u05DB\u05D5\u05DD \u05E4\u05E8-\u05E1\u05D5\u05D2"},"\uD83D\uDDA8\uFE0F"),/*#__PURE__*/React.createElement("button",{onClick:()=>{const win=window.open("","_blank");/* v2.3.158: \u05D4\u05D3\u05E4\u05E1\u05D4 \u05DE\u05E8\u05D5\u05DB\u05D6\u05EA \u2014 \u05DE\u05E7"\u05D8/\u05E9\u05DD/\u05DB\u05DE\u05D5\u05EA, \u05E9\u05D5\u05E8\u05D4 \u05D0\u05D7\u05EA \u05DC\u05DB\u05DC \u05E1\u05D5\u05D2 (groups), \u05D1\u05DC\u05D9 \u05E6'/\u05E1\u05D9\u05D3\u05D5\u05E8\u05D9 */const sortedGroups=Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,"he"));const rows=sortedGroups.map(grp=>{const mk=getMakat(grp.name,db)||"";return `<tr><td>${mk||"\u2014"}</td><td>${grp.name}</td><td>${grp.items.length}</td></tr>`;}).join("");win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${cabName}</title>
+                    </body></html>`);win.document.close();},style:{...S.btn(""),padding:"3px 8px",fontSize:11},title:"\u05D4\u05D3\u05E4\u05E1\u05D4 \u05DE\u05E4\u05D5\u05E8\u05D8\u05EA \u2014 \u05E4\u05D9\u05E8\u05D5\u05D8 \u05DE\u05DC\u05D0 \u05DC\u05E4\u05D9 \u05E4\u05E8\u05D9\u05D8 + \u05E1\u05D9\u05DB\u05D5\u05DD \u05E4\u05E8-\u05E1\u05D5\u05D2"},"\uD83D\uDDA8\uFE0F"),/*#__PURE__*/React.createElement("button",{onClick:()=>{try{_exportLabelsXlsx(_buildCabinetLabelRows(db,items),"\u05D0\u05E8\u05D5\u05DF_"+cabName);}catch(_e){console.error("[cab-labels]",_e);alert("\u05E9\u05D2\u05D9\u05D0\u05D4 \u05D1\u05D9\u05D9\u05E6\u05D5\u05D0 \u05DE\u05D3\u05D1\u05E7\u05D5\u05EA");}},style:{...S.btn(""),padding:"3px 8px",fontSize:11},title:"\u05D9\u05D9\u05E6\u05D5\u05D0 \u05DE\u05D3\u05D1\u05E7\u05D5\u05EA NIIMBOT \u05DC\u05DB\u05DC \u05E4\u05E8\u05D9\u05D8\u05D9 \u05D4\u05D0\u05E8\u05D5\u05DF \u2014 \u05DE\u05E9\u05D5\u05D9\u05DB\u05D9\u05DD + \u05DC\u05D0 \u05DE\u05D5\u05E7\u05E6\u05D9\u05DD + \u05E1\u05D3\u05E0\u05D0"},"\uD83C\uDFF7\uFE0F"),/*#__PURE__*/React.createElement("button",{onClick:()=>{const win=window.open("","_blank");/* v2.3.158: \u05D4\u05D3\u05E4\u05E1\u05D4 \u05DE\u05E8\u05D5\u05DB\u05D6\u05EA \u2014 \u05DE\u05E7"\u05D8/\u05E9\u05DD/\u05DB\u05DE\u05D5\u05EA, \u05E9\u05D5\u05E8\u05D4 \u05D0\u05D7\u05EA \u05DC\u05DB\u05DC \u05E1\u05D5\u05D2 (groups), \u05D1\u05DC\u05D9 \u05E6'/\u05E1\u05D9\u05D3\u05D5\u05E8\u05D9 */const sortedGroups=Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,"he"));const rows=sortedGroups.map(grp=>{const mk=getMakat(grp.name,db)||"";return `<tr><td>${mk||"\u2014"}</td><td>${grp.name}</td><td>${grp.items.length}</td></tr>`;}).join("");win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${cabName}</title>
                     <style>body{font-family:Arial;direction:rtl;padding:20px}table{width:100%;border-collapse:collapse}
                     th,td{border:1px solid #ccc;padding:6px 10px;text-align:right}th{background:#1a1a2e;color:#fff}
                     .sum{margin-top:10px;font-weight:700;font-size:14px}
