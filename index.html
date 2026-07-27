@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.197";
+const APP_VERSION = "2.3.198";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -3968,7 +3968,7 @@ function WorkshopBoard({db,setDb,soldiers,auth}){
     let soldierName="—",unit="—";
     if(qHolderType==="soldier"){if(!qSoldierId){alert("בחר חייל");return;}const sol=getSoldiers(db).find(s=>s.id===qSoldierId);soldierName=sol?.name||"—";unit=sol?.unit||"—";}
     else if(qHolderType==="unit"){soldierName="—";unit=qUnit;}
-    else{soldierName="בארמון";unit="בארמון";}
+    else{soldierName="בארמון";unit="גדודי";/* v2.3.198: מחזיק "ארמון" → unit="גדודי" (היה "בארמון" ש-buildWorkshopIndex מנטרל מהאינדקסים הפר-פלוגתיים → לא נספר/נראה בפר-פלוגה). מחזיק "חייל"→sol.unit, "פלוגה"→qUnit נשמרים נכון כבר. */}
     setBusy(true);
     const id="ws_"+Date.now()+"_"+Math.random().toString(36).slice(2,6);
     const rec={id,serial:"",itemName:cleanItemName(nm),makat:getMakat(nm,db)||"",soldierName,unit,qty,hasSerial:false,holderType:qHolderType,soldierId:(qHolderType==="soldier"?qSoldierId:""),returnedQty:0,sentAt:todayStr()+" "+nowStr(),sentBy:auth?.name||"—",status:"בסדנא",returned:false,returnedAt:"",foundInSystem:true};
