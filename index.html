@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.198";
+const APP_VERSION = "2.3.199";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -5734,7 +5734,7 @@ const key=srl||"ui_"+uid;if(seen.has(key))return;seen.add(key);items.push({id:"u
 getSoldiers(db).forEach(sol=>{const sUnit=sol.unit||"";const isOwnUnit=(sUnit===selUnit);/* v2.3.49: include all soldiers; filter by ownership OR cabinet location below */const sig=db.signatures?.[sol.id];// אם חתום מלא (לא partial) — דלג, הפריטים יצאו מהארמון
 if(_isSoldierFullySigned(db,sol))return;// אם חתום חלקית — קבל רשימת הפריטים שכן נחתמו (וחסר אותם)
 const signedItems=Array.isArray(sig?.items)?new Set(sig.items):null;const meta=(db.assignmentMeta||{})[sol.id]||{};Object.entries(db.assignments?.[sol.id]||{}).forEach(([name,val])=>{const n=cleanItemName(name);// אם חתום חלקית והפריט הזה נחתם — דלג (יצא מהארמון)
-if(signedItems&&signedItems.has(name))return;const srl=val&&val!==1?String(val):null;const key=srl||"sol_"+sol.id+"_"+n;if(seen.has(key))return;const metaVal=meta[name]||meta[n]||Object.entries(meta).find(([k])=>cleanItemName(k)===n)?.[1];const cabName=metaVal?.cabName||metaVal?.lastCabName||"";/* v2.3.50: physical location wins over ownership; v2.3.163: fallback ל-lastCabName */const cabTrim=String(cabName).trim();if(cabTrim){if(cabToUnit[cabTrim]!==selUnit)return;}else{if(!isOwnUnit)return;}// סנן אביזרי חבילה רק אם אין להם מיקום ידני
+if(signedItems&&signedItems.has(name))return;const srl=val&&val!==1?String(val):null;const key=srl||"sol_"+sol.id+"_"+name;/* v2.3.199: מפתח גולמי (name עם __N) לפריט ללא-צ' — חייל עם N יחידות מאותו סוג ייספר N ולא יאוחד ל-1 (תיקון "כנה ב" 49→51). פריט עם צ' (srl) לא מושפע — המפתח נשאר הצ', כך שאותה יחידה לא נספרת כפול (unitItem+assignment). תצוגה/ספירה בלבד. */if(seen.has(key))return;const metaVal=meta[name]||meta[n]||Object.entries(meta).find(([k])=>cleanItemName(k)===n)?.[1];const cabName=metaVal?.cabName||metaVal?.lastCabName||"";/* v2.3.50: physical location wins over ownership; v2.3.163: fallback ל-lastCabName */const cabTrim=String(cabName).trim();if(cabTrim){if(cabToUnit[cabTrim]!==selUnit)return;}else{if(!isOwnUnit)return;}// סנן אביזרי חבילה רק אם אין להם מיקום ידני
 // אם יש להם cabName במ-meta — המשתמש הקצה אותם ידנית, נציג
 if(BUNDLE_ACCS.has(n)&&!cabName)return;seen.add(key);const partialMark=sig?.partial?" (חתום חלקית)":"";items.push({id:"sol_"+sol.id+"_"+n,name:n,serial:srl,cabName,soldierName:sol.name+partialMark,soldierId:sol.id,itemKey:name,source:"soldier",unit:sUnit/* v2.3.49 */});});});return items;},[db.unitItems,db.assignments,db.assignmentMeta,db.signatures,db.cabinetNames,selUnit]);// === פריטים ללא פלוגה — מוצגים בנפרד ===
 const itemsWithoutUnit=React.useMemo(()=>{const signedIds=new Set(Object.keys(db.signatures||{}));const items=[];const seen=new Set();const VALID_UNITS=new Set(["א","ב","ג","מסייעת","אגמ","פלסמ","גדודי"]);const assignedSerials=new Set();getSoldiers(db).forEach(s=>{Object.values(db.assignments?.[s.id]||{}).forEach(v=>{if(v&&v!==1)assignedSerials.add(String(v));});});Object.entries(db.unitItems||{}).forEach(([uid,v])=>{const u=v.u||v.unit||"";const t=v.t||v.assignedType||"unit";if(t!=="unit")return;/* רק פריטים ללא פלוגה תקינה */
