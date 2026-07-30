@@ -36,7 +36,7 @@ firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.204";
+const APP_VERSION = "2.3.205";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -1993,28 +1993,37 @@ async function _generateFullUnitReportExcel(db){
         return true;
       });
       const sRows=[],aRows=[],qtyS={},qtyA={};
+      /* v2.3.205: ניקוי הסיומת "(חתום חלקית)" משם המחזיק — קוסמטי, בדוח בלבד. buildUnitItems לא נגע (הסימון נשאר במסך). */
+      const _clean=h=>String(h||"").replace(/\s*\(חתום חלקית\)\s*$/,"").trim();
+      const perItem={};/* v2.3.205: סיכום פר פריט לפלוגה */
       items.forEach(it=>{
         const nm=it.name;
         const isSol=it.source==="soldier";
         const makat=getMakat(nm,db)||"";
+        const cab=String(it.cabName||"").trim();/* v2.3.205: מיקום/ארון — אותו שדה שהגריד מקבץ לפיו, ולכן השוואה ישירה מול טאב ארונות */
         if(it.serial){
-          (isSol?sRows:aRows).push({holder:isSol?(it.soldierName||""):"",makat,name:nm,serial:String(it.serial),qty:1});
+          (isSol?sRows:aRows).push({holder:isSol?_clean(it.soldierName):"",makat,name:nm,serial:String(it.serial),qty:1,cab});
         }else{
           const bucket=isSol?qtyS:qtyA;
-          const key=(isSol?("S|"+(it.soldierName||"")):"A")+"|"+nm;
-          if(!bucket[key])bucket[key]={holder:isSol?(it.soldierName||""):"",makat,name:nm,serial:"",qty:0};
+          /* v2.3.205: cab נכנס למפתח האיחוד — אחרת יחידות של אותו חייל+פריט ממיקומים שונים היו מתמזגות לשורה אחת עם מיקום שרירותי. הסכום לא משתנה (סכום qty = מספר היחידות). */
+          const key=(isSol?("S|"+_clean(it.soldierName)):"A")+"|"+nm+"|"+cab;
+          if(!bucket[key])bucket[key]={holder:isSol?_clean(it.soldierName):"",makat,name:nm,serial:"",qty:0,cab};
           bucket[key].qty++;
         }
+        if(!perItem[nm])perItem[nm]={name:nm,makat,qty:0};
+        perItem[nm].qty++;
         if(!matrix[nm])matrix[nm]={name:nm,makat,byUnit:{},total:0};
         matrix[nm].byUnit[unit]=(matrix[nm].byUnit[unit]||0)+1;
         matrix[nm].total++;
       });
       Object.values(qtyS).forEach(r=>sRows.push(r));
       Object.values(qtyA).forEach(r=>aRows.push(r));
-      const _cmp=(a,b)=>String(a.name).localeCompare(String(b.name),"he")||String(a.serial).localeCompare(String(b.serial));
+      const _cmp=(a,b)=>String(a.name).localeCompare(String(b.name),"he")||String(a.serial).localeCompare(String(b.serial))||String(a.cab).localeCompare(String(b.cab),"he");
       sRows.sort((a,b)=>String(a.holder).localeCompare(String(b.holder),"he")||_cmp(a,b));
-      aRows.sort(_cmp);
-      perUnit[unit]={sRows,aRows};
+      aRows.sort((a,b)=>String(a.cab).localeCompare(String(b.cab),"he")||_cmp(a,b));/* v2.3.205: בלוק הארמון ממוין לפי ארון */
+      const _mn=v=>{const s=String(v||"").replace(/\D/g,"");return s?Number(s):null;};
+      const itemSum=Object.values(perItem).sort((a,b)=>{const an=_mn(a.makat),bn=_mn(b.makat);if(an===null&&bn===null)return String(a.name).localeCompare(String(b.name),"he");if(an===null)return 1;if(bn===null)return-1;return(an-bn)||String(a.name).localeCompare(String(b.name),"he");});
+      perUnit[unit]={sRows,aRows,itemSum};
     });
     const wb=new ExcelJS.Workbook();
     wb.creator="ארמון 9219";
@@ -2022,25 +2031,25 @@ async function _generateFullUnitReportExcel(db){
     const dateStr=new Date().toLocaleDateString("he-IL");
     const unitTotals={};
     UNITS_ALL.forEach(unit=>{
-      const sRows=perUnit[unit].sRows,aRows=perUnit[unit].aRows;
+      const sRows=perUnit[unit].sRows,aRows=perUnit[unit].aRows,itemSum=perUnit[unit].itemSum;
       const ws=wb.addWorksheet("פלוגה "+unit,{views:[{rightToLeft:true,state:"frozen",ySplit:1}]});
-      const hdr=ws.addRow(["שם חייל","מק\"ט","שם פריט","צ'","כמות"]);
+      const hdr=ws.addRow(["שם חייל","מק\"ט","שם פריט","צ'","כמות","מיקום/ארון"]);
       hdr.height=20;
       hdr.font={bold:true,color:{argb:"FFFFFFFF"},name:"Arial",size:11};
       hdr.fill={type:"pattern",pattern:"solid",fgColor:{argb:NAVY}};
       hdr.eachCell(c=>{c.border=_bd;c.alignment={horizontal:"center",vertical:"middle"};});
       const addRow=(r,alt)=>{
-        const row=ws.addRow([r.holder,r.makat||"—",r.name,r.serial||"",r.qty]);
+        const row=ws.addRow([r.holder,r.makat||"—",r.name,r.serial||"",r.qty,r.cab||"—"]);
         row.eachCell((c,i)=>{
           c.font={name:"Arial",size:10};
-          c.alignment={horizontal:(i===1||i===3)?"right":"center"};
+          c.alignment={horizontal:(i===1||i===3||i===6)?"right":"center"};
           c.border=_bd;
           if(alt)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:ALT}};
         });
       };
       sRows.forEach((r,i)=>addRow(r,i%2===1));
       if(aRows.length>0){
-        const sep=ws.addRow(["— בארמון —","","","",""]);
+        const sep=ws.addRow(["— בארמון —","","","","",""]);
         sep.font={bold:true,name:"Arial",size:11};
         sep.fill={type:"pattern",pattern:"solid",fgColor:{argb:SEPBG}};
         sep.eachCell(c=>{c.border=_bd;});
@@ -2048,12 +2057,32 @@ async function _generateFullUnitReportExcel(db){
       }
       const tot=sRows.reduce((s,r)=>s+r.qty,0)+aRows.reduce((s,r)=>s+r.qty,0);
       unitTotals[unit]=tot;
-      const tr=ws.addRow(["סה\"כ פלוגה "+unit,"","","",tot]);
+      const tr=ws.addRow(["סה\"כ פלוגה "+unit,"","","",tot,""]);
       tr.font={bold:true,name:"Arial",size:11};
       tr.fill={type:"pattern",pattern:"solid",fgColor:{argb:TOTBG}};
       tr.eachCell(c=>{c.border=_bd;c.alignment={horizontal:"center"};});
       tr.getCell(1).alignment={horizontal:"right"};
-      ws.columns=[{width:26},{width:14},{width:34},{width:16},{width:9}];
+      /* ===== v2.3.205: בלוק "סיכום פר פריט" — אותן עמודות (מק"ט/שם פריט/כמות), מיון מק"ט עולה ===== */
+      ws.addRow([]);
+      const sep2=ws.addRow(["— סיכום פר פריט —","","","","",""]);
+      sep2.font={bold:true,name:"Arial",size:11};
+      sep2.fill={type:"pattern",pattern:"solid",fgColor:{argb:SEPBG}};
+      sep2.eachCell(c=>{c.border=_bd;});
+      itemSum.forEach((r,i)=>{
+        const row=ws.addRow(["",r.makat||"—",r.name,"",r.qty,""]);
+        row.eachCell((c,j)=>{
+          c.font={name:"Arial",size:10,bold:j===5};
+          c.alignment={horizontal:j===3?"right":"center"};
+          c.border=_bd;
+          if(i%2===1)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:ALT}};
+        });
+      });
+      const tr2=ws.addRow(["","סה\"כ ("+itemSum.length+" סוגי פריט)","","",tot,""]);
+      tr2.font={bold:true,name:"Arial",size:11};
+      tr2.fill={type:"pattern",pattern:"solid",fgColor:{argb:TOTBG}};
+      tr2.eachCell(c=>{c.border=_bd;c.alignment={horizontal:"center"};});
+      tr2.getCell(2).alignment={horizontal:"right"};
+      ws.columns=[{width:26},{width:14},{width:34},{width:16},{width:9},{width:24}];
     });
     /* ===== גיליון מסכם — מטריצת מק"ט × פלוגה, מיון מק"ט עולה (כמו v2.3.203) ===== */
     const sumWs=wb.addWorksheet("סיכום כלל-גדודי",{views:[{rightToLeft:true,state:"frozen",ySplit:1}]});
@@ -2113,7 +2142,7 @@ function ComprehensiveInventoryTab({db,auth}){
     /*#__PURE__*/React.createElement("button",{onClick:async()=>{setBusy(true);try{await _generateComprehensiveInventoryReport(db,auth?.name||"");}finally{setBusy(false);}},disabled:busy,style:{padding:"12px 28px",background:busy?"#888":"#1a7f37",color:"#fff",border:"none",borderRadius:8,cursor:busy?"default":"pointer",fontWeight:800,fontSize:15,opacity:busy?0.7:1}},busy?"⏳ יוצר…":"📋 הורד דוח מלאי פלוגתי כולל"),
     /*#__PURE__*/React.createElement("div",{style:{marginTop:20,borderTop:"1px solid var(--color-border-muted)",paddingTop:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4}},"דוח פלוגתי מלא — גיליון לכל פלוגה + מסכם"),
-      /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginBottom:10,lineHeight:1.6}},"קובץ אחד · גיליון לכל אחת מ-7 הפלוגות (שם חייל · מק\"ט · שם פריט · צ' · כמות + בלוק \"— בארמון —\") · גיליון מסכם עם מטריצת מק\"ט × פלוגה. ללא 7 אביזרי ה-kit וללא פריטי סדנא עם צ'. ספירה זהה לגריד הארונות."),
+      /*#__PURE__*/React.createElement("div",{style:{fontSize:"var(--text-xs)",color:"var(--color-text-muted)",marginBottom:10,lineHeight:1.6}},"קובץ אחד · גיליון לכל אחת מ-7 הפלוגות (שם חייל · מק\"ט · שם פריט · צ' · כמות · מיקום/ארון + בלוק \"— בארמון —\" + בלוק \"— סיכום פר פריט —\") · גיליון מסכם עם מטריצת מק\"ט × פלוגה. ללא 7 אביזרי ה-kit וללא פריטי סדנא עם צ'. ספירה זהה לגריד הארונות."),
       /*#__PURE__*/React.createElement("button",{onClick:async()=>{setBusyFull(true);try{await _generateFullUnitReportExcel(db);}finally{setBusyFull(false);}},disabled:busyFull,style:{...S.btn(busyFull?"":"success","md"),fontWeight:700,opacity:busyFull?0.6:1}},busyFull?"⏳ מייצר...":"📊 ייצא Excel — דוח פלוגתי מלא")),
     /*#__PURE__*/React.createElement("div",{style:{marginTop:20,borderTop:"1px solid var(--color-border-muted)",paddingTop:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:"var(--text-sm)",marginBottom:4}},"או — ייצוא פר-פלוגה (2 גיליונות)"),
