@@ -22,6 +22,7 @@
 <!-- ExcelJS נטען lazy בעת לחיצה על כפתור ייצוא — ראה _loadExcelJS() ב-JS -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyAHQncFZZju3Myq-k83MU8LVdUlo5j_Keo",
@@ -35,8 +36,32 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
+// === v2.3.207: כניסה אנונימית ל-Firebase (שלב 1 — הכנה לסגירת המסד; החוקים עדיין פתוחים) ===
+// לא חוסם כלום: האפליקציה עולה מיד כמו קודם; הכניסה רצה ברקע. _fbAuthReady ישמש בשלב הנעילה.
+window._fbIdToken = null;
+window._fbUid = null;
+window._fbAuthReady = new Promise(function(resolve){
+  var settled = false;
+  function done(){ if(!settled){ settled = true; resolve(); } }
+  setTimeout(function(){ if(!settled) console.warn("[auth] timeout — ממשיך בלי כניסה"); done(); }, 6000);
+  try {
+    if (!firebase.auth) { console.warn("[auth] auth SDK not loaded"); done(); return; }
+    var fa = firebase.auth();
+    fa.onIdTokenChanged(function(u){
+      if (u) {
+        window._fbUid = u.uid;
+        u.getIdToken().then(function(t){ window._fbIdToken = t; }).catch(function(e){ console.warn("[auth] token", e); });
+        done();
+      } else {
+        window._fbUid = null; window._fbIdToken = null;
+        fa.signInAnonymously().catch(function(e){ console.warn("[auth] signInAnonymously failed", e); done(); });
+      }
+    });
+  } catch(e) { console.warn("[auth] init failed", e); done(); }
+});
+
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.206";
+const APP_VERSION = "2.3.207";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -8386,10 +8411,10 @@ if(parsed.autoSign||parsed.autoExitForm||parsed.autoTestCert||parsed.autoBulkSig
 // שמור רק sessions של מנהלים — לעולם לא חיילים
 // שמור session לכל משתמש שנכנס דרך הכניסה - חוץ מחיילים דרך לינק
 const isSoldierLink=a.autoSign||a.autoExitForm||a.autoTestCert||a.autoBulkSign;if(!isSoldierLink){try{sessionStorage.setItem("armory_session",JSON.stringify({...a,_sv:"v5"}));}catch(e){console.warn("[caught]",e);}}// Log login to Firebase
-const loginTs=Date.now();const logEntry={username:a.username||a.name||"",name:a.name||"",role:a.role||"",loginAt:new Date().toLocaleString("he-IL"),ts:loginTs,logoutAt:null};const loginDateKey2=new Date().toISOString().split("T")[0];fbSet("db/loginLog/"+loginDateKey2+"/"+loginTs,logEntry).catch(e=>console.warn("[fb-err]",e));try{sessionStorage.setItem("login_ts",String(loginTs));}catch(e){console.warn("[caught]",e);}setAuth(a);}function handleLogout(){// רשום זמן יציאה
+const loginTs=Date.now();const logEntry={username:a.username||a.name||"",name:a.name||"",role:a.role||"",loginAt:new Date().toLocaleString("he-IL"),ts:loginTs,logoutAt:null,fbUid:window._fbUid||null};const loginDateKey2=new Date().toISOString().split("T")[0];fbSet("db/loginLog/"+loginDateKey2+"/"+loginTs,logEntry).catch(e=>console.warn("[fb-err]",e));try{sessionStorage.setItem("login_ts",String(loginTs));}catch(e){console.warn("[caught]",e);}setAuth(a);}function handleLogout(){// רשום זמן יציאה
 try{const loginTs=sessionStorage.getItem("login_ts");if(loginTs){const logoutStr=new Date().toLocaleString("he-IL");const _dateKey=new Date(parseInt(loginTs)).toISOString().split("T")[0];fbSet("db/loginLog/"+_dateKey+"/"+loginTs+"/logoutAt",logoutStr).catch(e=>console.warn("[fb-err]",e));fbSet("db/loginLog/"+_dateKey+"/"+loginTs+"/duration",Math.round((Date.now()-parseInt(loginTs))/60000)+"m").catch(e=>console.warn("[fb-err]",e));sessionStorage.removeItem("login_ts");}}catch(e){console.warn("[caught]",e);}try{sessionStorage.removeItem("armory_session");}catch(e){console.warn("[caught]",e);}try{["link_sign","link_testcert","link_bulksign","link_exit","link_greeneyes","link_greeneyes_unit"].forEach(k=>sessionStorage.removeItem(k));}catch(e){console.warn("[caught]",e);}setAuth(null);}const[db,setDb]=useState(()=>initDB());const[globalLightbox,setGlobalLightbox]=useState(null);const[serialHistoryReq,setSerialHistoryReq]=useState(null);React.useEffect(()=>{window._showLightbox=src=>setGlobalLightbox(src);window.openSerialHistory=(serial,itemName)=>{const s=String(serial||"").trim();if(!s||s==="1"||s==="true")return;setSerialHistoryReq({serial:s,itemName:itemName||""});};/* רשום יציאה כשהטאב נסגר */
 function handleUnload(){try{const loginTs=sessionStorage.getItem("login_ts");if(loginTs){const logoutStr=new Date().toLocaleString("he-IL");// navigator.sendBeacon is more reliable on unload
-const _dateKey=new Date(parseInt(loginTs)).toISOString().split("T")[0];const url="https://armory-9219-default-rtdb.firebaseio.com/db/loginLog/"+_dateKey+"/"+loginTs+".json";const data=JSON.stringify({logoutAt:logoutStr,duration:Math.round((Date.now()-parseInt(loginTs))/60000)+"m"});// Use fetch with keepalive
+const _dateKey=new Date(parseInt(loginTs)).toISOString().split("T")[0];const url="https://armory-9219-default-rtdb.firebaseio.com/db/loginLog/"+_dateKey+"/"+loginTs+".json"+(window._fbIdToken?"?auth="+window._fbIdToken:"");const data=JSON.stringify({logoutAt:logoutStr,duration:Math.round((Date.now()-parseInt(loginTs))/60000)+"m"});// Use fetch with keepalive
 fetch(url,{method:"PATCH",body:data,headers:{"Content-Type":"application/json"},keepalive:true}).catch(e=>console.warn("[fb-err]",e));}}catch(e){console.warn("[caught]",e);}}window.addEventListener("beforeunload",handleUnload);return()=>{window._showLightbox=null;window.removeEventListener("beforeunload",handleUnload);};},[]);// אם יש ?exitform= ב-URL — תמיד פתח טופס יציאה, גם אם מחובר כמנהל
 const exitFormParam=new URLSearchParams(window.location.search).get("exitform");// ירוק בעיניים URL param — קרא מ-sessionStorage (URL כבר נמחק)
 const greenEyesParamApp=new URLSearchParams(window.location.search).get("greeneyes")||(()=>{try{return sessionStorage.getItem("link_greeneyes");}catch(e){return null;}})();if(greenEyesParamApp){return/*#__PURE__*/React.createElement(GreenEyesView,{db:db,setDb:setDb});}// טוקן טופס ירוק בעיניים פר פלוגה
