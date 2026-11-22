@@ -61,7 +61,7 @@ window._fbAuthReady = new Promise(function(resolve){
 });
 
 // === APP VERSION === update here when releasing a new version
-const APP_VERSION = "2.3.209";
+const APP_VERSION = "2.3.210";
 try { console.log("%cArmory System v" + APP_VERSION + " loaded", "color:#2ea043;font-weight:bold;font-size:13px;"); } catch(e){console.warn("[caught]",e);}
 
 // פונקציות Firebase
@@ -69,6 +69,100 @@ function fbSet(path, data){ return rtdb.ref(path).set(data); }
 function fbGet(path){ return rtdb.ref(path).once("value").then(s=>s.val()); }
 function fbOn(path, cb){ const fn = s=>cb(s.val()); rtdb.ref(path).on("value", fn); return ()=>rtdb.ref(path).off("value", fn); }
 function fbDelete(path){ return rtdb.ref(path).remove(); }
+
+// === v2.3.210: חיווי שמירה — נשמר / לא נשמר / ממתין לרשת ===
+// רק מאזין: עוטף את set/update/remove של Firebase ומחזיר בדיוק את אותה הבטחה (promise), עם אותם ארגומנטים.
+// לא משנה שום נתון, נתיב או לוגיקה. אם משהו כאן נכשל — המערכת ממשיכה לעבוד כרגיל בלי החיווי.
+(function(){
+  try {
+    var pending = 0, failed = 0, online = null, startedAt = Date.now();
+    var lastFail = "", savedTimer = null, showPendingTimer = null, el = null, uiState = "";
+    function ensureEl(){
+      if (el || !document.body) return el;
+      el = document.createElement("div");
+      el.id = "save-status";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      document.body.appendChild(el);
+      return el;
+    }
+    function render(state){
+      var e = ensureEl(); if (!e) return;
+      uiState = state;
+      if (!state){ e.className = ""; e.innerHTML = ""; return; }
+      var html = "";
+      if (state === "fail") {
+        html = '<span class="ss-ic">✕</span><span class="ss-t"><b>השמירה נכשלה</b><small>' +
+          (failed > 1 ? failed + " שינויים לא נשמרו בשרת. " : "השינוי האחרון לא נשמר בשרת. ") +
+          'בדוק חיבור ונסה שוב.' + (lastFail ? " (" + lastFail + ")" : "") + '</small></span><button type="button" class="ss-x" aria-label="סגור">סגור</button>';
+      } else if (state === "offline") {
+        html = '<span class="ss-ic">📡</span><span class="ss-t"><b>אין חיבור לשרת</b><small>' +
+          (pending === 1 ? "שינוי אחד ממתין ויישלח כשהחיבור יחזור. לא לסגור את הדף." : pending > 1 ? pending + " שינויים ממתינים ויישלחו כשהחיבור יחזור. לא לסגור את הדף." : "שינויים שתעשה יישמרו כשהחיבור יחזור.") + '</small></span>';
+      } else if (state === "pending") {
+        html = '<span class="ss-ic ss-spin">⟳</span><span class="ss-t"><b>שומר…</b></span>';
+      } else if (state === "saved") {
+        html = '<span class="ss-ic">✓</span><span class="ss-t"><b>נשמר</b></span>';
+      }
+      e.className = "ss-on ss-" + state;
+      e.innerHTML = html;
+      var x = e.querySelector(".ss-x");
+      if (x) x.onclick = function(){ failed = 0; lastFail = ""; update(); };
+    }
+    function update(){
+      if (failed > 0) return render("fail");
+      if (online === false && (pending > 0 || Date.now() - startedAt > 4000)) return render("offline");
+      if (pending > 0) {
+        if (uiState !== "pending" && !showPendingTimer) {
+          showPendingTimer = setTimeout(function(){ showPendingTimer = null; if (pending > 0 && !failed && online !== false) render("pending"); }, 900);
+        }
+        return;
+      }
+      if (showPendingTimer) { clearTimeout(showPendingTimer); showPendingTimer = null; }
+      if (uiState === "pending" || uiState === "offline" || uiState === "saved-due") {
+        render("saved");
+        clearTimeout(savedTimer);
+        savedTimer = setTimeout(function(){ if (uiState === "saved") render(""); }, 1800);
+      } else if (uiState !== "saved") { render(""); }
+    }
+    function track(p, quickSaved){
+      if (!p || typeof p.then !== "function") return;
+      pending++;
+      update();
+      p.then(function(){
+        pending = Math.max(0, pending - 1);
+        // אחרי טעינת הדף: הצג "נשמר" קצר גם לשמירה מהירה, כדי שהמשתמש יראה שהפעולה הגיעה לשרת
+        if (pending === 0 && Date.now() - startedAt > 6000 && uiState !== "fail") uiState = "saved-due";
+        update();
+      }, function(err){
+        pending = Math.max(0, pending - 1);
+        failed++;
+        var code = (err && (err.code || err.message)) ? String(err.code || err.message) : "";
+        lastFail = /permission|PERMISSION/.test(code) ? "אין הרשאה" : (code ? code.slice(0, 40) : "");
+        try { console.error("[save-status] write failed", err); } catch(_){}
+        update();
+      });
+    }
+    var proto = Object.getPrototypeOf(rtdb.ref());
+    ["set", "update", "remove", "setWithPriority"].forEach(function(m){
+      var orig = proto && proto[m];
+      if (typeof orig !== "function" || orig.__ssWrapped) return;
+      var wrapped = function(){
+        var p = orig.apply(this, arguments);
+        try { track(p); } catch(_){}
+        return p;
+      };
+      wrapped.__ssWrapped = true;
+      proto[m] = wrapped;
+    });
+    try {
+      rtdb.ref(".info/connected").on("value", function(s){
+        online = !!(s && s.val());
+        update();
+      });
+    } catch(_){}
+    window._saveStatus = { get pending(){ return pending; }, get failed(){ return failed; }, get online(){ return online; } };
+  } catch(e) { try { console.warn("[save-status] disabled", e); } catch(_){} }
+})();
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap');
@@ -827,6 +921,19 @@ button, a, label, [onClick] {
 @media (max-width: 480px) {
   :root { --text-base: 14px; }
 }
+/* v2.3.210 — חיווי שמירה */
+#save-status{position:fixed;z-index:4000;left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));display:none;align-items:center;gap:10px;max-width:min(420px,calc(100vw - 24px));padding:10px 14px;border-radius:12px;font-family:inherit;font-size:14px;line-height:1.35;direction:rtl;box-shadow:var(--shadow);border:1px solid var(--color-border-default);background:var(--color-bg-default);color:var(--color-text-primary);pointer-events:none}
+#save-status.ss-on{display:flex}
+#save-status .ss-t{display:flex;flex-direction:column}
+#save-status .ss-t small{font-size:13px;color:var(--color-text-secondary)}
+#save-status .ss-ic{font-weight:800;font-size:16px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+#save-status.ss-saved{border-color:var(--color-success-fg)} #save-status.ss-saved .ss-ic{background:var(--color-success-bg);color:var(--color-success-fg)}
+#save-status.ss-pending .ss-ic{background:var(--color-accent-bg);color:var(--color-accent-fg)}
+#save-status.ss-offline{border-color:var(--color-warning-fg)} #save-status.ss-offline .ss-ic{background:var(--color-warning-bg);color:var(--color-warning-fg)}
+#save-status.ss-fail{border-color:var(--color-danger-fg);background:var(--color-danger-bg);pointer-events:auto} #save-status.ss-fail .ss-ic{background:var(--color-danger-fg);color:#fff}
+#save-status .ss-x{min-height:36px;padding:0 12px;border-radius:8px;background:var(--color-bg-default);color:var(--color-text-primary);border:1px solid var(--color-border-default);font-weight:700;margin-inline-start:auto}
+@keyframes ss-spin{to{transform:rotate(360deg)}} #save-status .ss-spin{animation:ss-spin 1s linear infinite}
+@media print{#save-status{display:none!important}}
 </style>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext x='0' y='14' font-size='14'%3E%F0%9F%8F%9B%EF%B8%8F%3C/text%3E%3C/svg%3E">
 </head>
